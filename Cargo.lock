@@ -347,6 +347,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "either"
+version = "1.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb1f6b1ce1c140482ea30ddd3335fc0024ac7ee112895426e0a629a6c20adfe3"
+
+[[package]]
 name = "failure"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -632,6 +638,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a69dd5e3613374e74da81c251750153abe3bd0ad17641ea63d43d1e21d0dbd4d"
 dependencies = [
  "serde 1.0.104",
+]
+
+[[package]]
+name = "itertools"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f56a2d0bc861f9165be4eb3442afd3c236d8a98afd426f65d92324ae1091a484"
+dependencies = [
+ "either",
 ]
 
 [[package]]
@@ -1525,12 +1540,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "state"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7345c971d1ef21ffdbd103a75990a15eb03604fc8b8852ca8cb418ee1a099028"
-
-[[package]]
 name = "strsim"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1651,13 +1660,20 @@ dependencies = [
 name = "tezedge_proxy"
 version = "0.1.0"
 dependencies = [
+ "bytes 0.5.4",
+ "crossbeam",
  "crypto",
  "failure",
+ "hex",
+ "itertools",
+ "lazy_static 1.4.0",
  "log 0.4.8",
  "networking",
  "pnet",
+ "serde 1.0.104",
+ "serde_json",
  "simple_logger",
- "state",
+ "tezos_encoding",
  "tezos_messages",
 ]
 

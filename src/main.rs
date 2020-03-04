@@ -1,5 +1,10 @@
 #![allow(dead_code)]
 
+mod remote_client;
+mod network_message;
+mod identity;
+mod msg_decoder;
+
 use std::collections::HashMap;
 
 use log::info;
@@ -13,6 +18,20 @@ use pnet::{
     },
     datalink,
 };
+use std::sync::{Arc, RwLock};
+use lazy_static::lazy_static;
+
+use crate::{
+    remote_client::RemoteClient,
+    identity::{load_identity, Identity},
+};
+use crate::network_message::NetworkMessage;
+
+type Remotes = HashMap<u16, Arc<RwLock<RemoteClient>>>;
+
+lazy_static! {
+    pub static ref IDENTITY: Identity = load_identity("./identity/identity.json").expect("failed to load identity");
+}
 
 fn main() -> Result<(), Error> {
     simple_logger::init().expect("failed to initialize logger");
@@ -22,7 +41,7 @@ fn main() -> Result<(), Error> {
         .unwrap();
 
     let local_port = 9732; // Add as CLI command.
-    let mut node_messages: HashMap<u16, (bool, bool)> = Default::default();
+    let mut remotes: Remotes = Default::default();
 
     let (_tx, mut rx) = datalink::channel(&interface, Default::default())
         .map(|chan| match chan {
@@ -43,9 +62,9 @@ fn main() -> Result<(), Error> {
             let source_port = udp.get_source();
             let dest_port = udp.get_destination();
             if local_port == source_port {
-                process_outgoing(dest_port, &mut node_messages, udp.payload());
+                process_msg(dest_port, &mut remotes, udp.payload(), true);
             } else if local_port == dest_port {
-                process_incoming(source_port, &mut node_messages, udp.payload());
+                process_msg(source_port, &mut remotes, udp.payload(), false);
             } else {
                 continue;
             }
@@ -53,24 +72,27 @@ fn main() -> Result<(), Error> {
     }
 }
 
-// We need to catch first messages between two nodes, to reconstruct nonces and precomputed key
-
-fn process_outgoing(recipient: u16, msgs: &mut HashMap<u16, (bool, bool)>, payload: &[u8]) {
-    match msgs.get(&recipient) {
-        None | Some((false, _)) => {
-            info!("Sending message({})\n{:?}\n", recipient, payload);
-            msgs.insert(recipient, (true, false));
-        }
-        _ => return,
+#[inline]
+fn process_msg(remote: u16, remotes: &mut Remotes, payload: &[u8], incoming: bool) {
+    if !remotes.contains_key(&remote) {
+        // Spawn new remote client handler
+        remotes.insert(remote, RemoteClient::spawn(remote));
     }
+    let val = remotes.get(&remote).expect("Client dropped prematurely");
+    let mut lock = val.write().expect("Lock poisoning");
+    lock.send_message(if incoming {
+        NetworkMessage::incoming(payload)
+    } else {
+        NetworkMessage::outgoing(payload)
+    });
 }
 
-fn process_incoming(sender: u16, msgs: &mut HashMap<u16, (bool, bool)>, payload: &[u8]) {
-    match msgs.get(&sender) {
-        None | Some((_, false)) => {
-            info!("Got first message from {}\n{:?}\n", sender, payload);
-            msgs.insert(sender, (false, true));
-        }
-        _ => return,
-    }
+
+#[inline]
+/// Try to create a nonce-pair from *guessed* nonce messages.
+fn process_nonces(remote: u16, out_msg: &[u8], inc_msg: &[u8], incoming: bool) {
+    use crypto::nonce::generate_nonces;
+    info!("Received nonces for {}: {:?} | {:?}", remote, out_msg, inc_msg);
+    let nonces = generate_nonces(out_msg, inc_msg, incoming);
+    info!("Local nonce: {:?} | Remote nonce: {:?}", nonces.local, nonces.remote);
 }
