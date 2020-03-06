@@ -1,98 +1,84 @@
 #![allow(dead_code)]
 
-mod remote_client;
-mod network_message;
-mod identity;
-mod msg_decoder;
+mod configuration;
+mod actors;
+mod network;
 
-use std::collections::HashMap;
+use failure::{Error, Fail};
+use riker::actors::*;
 
-use log::info;
-use failure::Error;
 use pnet::{
     packet::{
-        Packet,
+        Packet as _,
         udp::UdpPacket,
         ipv4::Ipv4Packet,
         ethernet::{EthernetPacket, EtherTypes},
     },
     datalink,
 };
-use std::sync::{Arc, RwLock};
-use lazy_static::lazy_static;
 
 use crate::{
-    remote_client::RemoteClient,
-    identity::{load_identity, Identity},
+    actors::prelude::*,
+    configuration::AppConfig,
 };
-use crate::network_message::NetworkMessage;
 
-type Remotes = HashMap<u16, Arc<RwLock<RemoteClient>>>;
-
-lazy_static! {
-    pub static ref IDENTITY: Identity = load_identity("./identity/identity.json").expect("failed to load identity");
+#[derive(Debug, Fail)]
+enum AppError {
+    #[fail(display = "no valid network interface found")]
+    NoNetworkInterface,
+    #[fail(display = "only ethernet channels supported for now")]
+    UnsupportedNetworkChannelType,
+    #[fail(display = "encountered io error: {}", _0)]
+    IOError(std::io::Error),
+    #[fail(display = "received invalid packet")]
+    InvalidPacket,
 }
 
 fn main() -> Result<(), Error> {
-    simple_logger::init().expect("failed to initialize logger");
+    // -- Initialize logger
+    simple_logger::init()?;
+
+    // -- Load basic arguments + TODO: Add more arguments and more options ways to pass arguments
+    let app_config = AppConfig::from_env();
+    log::info!("Loaded arguments from CLI");
+    let identity = app_config.load_identity()?;
+    log::info!("Loaded identity file from '{}'", app_config.identity_file);
+
+    // -- Start Actor system
+    let system = ActorSystem::new()?;
+    let orchestrator = system.actor_of(Props::new_args(PacketOrchestrator::new, PacketOrchestratorArgs {
+        local_identity: identity.clone()
+    }), "packet_orchestrator")?;
+
+    // -- Acquire raw network interface
     let interface = datalink::interfaces().into_iter()
         .filter(|x| x.is_up() && x.is_broadcast() && x.is_multicast())
         .next()
-        .unwrap();
-
-    let local_port = 9732; // Add as CLI command.
-    let mut remotes: Remotes = Default::default();
-
+        .ok_or(AppError::NoNetworkInterface)?;
     let (_tx, mut rx) = datalink::channel(&interface, Default::default())
-        .map(|chan| match chan {
-            datalink::Channel::Ethernet(tx, rx) => (tx, rx),
-            _ => panic!("Unsupported channel type"),
+        .map_err(|err| AppError::IOError(err))
+        .and_then(|chan| match chan {
+            datalink::Channel::Ethernet(tx, rx) => Ok((tx, rx)),
+            _ => Err(AppError::UnsupportedNetworkChannelType)
         })?;
 
-    info!("Started sniffing on port {}", local_port);
+    log::info!("Starting to analyze traffic on port {}", app_config.port);
 
     loop {
-        // Ethernet Packet == MAC Address
-        let packet = EthernetPacket::new(rx.next()?).unwrap();
-
+        let data = rx.next()?;
+        let packet = EthernetPacket::new(data).ok_or(AppError::InvalidPacket)?;
         if packet.get_ethertype() == EtherTypes::Ipv4 {
-            // IPv4 == IP Address
-            let ipv4 = Ipv4Packet::new(packet.payload()).unwrap();
-            let udp = UdpPacket::new(ipv4.payload()).unwrap();
-            let source_port = udp.get_source();
-            let dest_port = udp.get_destination();
-            if local_port == source_port {
-                process_msg(dest_port, &mut remotes, udp.payload(), true);
-            } else if local_port == dest_port {
-                process_msg(source_port, &mut remotes, udp.payload(), false);
+            let header = Ipv4Packet::new(packet.payload()).ok_or(AppError::InvalidPacket)?;
+            let udp = UdpPacket::new(header.payload()).ok_or(AppError::InvalidPacket)?;
+            let (source, dest) = (udp.get_source(), udp.get_destination());
+
+            if app_config.port == source {
+                orchestrator.send_msg(Packet::outgoing(dest, udp.payload().to_vec()), None);
+            } else if app_config.port == dest {
+                orchestrator.send_msg(Packet::incoming(source, udp.payload().to_vec()), None);
             } else {
                 continue;
             }
         }
     }
-}
-
-#[inline]
-fn process_msg(remote: u16, remotes: &mut Remotes, payload: &[u8], incoming: bool) {
-    if !remotes.contains_key(&remote) {
-        // Spawn new remote client handler
-        remotes.insert(remote, RemoteClient::spawn(remote));
-    }
-    let val = remotes.get(&remote).expect("Client dropped prematurely");
-    let mut lock = val.write().expect("Lock poisoning");
-    lock.send_message(if incoming {
-        NetworkMessage::incoming(payload)
-    } else {
-        NetworkMessage::outgoing(payload)
-    });
-}
-
-
-#[inline]
-/// Try to create a nonce-pair from *guessed* nonce messages.
-fn process_nonces(remote: u16, out_msg: &[u8], inc_msg: &[u8], incoming: bool) {
-    use crypto::nonce::generate_nonces;
-    info!("Received nonces for {}: {:?} | {:?}", remote, out_msg, inc_msg);
-    let nonces = generate_nonces(out_msg, inc_msg, incoming);
-    info!("Local nonce: {:?} | Remote nonce: {:?}", nonces.local, nonces.remote);
 }

@@ -1,18 +1,19 @@
-use crypto::crypto_box::{PrecomputedKey, decrypt};
-use crypto::nonce::Nonce;
-use tezos_messages::p2p::binary_message::{BinaryMessage, BinaryChunk};
-use tezos_messages::p2p::encoding::peer::PeerMessageResponse;
+use crypto::{
+    crypto_box::{PrecomputedKey, decrypt},
+    nonce::Nonce,
+};
+use tezos_messages::p2p::{
+    binary_message::{BinaryMessage, BinaryChunk},
+    encoding::peer::PeerMessageResponse,
+};
 use tezos_encoding::binary_reader::BinaryReaderError;
-use log::{info, warn};
-use crate::network_message::NetworkMessage;
-
+use crate::network::prelude::*;
 
 pub struct EncryptedMessageDecoder {
     precomputed_key: PrecomputedKey,
     remote_nonce: Nonce,
     peer_id: String,
     input_remaining: usize,
-    buf: Vec<u8>,
 }
 
 impl EncryptedMessageDecoder {
@@ -22,7 +23,6 @@ impl EncryptedMessageDecoder {
             remote_nonce,
             peer_id,
             input_remaining: 0,
-            buf: Default::default(),
         }
     }
 
@@ -42,14 +42,14 @@ impl EncryptedMessageDecoder {
 
                 if self.input_remaining == 0 {
                     match PeerMessageResponse::from_bytes(input_data.clone()) {
-                        Ok(message) => info!("-- Decrypted new message message: {:?}", message),
+                        Ok(message) => log::info!("-- Decrypted new message message: {:?}", message),
                         Err(BinaryReaderError::Underflow { bytes }) => self.input_remaining += bytes,
-                        Err(e) => warn!("Failed to deserialize message: {}", e),
+                        Err(e) => log::warn!("Failed to deserialize message: {}", e),
                     }
                 }
             }
             Err(error) => {
-                warn!("Failed to deserialize message: {}", error);
+                log::warn!("Failed to deserialize message: {}", error);
             }
         }
     }
