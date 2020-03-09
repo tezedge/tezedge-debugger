@@ -67,7 +67,6 @@ impl Actor for PacketOrchestrator {
     type Msg = Packet;
 
     fn recv(&mut self, ctx: &Context<Self::Msg>, msg: Self::Msg, _sender: Option<BasicActorRef>) {
-        log::info!("Received {} message", if msg.incoming { "incoming" } else { "outgoing" });
         if let Some(remote) = self.remotes.get_mut(&msg.port) {
             remote.send_msg(msg.into(), ctx.myself());
         } else {

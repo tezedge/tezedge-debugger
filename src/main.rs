@@ -7,15 +7,14 @@ mod network;
 use failure::{Error, Fail};
 use riker::actors::*;
 
-use pnet::{
-    packet::{
-        Packet as _,
-        udp::UdpPacket,
-        ipv4::Ipv4Packet,
-        ethernet::{EthernetPacket, EtherTypes},
-    },
-    datalink,
-};
+use pnet::{packet::{
+    Packet as _,
+    tcp::TcpPacket,
+    ipv4::Ipv4Packet,
+    ipv6::Ipv6Packet,
+    ethernet::{EthernetPacket, EtherTypes},
+    ip::IpNextHeaderProtocols,
+}, datalink};
 
 use crate::{
     actors::prelude::*,
@@ -55,7 +54,7 @@ fn main() -> Result<(), Error> {
         .filter(|x| x.is_up() && x.is_broadcast() && x.is_multicast())
         .next()
         .ok_or(AppError::NoNetworkInterface)?;
-    let (_tx, mut rx) = datalink::channel(&interface, Default::default())
+    let (_, mut rx) = datalink::channel(&interface, Default::default())
         .map_err(|err| AppError::IOError(err))
         .and_then(|chan| match chan {
             datalink::Channel::Ethernet(tx, rx) => Ok((tx, rx)),
@@ -65,17 +64,26 @@ fn main() -> Result<(), Error> {
     log::info!("Starting to analyze traffic on port {}", app_config.port);
 
     loop {
-        let data = rx.next()?;
-        let packet = EthernetPacket::new(data).ok_or(AppError::InvalidPacket)?;
-        if packet.get_ethertype() == EtherTypes::Ipv4 {
-            let header = Ipv4Packet::new(packet.payload()).ok_or(AppError::InvalidPacket)?;
-            let udp = UdpPacket::new(header.payload()).ok_or(AppError::InvalidPacket)?;
-            let (source, dest) = (udp.get_source(), udp.get_destination());
+        let packet = EthernetPacket::new(rx.next()?).unwrap();
+        let (payload, protocol) = match packet.get_ethertype() {
+            EtherTypes::Ipv4 => {
+                let header = Ipv4Packet::new(packet.payload()).unwrap();
+                (header.payload().to_vec(), header.get_next_level_protocol())
+            }
+            EtherTypes::Ipv6 => {
+                let header = Ipv6Packet::new(packet.payload()).unwrap();
+                ((header.payload()).to_vec(), header.get_next_header())
+            }
+            _ => continue,
+        };
 
-            if app_config.port == source {
-                orchestrator.send_msg(Packet::outgoing(dest, udp.payload().to_vec()), None);
-            } else if app_config.port == dest {
-                orchestrator.send_msg(Packet::incoming(source, udp.payload().to_vec()), None);
+        if protocol == IpNextHeaderProtocols::Tcp {
+            let tcp = TcpPacket::new(&payload).unwrap();
+            let (source, dest) = (tcp.get_source(), tcp.get_destination());
+            if app_config.port == dest {
+                orchestrator.send_msg(Packet::outgoing(source, tcp.payload().to_vec()), None);
+            } else if app_config.port == source {
+                orchestrator.send_msg(Packet::incoming(dest, tcp.payload().to_vec()), None);
             } else {
                 continue;
             }
