@@ -27,9 +27,17 @@ impl EncryptedMessageDecoder {
     }
 
     pub fn recv_msg(&mut self, enc: NetworkMessage) {
+        use std::convert::TryFrom;
         let mut input_data = vec![];
 
-        let chunk = BinaryChunk::from_content(enc.raw_msg()).unwrap();
+        let chunk: BinaryChunk = match BinaryChunk::try_from(enc.raw_msg().to_vec()) {
+            Ok(chunk) => chunk,
+            Err(e) => {
+                log::info!("Failed building chunk: {}", e);
+                return;
+            }
+        };
+
         match decrypt(chunk.content(), &self.nonce_fetch_increment(), &self.precomputed_key) {
             Ok(message_decrypted) => {
                 if self.input_remaining >= message_decrypted.len() {
@@ -49,7 +57,7 @@ impl EncryptedMessageDecoder {
                 }
             }
             Err(error) => {
-                log::warn!("Failed to deserialize message: {}", error);
+                log::warn!("Failed to decrypt message: {}", error);
             }
         }
     }

@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use failure::Error;
 use riker::actors::*;
 use crypto::{
@@ -76,7 +76,7 @@ impl Peer {
         self.buf.push(msg);
         if !self.initialized && self.buf.len() >= 2 {
             match self.try_upgrade() {
-                Ok(true) => log::warn!("Successfully upgraded port {} to {} peer {} (with {} messages)", self.port, if self.incoming {
+                Ok(true) => log::info!("Successfully upgraded port {} to {} peer {} (with {} messages)", self.port, if self.incoming {
                         "incoming"
                     } else {
                         "outgoing"
@@ -112,7 +112,10 @@ impl Peer {
             } else {
                 (second, first)
             };
-            let (incoming, outgoing) = (BinaryChunk::from_content(incoming.raw_msg())?, BinaryChunk::from_content(outgoing.raw_msg())?);
+            let (incoming, outgoing): (BinaryChunk, BinaryChunk) = (
+                incoming.raw_msg().to_vec().try_into()?,
+                outgoing.raw_msg().to_vec().try_into()?,
+            );
             let NoncePair { remote: remote_nonce, .. } = generate_nonces(
                 outgoing.raw(),
                 incoming.raw(),
