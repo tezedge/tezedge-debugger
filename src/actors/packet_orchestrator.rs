@@ -6,6 +6,8 @@ use crate::{
     network::network_message::NetworkMessage,
     actors::peer::{Peer, Message, PeerArgs},
 };
+use rocksdb::DB;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 /// Simple packet from raw interface, identified by a port
@@ -42,12 +44,14 @@ impl From<Packet> for Message {
 #[derive(Debug, Clone)]
 pub struct PacketOrchestratorArgs {
     pub local_identity: Identity,
+    pub db: Arc<DB>,
 }
 
 /// Main packet router and process orchestrator
 pub struct PacketOrchestrator {
     remotes: HashMap<u16, ActorRef<Message>>,
     local_identity: Identity,
+    db: Arc<DB>,
 }
 
 impl PacketOrchestrator {
@@ -55,11 +59,16 @@ impl PacketOrchestrator {
         Self {
             remotes: Default::default(),
             local_identity: args.local_identity,
+            db: args.db,
         }
     }
 
     fn spawn_peer(&self, ctx: &Context<<Self as Actor>::Msg>, port: u16) -> Result<ActorRef<Message>, Error> {
-        Ok(ctx.actor_of(Props::new_args(Peer::new, PeerArgs { port, local_identity: self.local_identity.clone() }), &format!("peer-{}", port))?)
+        Ok(ctx.actor_of(Props::new_args(Peer::new, PeerArgs {
+            port,
+            local_identity: self.local_identity.clone(),
+            db: self.db.clone(),
+        }), &format!("peer-{}", port))?)
     }
 }
 

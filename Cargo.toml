@@ -19,6 +19,7 @@ lazy_static = "1.4"
 bytes = "0.5"
 serde_json = "1.0"
 itertools = "0.9"
+rocksdb = "0.13"
 serde = { version="1.0", features=["derive"] }
 crypto = { version="*", git = "https://github.com/simplestaking/tezedge" }
 networking = { version="*", git = "https://github.com/simplestaking/tezedge" }

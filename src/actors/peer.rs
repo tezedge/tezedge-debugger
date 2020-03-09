@@ -14,6 +14,8 @@ use tezos_messages::p2p::{
     binary_message::BinaryChunk,
     encoding::connection::ConnectionMessage,
 };
+use rocksdb::DB;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 /// Message representing a network message for a peer.
@@ -30,10 +32,12 @@ impl Message {
 pub struct PeerArgs {
     pub port: u16,
     pub local_identity: Identity,
+    pub db: Arc<DB>,
 }
 
 /// Actor representing communication over specific port, before proper communication is established.
 pub struct Peer {
+    db: Arc<DB>,
     port: u16,
     initialized: bool,
     incoming: bool,
@@ -51,6 +55,7 @@ pub struct Peer {
 impl Peer {
     pub fn new(args: PeerArgs) -> Self {
         Self {
+            db: args.db,
             port: args.port,
             local_identity: args.local_identity,
             initialized: false,
@@ -107,27 +112,27 @@ impl Peer {
     fn try_upgrade(&mut self) -> Result<bool, Error> {
         if let Some((first, second)) = self.handshake() {
             let is_incoming = first.is_incoming();
-            let (incoming, outgoing) = if is_incoming {
+            let (received, sent) = if is_incoming {
                 (first, second)
             } else {
                 (second, first)
             };
-            let (incoming, outgoing): (BinaryChunk, BinaryChunk) = (
-                incoming.raw_msg().to_vec().try_into()?,
-                outgoing.raw_msg().to_vec().try_into()?,
+            let (received, sent): (BinaryChunk, BinaryChunk) = (
+                received.raw_msg().to_vec().try_into()?,
+                sent.raw_msg().to_vec().try_into()?,
             );
             let NoncePair { remote: remote_nonce, .. } = generate_nonces(
-                outgoing.raw(),
-                incoming.raw(),
+                sent.raw(),
+                received.raw(),
                 is_incoming,
             );
 
-            let peer_conn_msg: ConnectionMessage = ConnectionMessage::try_from(incoming)?;
+            let peer_conn_msg: ConnectionMessage = ConnectionMessage::try_from(received)?;
             let public_key = peer_conn_msg.public_key();
             let peer_id = HashType::PublicKeyHash.bytes_to_string(&public_key);
             let precomputed_key = precompute(&hex::encode(&public_key), &self.local_identity.secret_key)?;
 
-            self.decrypter = Some(EncryptedMessageDecoder::new(precomputed_key, remote_nonce, peer_id.clone()));
+            self.decrypter = Some(EncryptedMessageDecoder::new(precomputed_key, remote_nonce, peer_id.clone(), self.db.clone()));
             self.public_key = public_key.clone();
             self.peer_id = peer_id;
             self.incoming = is_incoming;

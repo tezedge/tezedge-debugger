@@ -20,6 +20,7 @@ use crate::{
     actors::prelude::*,
     configuration::AppConfig,
 };
+use std::sync::Arc;
 
 #[derive(Debug, Fail)]
 enum AppError {
@@ -43,17 +44,23 @@ fn main() -> Result<(), Error> {
     let identity = app_config.load_identity()?;
     log::info!("Loaded identity file from '{}'", app_config.identity_file);
 
+    // -- Initialize RocksDB
+    let db = Arc::new(app_config.open_database()?);
+    log::info!("Created RocksDB storage in: {}", app_config.storage_path);
+
     // -- Start Actor system
     let system = ActorSystem::new()?;
     let orchestrator = system.actor_of(Props::new_args(PacketOrchestrator::new, PacketOrchestratorArgs {
-        local_identity: identity.clone()
+        local_identity: identity.clone(),
+        db,
     }), "packet_orchestrator")?;
 
     // -- Acquire raw network interface
     let interface = datalink::interfaces().into_iter()
-        .filter(|x| x.is_up() && x.is_broadcast() && x.is_multicast())
+        .filter(|x| x.name == app_config.interface)
         .next()
         .ok_or(AppError::NoNetworkInterface)?;
+    log::info!("Captured interface {}", interface.name);
     let (_, mut rx) = datalink::channel(&interface, Default::default())
         .map_err(|err| AppError::IOError(err))
         .and_then(|chan| match chan {

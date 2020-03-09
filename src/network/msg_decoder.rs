@@ -3,61 +3,63 @@ use crypto::{
     nonce::Nonce,
 };
 use tezos_messages::p2p::{
-    binary_message::{BinaryMessage, BinaryChunk},
-    encoding::peer::PeerMessageResponse,
+    binary_message::BinaryChunk,
 };
-use tezos_encoding::binary_reader::BinaryReaderError;
 use crate::network::prelude::*;
+use std::convert::TryFrom;
+use bytes::Buf;
+use rocksdb::DB;
+use std::sync::Arc;
+use std::time::Instant;
 
 pub struct EncryptedMessageDecoder {
+    db: Arc<DB>,
     precomputed_key: PrecomputedKey,
     remote_nonce: Nonce,
     peer_id: String,
-    input_remaining: usize,
+    processing: bool,
+    enc_buf: Vec<u8>,
+    stamper: Instant,
 }
 
 impl EncryptedMessageDecoder {
-    pub fn new(precomputed_key: PrecomputedKey, remote_nonce: Nonce, peer_id: String) -> Self {
+    pub fn new(precomputed_key: PrecomputedKey, remote_nonce: Nonce, peer_id: String, db: Arc<DB>) -> Self {
         Self {
+            db,
             precomputed_key,
             remote_nonce,
             peer_id,
-            input_remaining: 0,
+            processing: false,
+            enc_buf: Default::default(),
+            stamper: Instant::now(),
         }
     }
 
     pub fn recv_msg(&mut self, enc: NetworkMessage) {
-        use std::convert::TryFrom;
-        let mut input_data = vec![];
-
-        let chunk: BinaryChunk = match BinaryChunk::try_from(enc.raw_msg().to_vec()) {
-            Ok(chunk) => chunk,
-            Err(e) => {
-                log::info!("Failed building chunk: {}", e);
-                return;
+        if enc.is_incoming() && !enc.is_empty() {
+            if self.enc_buf.is_empty() {
+                self.enc_buf.extend_from_slice(&enc.raw_msg());
+            } else {
+                self.enc_buf.extend_from_slice(&enc.raw_msg()[2..]);
             }
-        };
+            self.try_decrypt();
+        }
+    }
 
-        match decrypt(chunk.content(), &self.nonce_fetch_increment(), &self.precomputed_key) {
-            Ok(message_decrypted) => {
-                if self.input_remaining >= message_decrypted.len() {
-                    self.input_remaining -= message_decrypted.len();
-                } else {
-                    self.input_remaining = 0;
+    fn try_decrypt(&mut self) {
+        let len = (&self.enc_buf[0..2]).get_u16() as usize;
+        if self.enc_buf[2..].len() >= len {
+            let chunk = match BinaryChunk::try_from(self.enc_buf[0..len + 2].to_vec()) {
+                Ok(chunk) => chunk,
+                Err(e) => {
+                    log::error!("Failed to load binary chunk: {}", e);
+                    return;
                 }
+            };
 
-                input_data.extend(enc.raw_msg());
-
-                if self.input_remaining == 0 {
-                    match PeerMessageResponse::from_bytes(input_data.clone()) {
-                        Ok(message) => log::info!("-- Decrypted new message message: {:?}", message),
-                        Err(BinaryReaderError::Underflow { bytes }) => self.input_remaining += bytes,
-                        Err(e) => log::warn!("Failed to deserialize message: {}", e),
-                    }
-                }
-            }
-            Err(error) => {
-                log::warn!("Failed to decrypt message: {}", error);
+            self.enc_buf.drain(0..len + 2);
+            if let Ok(msg) = decrypt(chunk.content(), &self.nonce_fetch_increment(), &self.precomputed_key) {
+                let _ = self.db.put(self.stamper.elapsed().as_nanos().to_be_bytes(), &msg);
             }
         }
     }
@@ -67,4 +69,6 @@ impl EncryptedMessageDecoder {
         let incremented = self.remote_nonce.increment();
         std::mem::replace(&mut self.remote_nonce, incremented)
     }
+
+    fn store_message(&mut self) {}
 }
