@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct NetworkMessage {
     raw_msg: Vec<u8>,
     incoming: bool,
