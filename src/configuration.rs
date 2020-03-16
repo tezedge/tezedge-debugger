@@ -1,18 +1,12 @@
-use argh::FromArgs;
-use serde::{Serialize, Deserialize};
-use failure::{Error, Fail};
-use rocksdb::DB;
 use std::{
-    fs, path::Path,
+    fs, path::Path, sync::Arc,
 };
+use rocksdb::DB;
+use argh::FromArgs;
+use failure::Error;
+use serde::{Serialize, Deserialize};
+use crate::storage::MessageStore;
 
-#[derive(Debug, Fail)]
-enum ConfigError {
-    #[fail(display = "directory not empty: {}", _0)]
-    DirectoryNotEmpty(String),
-    #[fail(display = "path is not a directory: {}", _0)]
-    NotADirectory(String),
-}
 
 #[derive(FromArgs, Debug, Clone, PartialEq)]
 /// Simple packet sniffer for Tezos nodes (for testing and development purposes).
@@ -20,7 +14,7 @@ pub struct AppConfig {
     #[argh(option, default = "\"eth0\".to_string()")]
     /// network interface to listen for communication
     pub interface: String,
-    #[argh(option, default = "10000")]
+    #[argh(option, default = "9732")]
     /// tezedge p2p port
     pub port: u16,
     #[argh(option)]
@@ -44,9 +38,9 @@ impl AppConfig {
         Ok(serde_json::from_str(&content)?)
     }
 
-    pub fn open_database(&self) -> Result<DB, Error> {
+    pub fn open_database(&self) -> Result<MessageStore, Error> {
         let path = Path::new(&self.storage_path);
-        Ok(DB::open_default(path)?)
+        Ok(MessageStore::new(Arc::new(DB::open_default(path)?)))
     }
 }
 
