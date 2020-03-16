@@ -1,6 +1,6 @@
-use std::convert::{TryFrom, TryInto};
 use failure::Error;
 use riker::actors::*;
+use std::convert::{TryFrom, TryInto};
 use crypto::{
     hash::HashType,
     crypto_box::precompute,
@@ -9,13 +9,12 @@ use crypto::{
 use crate::{
     network::prelude::*,
     configuration::Identity,
+    storage::MessageStore,
 };
 use tezos_messages::p2p::{
     binary_message::BinaryChunk,
     encoding::connection::ConnectionMessage,
 };
-use rocksdb::DB;
-use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 /// Message representing a network message for a peer.
@@ -32,20 +31,18 @@ impl Message {
 pub struct PeerArgs {
     pub port: u16,
     pub local_identity: Identity,
-    pub db: Arc<DB>,
+    pub db: MessageStore,
 }
 
 /// Actor representing communication over specific port, before proper communication is established.
 pub struct Peer {
-    db: Arc<DB>,
+    db: MessageStore,
     port: u16,
     initialized: bool,
     incoming: bool,
     dead: bool,
     waiting: bool,
     buf: Vec<NetworkMessage>,
-    inc_buf: Vec<u8>,
-    out_buf: Vec<u8>,
     local_identity: Identity,
     peer_id: String,
     public_key: Vec<u8>,
@@ -63,8 +60,6 @@ impl Peer {
             dead: false,
             waiting: false,
             buf: Default::default(),
-            inc_buf: Default::default(),
-            out_buf: Default::default(),
             peer_id: Default::default(),
             public_key: Default::default(),
             decrypter: None,
@@ -81,12 +76,15 @@ impl Peer {
         self.buf.push(msg);
         if !self.initialized && self.buf.len() >= 2 {
             match self.try_upgrade() {
-                Ok(true) => log::info!("Successfully upgraded port {} to {} peer {} (with {} messages)", self.port, if self.incoming {
+                Ok(true) => {
+                    log::info!("Successfully upgraded port {} to {} peer {} (with {} messages)", self.port, if self.incoming {
                         "incoming"
                     } else {
                         "outgoing"
-                    }, self.peer_id, self.buf.len()
-                ),
+                    }, self.peer_id, self.buf.len());
+                    self.buf.clear();
+                    self.buf.shrink_to_fit();
+                }
                 Err(e) => {
                     self.dead = true;
                     let (first, second) = (self.buf.get(0).unwrap(), self.buf.get(1).unwrap());

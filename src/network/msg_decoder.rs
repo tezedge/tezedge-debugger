@@ -5,25 +5,21 @@ use crypto::{
 use tezos_messages::p2p::{
     binary_message::BinaryChunk,
 };
-use crate::network::prelude::*;
+use crate::{network::prelude::*, storage::MessageStore};
 use std::convert::TryFrom;
 use bytes::Buf;
-use rocksdb::DB;
-use std::sync::Arc;
-use std::time::Instant;
 
 pub struct EncryptedMessageDecoder {
-    db: Arc<DB>,
+    db: MessageStore,
     precomputed_key: PrecomputedKey,
     remote_nonce: Nonce,
     peer_id: String,
     processing: bool,
     enc_buf: Vec<u8>,
-    stamper: Instant,
 }
 
 impl EncryptedMessageDecoder {
-    pub fn new(precomputed_key: PrecomputedKey, remote_nonce: Nonce, peer_id: String, db: Arc<DB>) -> Self {
+    pub fn new(precomputed_key: PrecomputedKey, remote_nonce: Nonce, peer_id: String, db: MessageStore) -> Self {
         Self {
             db,
             precomputed_key,
@@ -31,7 +27,6 @@ impl EncryptedMessageDecoder {
             peer_id,
             processing: false,
             enc_buf: Default::default(),
-            stamper: Instant::now(),
         }
     }
 
@@ -59,7 +54,7 @@ impl EncryptedMessageDecoder {
 
             self.enc_buf.drain(0..len + 2);
             if let Ok(msg) = decrypt(chunk.content(), &self.nonce_fetch_increment(), &self.precomputed_key) {
-                let _ = self.db.put(self.stamper.elapsed().as_nanos().to_be_bytes(), &msg);
+                let _ = self.db.store(&msg);
             }
         }
     }

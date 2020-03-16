@@ -3,9 +3,11 @@
 mod configuration;
 mod actors;
 mod network;
+mod storage;
 
 use failure::{Error, Fail};
 use riker::actors::*;
+use warp::Filter;
 
 use pnet::{packet::{
     Packet as _,
@@ -20,7 +22,6 @@ use crate::{
     actors::prelude::*,
     configuration::AppConfig,
 };
-use std::sync::Arc;
 
 #[derive(Debug, Fail)]
 enum AppError {
@@ -34,25 +35,26 @@ enum AppError {
     InvalidPacket,
 }
 
-fn main() -> Result<(), Error> {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
     // -- Initialize logger
     simple_logger::init()?;
 
-    // -- Load basic arguments + TODO: Add more arguments and more options ways to pass arguments
+    // -- Load basic arguments
     let app_config = AppConfig::from_env();
     log::info!("Loaded arguments from CLI");
     let identity = app_config.load_identity()?;
     log::info!("Loaded identity file from '{}'", app_config.identity_file);
 
     // -- Initialize RocksDB
-    let db = Arc::new(app_config.open_database()?);
+    let db = app_config.open_database()?;
     log::info!("Created RocksDB storage in: {}", app_config.storage_path);
 
     // -- Start Actor system
     let system = ActorSystem::new()?;
     let orchestrator = system.actor_of(Props::new_args(PacketOrchestrator::new, PacketOrchestratorArgs {
         local_identity: identity.clone(),
-        db,
+        db: db.clone(),
     }), "packet_orchestrator")?;
 
     // -- Acquire raw network interface
@@ -70,30 +72,56 @@ fn main() -> Result<(), Error> {
 
     log::info!("Starting to analyze traffic on port {}", app_config.port);
 
-    loop {
-        let packet = EthernetPacket::new(rx.next()?).unwrap();
-        let (payload, protocol) = match packet.get_ethertype() {
-            EtherTypes::Ipv4 => {
-                let header = Ipv4Packet::new(packet.payload()).unwrap();
-                (header.payload().to_vec(), header.get_next_level_protocol())
-            }
-            EtherTypes::Ipv6 => {
-                let header = Ipv6Packet::new(packet.payload()).unwrap();
-                ((header.payload()).to_vec(), header.get_next_header())
-            }
-            _ => continue,
-        };
+    std::thread::spawn(move || {
+        loop {
+            let packet = EthernetPacket::new(rx.next().expect("Failed to read packet")).unwrap();
+            let (payload, protocol) = match packet.get_ethertype() {
+                EtherTypes::Ipv4 => {
+                    let header = Ipv4Packet::new(packet.payload()).unwrap();
+                    (header.payload().to_vec(), header.get_next_level_protocol())
+                }
+                EtherTypes::Ipv6 => {
+                    let header = Ipv6Packet::new(packet.payload()).unwrap();
+                    ((header.payload()).to_vec(), header.get_next_header())
+                }
+                _ => continue,
+            };
 
-        if protocol == IpNextHeaderProtocols::Tcp {
-            let tcp = TcpPacket::new(&payload).unwrap();
-            let (source, dest) = (tcp.get_source(), tcp.get_destination());
-            if app_config.port == dest {
-                orchestrator.send_msg(Packet::outgoing(source, tcp.payload().to_vec()), None);
-            } else if app_config.port == source {
-                orchestrator.send_msg(Packet::incoming(dest, tcp.payload().to_vec()), None);
-            } else {
-                continue;
+            if protocol == IpNextHeaderProtocols::Tcp {
+                let tcp = TcpPacket::new(&payload).unwrap();
+                let (source, dest) = (tcp.get_source(), tcp.get_destination());
+                if app_config.port == dest {
+                    orchestrator.send_msg(Packet::outgoing(source, tcp.payload().to_vec()), None);
+                } else if app_config.port == source {
+                    orchestrator.send_msg(Packet::incoming(dest, tcp.payload().to_vec()), None);
+                } else {
+                    continue;
+                }
             }
         }
-    }
+    });
+
+    let cloner = move || {
+        db.clone()
+    };
+
+    let endpoint = move |start, end| {
+        match cloner().get_range(start, end) {
+            Ok(value) => serde_json::to_string(&value).expect("failed to serialize the array"),
+            _ => format!("failed")
+        }
+    };
+
+    let port: usize = 5050;
+    log::info!("Starting to serving data at {}", port);
+
+    // -- Initialize server
+    let endpoint = warp::path!("data" / u64 / u64)
+        .map(endpoint);
+
+    warp::serve(endpoint)
+        .run(([127, 0, 0, 1], 5050))
+        .await;
+
+    Ok(())
 }

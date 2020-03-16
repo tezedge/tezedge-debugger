@@ -1,13 +1,12 @@
-use riker::actors::*;
 use failure::Error;
+use riker::actors::*;
 use std::collections::HashMap;
 use crate::{
     configuration::Identity,
     network::network_message::NetworkMessage,
     actors::peer::{Peer, Message, PeerArgs},
+    storage::MessageStore,
 };
-use rocksdb::DB;
-use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 /// Simple packet from raw interface, identified by a port
@@ -44,14 +43,14 @@ impl From<Packet> for Message {
 #[derive(Debug, Clone)]
 pub struct PacketOrchestratorArgs {
     pub local_identity: Identity,
-    pub db: Arc<DB>,
+    pub db: MessageStore,
 }
 
 /// Main packet router and process orchestrator
 pub struct PacketOrchestrator {
     remotes: HashMap<u16, ActorRef<Message>>,
     local_identity: Identity,
-    db: Arc<DB>,
+    db: MessageStore,
 }
 
 impl PacketOrchestrator {
