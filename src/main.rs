@@ -5,21 +5,15 @@ mod actors;
 mod network;
 mod storage;
 
+use std::sync::{Mutex, Arc};
+
 use failure::{Error, Fail};
 use riker::actors::*;
 use warp::Filter;
 
-use pnet::{packet::{
-    Packet as _,
-    tcp::TcpPacket,
-    ipv4::Ipv4Packet,
-    ipv6::Ipv6Packet,
-    ethernet::{EthernetPacket, EtherTypes},
-    ip::IpNextHeaderProtocols,
-}, datalink};
-
 use crate::{
     actors::prelude::*,
+    network::prelude::*,
     configuration::AppConfig,
 };
 
@@ -50,76 +44,50 @@ async fn main() -> Result<(), Error> {
     let db = app_config.open_database()?;
     log::info!("Created RocksDB storage in: {}", app_config.storage_path);
 
+    // -- Create TUN devices
+    let addr_in = ((10, 0, 0, 0), (255, 255, 255, 0));
+    let addr_out = ((10, 0, 1, 0), (255, 255, 255, 0));
+    let ((_, receiver), writer) = make_bridge(
+        // TODO: Make settings for this
+        addr_in.clone(),
+        addr_out.clone(),
+    )?;
+    log::info!("Created TUN bridge on {:?} <-> {:?}", addr_in, addr_out);
+
     // -- Start Actor system
     let system = ActorSystem::new()?;
     let orchestrator = system.actor_of(Props::new_args(PacketOrchestrator::new, PacketOrchestratorArgs {
         local_identity: identity.clone(),
         db: db.clone(),
+        writer: Arc::new(Mutex::new(writer)),
     }), "packet_orchestrator")?;
-
-    // -- Acquire raw network interface
-    let interface = datalink::interfaces().into_iter()
-        .filter(|x| x.name == app_config.interface)
-        .next()
-        .ok_or(AppError::NoNetworkInterface)?;
-    log::info!("Captured interface {}", interface.name);
-    let (_, mut rx) = datalink::channel(&interface, Default::default())
-        .map_err(|err| AppError::IOError(err))
-        .and_then(|chan| match chan {
-            datalink::Channel::Ethernet(tx, rx) => Ok((tx, rx)),
-            _ => Err(AppError::UnsupportedNetworkChannelType)
-        })?;
-
-    log::info!("Starting to analyze traffic on port {}", app_config.port);
 
     std::thread::spawn(move || {
         loop {
-            let packet = EthernetPacket::new(rx.next().expect("Failed to read packet")).unwrap();
-            let (payload, protocol) = match packet.get_ethertype() {
-                EtherTypes::Ipv4 => {
-                    let header = Ipv4Packet::new(packet.payload()).unwrap();
-                    (header.payload().to_vec(), header.get_next_level_protocol())
-                }
-                EtherTypes::Ipv6 => {
-                    let header = Ipv6Packet::new(packet.payload()).unwrap();
-                    ((header.payload()).to_vec(), header.get_next_header())
-                }
-                _ => continue,
-            };
-
-            if protocol == IpNextHeaderProtocols::Tcp {
-                let tcp = TcpPacket::new(&payload).unwrap();
-                let (source, dest) = (tcp.get_source(), tcp.get_destination());
-                if app_config.port == dest {
-                    orchestrator.send_msg(Packet::outgoing(source, tcp.payload().to_vec()), None);
-                } else if app_config.port == source {
-                    orchestrator.send_msg(Packet::incoming(dest, tcp.payload().to_vec()), None);
-                } else {
-                    continue;
-                }
+            for message in receiver.recv() {
+                orchestrator.tell(message, None);
             }
         }
     });
+
+    log::info!("Starting to analyze traffic on port {}", app_config.port);
+
 
     let cloner = move || {
         db.clone()
     };
 
-    let endpoint = move |start, end| {
-        match cloner().get_range(start, end) {
-            Ok(value) => serde_json::to_string(&value).expect("failed to serialize the array"),
-            _ => format!("failed")
-        }
-    };
-
-    let port: usize = 5050;
-    log::info!("Starting to serving data at {}", port);
-
     // -- Initialize server
     let endpoint = warp::path!("data" / u64 / u64)
-        .map(endpoint);
+        .map(move |start, end| {
+            match cloner().get_range(start, end) {
+                Ok(value) => serde_json::to_string(&value).expect("failed to serialize the array"),
+                _ => format!("failed")
+            }
+        });
 
     warp::serve(endpoint)
+        // TODO: Add as config settings
         .run(([127, 0, 0, 1], 5050))
         .await;
 

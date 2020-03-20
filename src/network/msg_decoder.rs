@@ -5,9 +5,10 @@ use crypto::{
 use tezos_messages::p2p::{
     binary_message::BinaryChunk,
 };
-use crate::{network::prelude::*, storage::MessageStore};
+use crate::storage::MessageStore;
 use std::convert::TryFrom;
 use bytes::Buf;
+use crate::actors::packet_orchestrator::Packet;
 
 pub struct EncryptedMessageDecoder {
     db: MessageStore,
@@ -30,7 +31,7 @@ impl EncryptedMessageDecoder {
         }
     }
 
-    pub fn recv_msg(&mut self, enc: NetworkMessage) {
+    pub fn recv_msg(&mut self, enc: &Packet) {
         if enc.is_incoming() && !enc.is_empty() {
             if self.enc_buf.is_empty() {
                 self.enc_buf.extend_from_slice(&enc.raw_msg());

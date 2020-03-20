@@ -1,16 +1,21 @@
 use tun::{
-    self, Configuration, Device as _,
-    platform::Device,
+    self, Configuration,
+    platform::posix::{Reader, Writer},
 };
-use std::io::Read as _;
+use std::io::{Read, Write};
 use failure::{Error, Fail};
 use flume::{Receiver, Sender, unbounded};
-use pnet::packet::ipv4::Ipv4Packet;
+use pnet::packet::{
+    Packet as PacketTrait,
+    ipv4::MutableIpv4Packet,
+};
+use crate::actors::packet_orchestrator::{OrchestratorMessage, Packet};
+use std::net::Ipv4Addr;
 
 pub fn make_bridge(
     (in_addr, in_mask): (IpAddrTuple, IpAddrTuple),
     (out_addr, out_mask): (IpAddrTuple, IpAddrTuple),
-) -> Result<(Sender<Packet>, Receiver<Packet>), Error> {
+) -> Result<((Sender<OrchestratorMessage>, Receiver<OrchestratorMessage>), BridgeWriter), Error> {
     let mut in_conf = Configuration::default();
     let mut out_conf = Configuration::default();
 
@@ -19,7 +24,6 @@ pub fn make_bridge(
             config.packet_information(false);
         })
         .netmask(in_mask)
-        .name("tintun")
         .up();
 
     out_conf.address(out_addr)
@@ -27,33 +31,85 @@ pub fn make_bridge(
             config.packet_information(false);
         })
         .netmask(out_mask)
-        .name("toutun")
         .up();
-
-    let in_tun = tun::platform::create(&in_conf)
-        .map_err(BridgeError::from)?;
-    let out_tun = tun::platform::create(&out_conf)
-        .map_err(BridgeError::from)?;
 
     let (tx, rx) = unbounded();
     let in_send = tx.clone();
     let out_send = tx.clone();
 
-    std::thread::spawn(process_packets(in_tun, in_send));
-    std::thread::spawn(process_packets(out_tun, out_send));
+    let (in_reader, in_writer) = tun::platform::create(&in_conf)
+        .map_err(BridgeError::from)?
+        .split();
+    let (out_reader, out_writer) = tun::platform::create(&out_conf)
+        .map_err(BridgeError::from)?
+        .split();
 
-    Ok((tx, rx))
+    std::thread::spawn(process_packets(in_reader, in_send, false));
+    std::thread::spawn(process_packets(out_reader, out_send, true));
+
+    Ok(((tx, rx), BridgeWriter::new(in_writer, out_writer)))
 }
 
-fn process_packets(mut dev: Device, sender: Sender<Packet>) -> impl FnMut() + 'static {
+fn process_packets(mut dev: Reader, sender: Sender<OrchestratorMessage>, inner: bool) -> impl FnMut() + 'static {
     move || {
-        let mut buf = Vec::with_capacity(65535);
+        let mut buf = [0u8; 65535];
         loop {
             let count = dev.read(&mut buf).unwrap();
-            if let Err(err) = sender.send(Ipv4Packet::owned((&buf[0..count]).to_vec()).unwrap()) {
-                log::error!("Failed to send message from on TUN {}: {:?}", dev.name(), err);
+            let data = &buf[0..count];
+            let header = data[0];
+            let version = header >> 4;
+            if version == 4 {
+                if let Some(ip_header) = MutableIpv4Packet::owned((&buf[0..count]).to_vec()) {
+                    if let Err(err) = sender.send(if inner {
+                        OrchestratorMessage::Inner(
+                            if ip_header.get_source() == Ipv4Addr::new(10, 0, 0, 1) {
+                                Packet::outgoing
+                            } else {
+                                Packet::incoming
+                            }(ip_header)
+                        )
+                    } else {
+                        OrchestratorMessage::Outer(
+                            if ip_header.get_destination() == Ipv4Addr::new(10, 0, 1, 1) {
+                                Packet::incoming
+                            } else {
+                                Packet::outgoing
+                            }(ip_header)
+                        )
+                    }) {
+                        log::error!("failed to forward message: {:?}", err);
+                    }
+                } else {
+                    log::warn!("Got invalid ip message: {:?}", &buf[0..count]);
+                }
             }
         }
+    }
+}
+
+/// Writing part of the bridge, to send forward captured packets
+pub struct BridgeWriter {
+    /// "Inwards" writer, for forwarding to local clients
+    in_writer: Writer,
+    /// "Outwards" writer, for forwarding to remote clients
+    out_writer: Writer,
+}
+
+impl BridgeWriter {
+    pub fn new(in_writer: Writer, out_writer: Writer) -> Self {
+        Self { in_writer, out_writer }
+    }
+
+    pub fn send_packet_to_internet(&mut self, packet: &mut MutableIpv4Packet) -> Result<(), Error> {
+        // TODO: Implement address handling
+        packet.set_source([10, 0, 1, 1].into());
+        Ok(self.out_writer.write_all(packet.packet())?)
+    }
+
+    pub fn send_packet_to_local(&mut self, packet: &mut MutableIpv4Packet) -> Result<(), Error> {
+        // TODO: Implement address handling
+        packet.set_destination([192, 168, 1, 199].into());
+        Ok(self.in_writer.write_all(packet.packet())?)
     }
 }
 
@@ -71,4 +127,3 @@ impl From<tun::Error> for BridgeError {
 }
 
 pub type IpAddrTuple = (u8, u8, u8, u8);
-pub type Packet = Ipv4Packet<'static>;
