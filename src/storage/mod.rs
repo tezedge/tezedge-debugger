@@ -1,11 +1,66 @@
 use rocksdb::DB;
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 use failure::Error;
+use std::net::Ipv4Addr;
+use tezos_messages::p2p::encoding::peer::PeerMessage;
+use serde::{Serialize, Deserialize};
+use pnet::packet::Packet as _;
+use tezos_messages::p2p::encoding::connection::ConnectionMessage;
+use crate::actors::packet_orchestrator::Packet;
 
 #[derive(Clone, Debug)]
 pub struct MessageStore {
     db: Arc<DB>,
     counter: Arc<AtomicU64>,
+}
+
+/// Types of messages stored in database
+#[derive(Debug, Serialize, Deserialize)]
+pub enum StoreMessage {
+    /// Raw Tcp message, part of tcp connection handling.
+    /// Not part of tezos node communication, but internet working.
+    TcpMessage {
+        source: Ipv4Addr,
+        destination: Ipv4Addr,
+        packet: Vec<u8>,
+    },
+
+    /// Unencrypted message, which is part of tezos communication handshake
+    ConnectionMessage {
+        source: Ipv4Addr,
+        destination: Ipv4Addr,
+        payload: ConnectionMessage,
+    },
+
+    /// Actual deciphered P2P message sent by some tezos node
+    P2PMessage {
+        source: Ipv4Addr,
+        destination: Ipv4Addr,
+        payload: Vec<PeerMessage>,
+    },
+}
+
+impl StoreMessage {
+    pub fn new_conn(source: Ipv4Addr, destination: Ipv4Addr, msg: &ConnectionMessage) -> Self {
+        let c = bincode::serialize(msg).unwrap();
+        let payload = bincode::deserialize(&c).unwrap();
+        Self::ConnectionMessage {
+            source,
+            destination,
+            payload,
+        }
+    }
+}
+
+impl From<Packet> for StoreMessage {
+    fn from(packet: Packet) -> Self {
+        let packet = packet.packet();
+        Self::TcpMessage {
+            source: packet.get_source(),
+            destination: packet.get_destination(),
+            packet: packet.packet().to_vec(),
+        }
+    }
 }
 
 impl MessageStore {
@@ -16,12 +71,17 @@ impl MessageStore {
         }
     }
 
+    pub fn store_message(&mut self, data: StoreMessage) -> Result<(), Error> {
+        let content = bincode::serialize(&data)?;
+        self.store(&content)
+    }
+
     pub fn store<T: AsRef<[u8]>>(&mut self, data: T) -> Result<(), Error> {
         let id: u64 = (*self.counter).fetch_add(1, Ordering::SeqCst);
         Ok(self.db.put(id.to_ne_bytes(), data)?)
     }
 
-    pub fn get_range(&mut self, start: u64, end: u64) -> Result<Vec<Vec<u8>>, Error> {
+    pub fn get_range(&mut self, start: u64, end: u64) -> Result<Vec<StoreMessage>, Error> {
         if start >= end || start >= self.counter.load(Ordering::SeqCst) {
             Ok(Default::default())
         } else {
@@ -29,7 +89,7 @@ impl MessageStore {
             for i in start..end {
                 let key = i.to_ne_bytes();
                 if let Some(x) = self.db.get(&key)? {
-                    ret.push(x);
+                    ret.push(bincode::deserialize(&x)?);
                 }
             }
             Ok(ret)

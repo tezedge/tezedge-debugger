@@ -2,7 +2,7 @@ use failure::Error;
 use riker::actors::*;
 use std::{
     net::Ipv4Addr,
-    convert::{TryFrom, TryInto},
+    convert::TryFrom,
 };
 use crypto::{
     hash::HashType,
@@ -22,11 +22,11 @@ use crate::actors::packet_orchestrator::{Packet, OrchestratorMessage};
 use pnet::packet::Packet as _;
 use packet::{
     Packet as _,
-    ip::{
-        v4::Packet as Ipv4Packet,
-    },
+    ip::v4::Packet as Ipv4Packet,
     tcp::Packet as TcpPacket,
 };
+use tezos_messages::p2p::binary_message::cache::CachedData;
+use crate::storage::StoreMessage;
 
 #[derive(Clone, Debug, PartialEq)]
 /// Message representing a network message for a peer.
@@ -51,7 +51,7 @@ pub struct Peer {
     incoming: bool,
     is_dead: bool,
     waiting: bool,
-    buf: Vec<Packet>,
+    buf: Vec<ConnectionMessage>,
     local_identity: Identity,
     peer_id: String,
     public_key: Vec<u8>,
@@ -76,35 +76,33 @@ impl Peer {
     }
 
     fn try_upgrade(&mut self) -> Result<bool, Error> {
-        if let Some((first, second)) = self.handshake() {
-            let is_incoming = first.is_incoming();
-            let (received, sent) = if is_incoming {
-                (first, second)
-            } else {
-                (second, first)
-            };
+        if self.buf.len() == 2 {
+            let precomputed_key;
+            let remote_nonce;
+            let peer_id;
+            let is_incoming;
+            let public_key;
+            {
+                let (first, second) = self.handshake().unwrap();
+                let first_pk = HashType::PublicKeyHash.bytes_to_string(&first.public_key());
+                is_incoming = first_pk != self.local_identity.public_key;
+                let (received, sent) = if is_incoming {
+                    (first, second)
+                } else {
+                    (second, first)
+                };
 
-            let p1 = received.packet().packet();
-            let ipp1 = Ipv4Packet::new(p1).unwrap();
-            let tpp1 = TcpPacket::new(ipp1.payload()).unwrap();
-            let p2 = sent.packet().packet();
-            let ipp2 = Ipv4Packet::new(p2).unwrap();
-            let tpp2 = TcpPacket::new(ipp2.payload()).unwrap();
+                let NoncePair { remote, .. } = generate_nonces(
+                    &sent.cache_reader().get().unwrap(),
+                    &received.cache_reader().get().unwrap(),
+                    is_incoming,
+                );
+                remote_nonce = remote;
 
-            let (received, sent): (BinaryChunk, BinaryChunk) = (
-                tpp1.payload().to_vec().try_into()?,
-                tpp2.payload().to_vec().try_into()?,
-            );
-            let NoncePair { remote: remote_nonce, .. } = generate_nonces(
-                sent.raw(),
-                received.raw(),
-                is_incoming,
-            );
-
-            let peer_conn_msg: ConnectionMessage = ConnectionMessage::try_from(received)?;
-            let public_key = peer_conn_msg.public_key();
-            let peer_id = HashType::PublicKeyHash.bytes_to_string(&public_key);
-            let precomputed_key = precompute(&hex::encode(&public_key), &self.local_identity.secret_key)?;
+                public_key = received.public_key().clone();
+                peer_id = HashType::PublicKeyHash.bytes_to_string(&public_key);
+                precomputed_key = precompute(&hex::encode(&public_key), &self.local_identity.secret_key)?;
+            }
 
             self.decrypter = Some(EncryptedMessageDecoder::new(precomputed_key, remote_nonce, peer_id.clone(), self.db.clone()));
             self.public_key = public_key.clone();
@@ -117,14 +115,9 @@ impl Peer {
         }
     }
 
-    fn handshake(&self) -> Option<(&Packet, &Packet)> {
+    fn handshake(&self) -> Option<(&ConnectionMessage, &ConnectionMessage)> {
         if self.buf.len() >= 2 {
-            let first = self.buf.get(0).unwrap();
-            if let Some(second) = self.buf.iter().find(|x| x.is_incoming() != first.is_incoming()) {
-                Some((first, second))
-            } else {
-                None
-            }
+            Some((self.buf.get(0).unwrap(), self.buf.get(1).unwrap()))
         } else {
             None
         }
@@ -133,8 +126,8 @@ impl Peer {
     fn check_packet(&self, packet: &Packet) -> bool {
         use packet::tcp::flag::PSH;
         let raw = &packet.packet().packet();
-        let ipp= Ipv4Packet::new(raw).unwrap();
-        let tpp= TcpPacket::new(ipp.payload()).unwrap();
+        let ipp = Ipv4Packet::new(raw).unwrap();
+        let tpp = TcpPacket::new(ipp.payload()).unwrap();
         !packet.is_empty() && !self.is_dead
             && tpp.flags().intersects(PSH)
     }
@@ -148,10 +141,25 @@ impl Peer {
 
     fn primer_process_packet(&mut self, packet: Packet) -> Packet {
         if !self.check_packet(&packet) {
+            let _ = self.db.store_message(packet.clone().into());
             return packet;
         }
 
-        self.buf.push(packet.clone());
+        if self.buf.len() == 0 || self.buf.len() == 1 {
+            let p = packet.packet().packet();
+            let ipp = Ipv4Packet::new(p).unwrap();
+            let tpp = TcpPacket::new(ipp.payload()).unwrap();
+            if let Ok(chunk) = BinaryChunk::try_from(tpp.payload().to_vec()) {
+                if let Ok(msg) = ConnectionMessage::try_from(chunk) {
+                    let _ = self.db.store_message(StoreMessage::new_conn(
+                        packet.packet().get_source(),
+                        packet.packet().get_destination(),
+                        &msg,
+                    ));
+                    self.buf.push(msg);
+                }
+            }
+        }
 
         if !self.initialized && self.buf.len() >= 2 {
             match self.try_upgrade() {
@@ -165,16 +173,7 @@ impl Peer {
                     self.buf.shrink_to_fit();
                 }
                 Err(e) => {
-                    self.is_dead = true;
-                    let (first, second) = (self.buf.get(0).unwrap(), self.buf.get(1).unwrap());
-                    let is_incoming = first.is_incoming();
-                    let (inc, out) = if is_incoming {
-                        (first, second)
-                    } else {
-                        (second, first)
-                    };
-                    log::error!("Failed to upgrade client on port {}. Handshake messages:\nTezedge: \
-                        \n\t{:?}\nOCaml:\n\t{:?}\nError: {}", self.addr, out, inc, e);
+                    log::info!("Failed to upgrade peer {}: {}", self.addr, e);
                 }
                 _ => {
                     if !self.waiting {
