@@ -12,7 +12,10 @@ use std::{
 
 use failure::{Error, Fail};
 use riker::actors::*;
-use warp::Filter;
+use warp::{
+    Filter,
+    http::Response
+};
 
 use crate::{
     actors::prelude::*,
@@ -111,7 +114,6 @@ async fn main() -> Result<(), Error> {
 
     log::info!("Starting to analyze traffic on port {}", app_config.port);
 
-
     let cloner = move || {
         db.clone()
     };
@@ -120,9 +122,18 @@ async fn main() -> Result<(), Error> {
     let endpoint = warp::path!("data" / u64 / u64)
         .map(move |start, end| {
             match cloner().get_range(start, end) {
-                Ok(value) => serde_json::to_string(&value).expect("failed to serialize the array"),
-                _ => format!("failed")
+                Ok(value) => {
+                    serde_json::to_string(&value).expect("failed to serialize the array")
+                },
+                Err(e) => serde_json::to_string(&
+                    format!("Failed to read database: {}", e)
+                ).unwrap()
             }
+        })
+        .map(|value| {
+           Response::builder()
+               .header("Content-Type", "application/json")
+               .body(value)
         });
 
     warp::serve(endpoint)
