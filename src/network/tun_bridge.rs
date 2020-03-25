@@ -132,6 +132,7 @@ impl BridgeWriter {
             },
         };
 
+
         let packet: &mut [u8] = packet.packet_mut();
         let mut ip_packet = IPv4Packet::new(packet).unwrap();
         let _ = ip_packet.update_checksum();
