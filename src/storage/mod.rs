@@ -2,7 +2,7 @@ use rocksdb::DB;
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 use failure::Error;
 use std::net::Ipv4Addr;
-use tezos_messages::p2p::encoding::peer::PeerMessage;
+use tezos_messages::p2p::encoding::peer::{PeerMessage, PeerMessageResponse};
 use serde::{Serialize, Deserialize};
 use pnet::packet::Packet as _;
 use tezos_messages::p2p::encoding::connection::ConnectionMessage;
@@ -45,6 +45,16 @@ impl StoreMessage {
         let c = bincode::serialize(msg).unwrap();
         let payload = bincode::deserialize(&c).unwrap();
         Self::ConnectionMessage {
+            source,
+            destination,
+            payload,
+        }
+    }
+
+    pub fn new_peer(source: Ipv4Addr, destination: Ipv4Addr, msg: &PeerMessageResponse) -> Self {
+        let c = bincode::serialize(msg.messages()).unwrap();
+        let payload = bincode::deserialize(&c).unwrap();
+        Self::P2PMessage {
             source,
             destination,
             payload,
