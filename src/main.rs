@@ -5,7 +5,10 @@ mod actors;
 mod network;
 mod storage;
 
-use std::sync::{Mutex, Arc};
+use std::{
+    process::Command,
+    sync::{Mutex, Arc},
+};
 
 use failure::{Error, Fail};
 use riker::actors::*;
@@ -29,6 +32,14 @@ enum AppError {
     InvalidPacket,
 }
 
+fn set_sysctl(ifaces: &[&str]) {
+    for iface in ifaces {
+        Command::new("sysctl")
+            .args(&["-w", &format!("net.ipv4.conf.{}.rp_filter=0", iface)])
+            .output().unwrap();
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     // -- Initialize logger
@@ -45,18 +56,46 @@ async fn main() -> Result<(), Error> {
     log::info!("Created RocksDB storage in: {}", app_config.storage_path);
 
     // -- Create TUN devices
-    let addr_in = ((10, 0, 0, 0), (255, 255, 255, 0));
-    let addr_out = ((10, 0, 1, 0), (255, 255, 255, 0));
     let ((_, receiver), writer) = make_bridge(
-        // TODO: Make settings for this
-        addr_in.clone(),
-        addr_out.clone(),
+        &app_config.tun0_address_space,
+        &app_config.tun1_address_space,
+        &app_config.local_address,
+        &app_config.tun1_address,
     )?;
-    log::info!("Created TUN bridge on {:?} <-> {:?}", addr_in, addr_out);
+
+    log::info!("Created TUN bridge on {} <-> {} <-> {}",
+        app_config.local_address,
+        app_config.tun0_address,
+        app_config.tun1_address,
+    );
+
+    // -- Setup redirects
+    Command::new("ip")
+        .args(&["rule", "add", "fwmark", "1", "table", "1"])
+        .output().unwrap();
+    Command::new("ip")
+        .args(&["route", "add", "default", "dev", &app_config.tun0_name, "table", "1"])
+        .output().unwrap();
+    Command::new("iptables")
+        .args(&["-t", "mangle", "-A", "OUTPUT",
+            "--source", &app_config.local_address,
+            "-o", &app_config.interface, "-p", "tcp",
+            "--dport", &app_config.port.to_string(),
+            "-j", "MARK", "--set-mark", "1"])
+        .output().unwrap();
+    Command::new("iptables")
+        .args(&["-t", "nat", "-A", "POSTROUTING",
+            "--source", &app_config.tun1_address_space,
+            "-o", &app_config.interface, "-j", "MASQUERADE"])
+        .output().unwrap();
+    set_sysctl(&["all", "default", &app_config.tun0_name, &app_config.tun1_name, &app_config.interface]);
+
 
     // -- Start Actor system
     let system = ActorSystem::new()?;
     let orchestrator = system.actor_of(Props::new_args(PacketOrchestrator::new, PacketOrchestratorArgs {
+        local_address: app_config.local_address.clone(),
+        fake_address: app_config.tun1_address.clone(),
         local_identity: identity.clone(),
         db: db.clone(),
         writer: Arc::new(Mutex::new(writer)),

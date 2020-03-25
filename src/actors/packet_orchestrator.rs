@@ -24,7 +24,7 @@ impl Packet {
     pub fn outgoing(packet: MutableIpv4Packet<'static>) -> Self { Self::new(packet, false) }
 
     pub fn raw_msg(&self) -> &[u8] {
-        self.packet().payload()
+        &self.packet().payload()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -54,7 +54,7 @@ impl Packet {
         }
     }
 
-    fn addr(&self) -> Ipv4Addr {
+    pub fn addr(&self) -> Ipv4Addr {
         match self {
             Packet::Incoming(packet) => packet.get_source(),
             Packet::Outgoing(packet) => packet.get_destination(),
@@ -102,6 +102,8 @@ impl OrchestratorMessage {
 #[derive(Clone)]
 pub struct PacketOrchestratorArgs {
     pub local_identity: Identity,
+    pub fake_address: String,
+    pub local_address: String,
     pub db: MessageStore,
     pub writer: Arc<Mutex<BridgeWriter>>,
 }
@@ -112,6 +114,8 @@ pub struct PacketOrchestrator {
     local_identity: Identity,
     db: MessageStore,
     writer: Arc<Mutex<BridgeWriter>>,
+    fake_address: String,
+    local_address: String,
 }
 
 impl PacketOrchestrator {
@@ -121,6 +125,8 @@ impl PacketOrchestrator {
             local_identity: args.local_identity,
             db: args.db,
             writer: args.writer,
+            local_address: args.local_address,
+            fake_address: args.fake_address,
         }
     }
 
@@ -166,7 +172,7 @@ impl Actor for PacketOrchestrator {
                     Packet::Incoming(mut inner) => {
                         // Else the packet came from the internet, and was already processed by a peer
                         let mut bridge = self.writer.lock().expect("mutex poisoning");
-                        let _ = bridge.send_packet_to_local(&mut inner);
+                        let _ = bridge.send_packet_to_local(&mut inner, &self.local_address);
                     }
                 }
             }
@@ -175,7 +181,7 @@ impl Actor for PacketOrchestrator {
                     Packet::Outgoing(mut inner) => {
                         // Packet processed by the peer, ready to be sent to the internets
                         let mut bridge = self.writer.lock().expect("mutex poisoning");
-                        let _ = bridge.send_packet_to_internet(&mut inner);
+                        let _ = bridge.send_packet_to_internet(&mut inner, &self.fake_address);
                     }
                     Packet::Incoming(_) => {
                         // Packet needs to be forwarded to correct peer for processing

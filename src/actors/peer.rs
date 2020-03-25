@@ -19,6 +19,14 @@ use tezos_messages::p2p::{
     encoding::connection::ConnectionMessage,
 };
 use crate::actors::packet_orchestrator::{Packet, OrchestratorMessage};
+use pnet::packet::Packet as _;
+use packet::{
+    Packet as _,
+    ip::{
+        v4::Packet as Ipv4Packet,
+    },
+    tcp::Packet as TcpPacket,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 /// Message representing a network message for a peer.
@@ -75,9 +83,17 @@ impl Peer {
             } else {
                 (second, first)
             };
+
+            let p1 = received.packet().packet();
+            let ipp1 = Ipv4Packet::new(p1).unwrap();
+            let tpp1 = TcpPacket::new(ipp1.payload()).unwrap();
+            let p2 = sent.packet().packet();
+            let ipp2 = Ipv4Packet::new(p2).unwrap();
+            let tpp2 = TcpPacket::new(ipp2.payload()).unwrap();
+
             let (received, sent): (BinaryChunk, BinaryChunk) = (
-                received.raw_msg().to_vec().try_into()?,
-                sent.raw_msg().to_vec().try_into()?,
+                tpp1.payload().to_vec().try_into()?,
+                tpp2.payload().to_vec().try_into()?,
             );
             let NoncePair { remote: remote_nonce, .. } = generate_nonces(
                 sent.raw(),
@@ -115,7 +131,12 @@ impl Peer {
     }
 
     fn check_packet(&self, packet: &Packet) -> bool {
-        !packet.is_empty() && self.is_dead
+        use packet::tcp::flag::PSH;
+        let raw = &packet.packet().packet();
+        let ipp= Ipv4Packet::new(raw).unwrap();
+        let tpp= TcpPacket::new(ipp.payload()).unwrap();
+        !packet.is_empty() && !self.is_dead
+            && tpp.flags().intersects(PSH)
     }
 
     fn remote_process_packet(&mut self, packet: Packet) -> Packet {
@@ -125,19 +146,13 @@ impl Peer {
         packet
     }
 
-    fn primer_process_packet(&mut self, mut packet: Packet) -> Packet {
+    fn primer_process_packet(&mut self, packet: Packet) -> Packet {
         if !self.check_packet(&packet) {
             return packet;
         }
 
         self.buf.push(packet.clone());
-        if self.buf.len() == 2 && packet.is_incoming() {
-            // This is remote connection message, should be replaced local one
-            let mut fake_packet = self.buf.get(0).unwrap().clone();
-            fake_packet.packet_mut().set_source(packet.packet().get_source());
-            fake_packet.packet_mut().set_destination(packet.packet().get_destination());
-            packet = fake_packet
-        }
+
         if !self.initialized && self.buf.len() >= 2 {
             match self.try_upgrade() {
                 Ok(true) => {
@@ -193,7 +208,6 @@ impl Actor for Peer {
             }
             PeerMessage::Outer(packet) => {
                 assert!(packet.is_incoming(), "peer can only receive inner-outgoing or outer-incoming communication");
-                // TODO: Return correctly processed packet out of process function to be re-transmitted
                 let packet = if self.initialized {
                     self.remote_process_packet(packet)
                 } else {
