@@ -79,7 +79,7 @@ fn process_packets(mut dev: Reader, sender: Sender<RawPacketMessage>, inner: boo
                         }
                     }
                     Err(err) => {
-                        log::trace!("dropping invalid packet{:?}: {}", data, err);
+                        log::trace!("dropping invalid packet {:?}: {}", data, err);
                     }
                 }
             }
