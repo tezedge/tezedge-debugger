@@ -116,8 +116,14 @@ impl RawPacketMessage {
 
     #[inline]
     pub fn update_ip_packet_checksum(&mut self) -> Result<(), PacketError> {
+        let raw = self.clone_packet();
         if let IpPacket::V4(ref mut packet) = self.ip_packet_mut() {
-            packet.update_checksum()?;
+            use pnet::packet::{
+                ipv4::{Ipv4Packet as PnetIpv4Packet, checksum}
+            };
+            let ppacket = PnetIpv4Packet::new(&raw).unwrap();
+            let checksum = checksum(&ppacket);
+            packet.set_checksum(checksum)?;
             Ok(())
         } else {
             // TODO: Add IPv6 support
@@ -144,16 +150,12 @@ impl RawPacketMessage {
     #[inline]
     pub fn set_source_addr(&mut self, addr: IpAddr) -> Result<(), PacketError> {
         // TODO: Add IPv6 support
-        let mut was_updated = false;
         if let IpPacket::V4(ref mut packet) = self.ip_packet_mut() {
             if let IpAddr::V4(addr) = addr {
                 packet.set_source(addr)?;
-                was_updated = true;
             }
         }
-        if was_updated {
-            self.update_checksums()?;
-        }
+        self.update_checksums()?;
         Ok(())
     }
 
