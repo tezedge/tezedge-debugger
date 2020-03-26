@@ -8,6 +8,7 @@ use packet::{
 use std::net::{
     Ipv6Addr, IpAddr,
 };
+use packet::ip::Protocol;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PacketCharacter {
@@ -273,7 +274,14 @@ impl RawPacketMessage {
     }
 
     fn new(buffer: Vec<u8>, is_incoming: bool, is_inner: bool) -> Result<Self, PacketError> {
+        use packet::ErrorKind;
         let packet = IpPacket::new(buffer)?;
+        if let IpPacket::V4(ref packet) = packet {
+            if packet.protocol() != Protocol::Tcp {
+                let err: PacketError = ErrorKind::Msg("received non-TCP packet".to_string()).into();
+                Err(err)?;
+            }
+        }
         TcpPacket::new(packet.payload())?;
         Ok(Self {
             packet,
