@@ -5,17 +5,11 @@ use tun::{
 use std::{
     io::{Read, Write},
     process::Command,
-    net::Ipv4Addr,
+    net::IpAddr,
 };
 use failure::{Error, Fail};
 use flume::{Receiver, Sender, unbounded};
-use pnet::packet::{
-    Packet as PacketTrait,
-    MutablePacket as MutablePacketTrait,
-    ipv4::MutableIpv4Packet,
-};
-use crate::actors::packet_orchestrator::{OrchestratorMessage, Packet};
-use packet::PacketMut;
+use crate::actors::prelude::*;
 
 fn create_tun_device(device: &str) {
     Command::new("ip")
@@ -32,7 +26,7 @@ fn setup_tun_device(device: &str, ip: &str) {
         .output().unwrap();
 }
 
-pub fn make_bridge(in_addr_space: &str, out_addr_space: &str, in_addr: &str, out_addr: &str) -> Result<((Sender<OrchestratorMessage>, Receiver<OrchestratorMessage>), BridgeWriter), Error> {
+pub fn make_bridge(in_addr_space: &str, out_addr_space: &str, local_addr: IpAddr, remote_addr: IpAddr) -> Result<((Sender<RawPacketMessage>, Receiver<RawPacketMessage>), BridgeWriter), Error> {
     create_tun_device("tun0");
     create_tun_device("tun1");
 
@@ -55,13 +49,13 @@ pub fn make_bridge(in_addr_space: &str, out_addr_space: &str, in_addr: &str, out
         .map_err(BridgeError::from)?
         .split();
 
-    std::thread::spawn(process_packets(in_reader, in_send, true, in_addr.parse()?));
-    std::thread::spawn(process_packets(out_reader, out_send, false, out_addr.parse()?));
+    std::thread::spawn(process_packets(in_reader, in_send, true, local_addr, remote_addr));
+    std::thread::spawn(process_packets(out_reader, out_send, false, local_addr, remote_addr));
 
     Ok(((tx, rx), BridgeWriter::new(in_writer, out_writer)))
 }
 
-fn process_packets(mut dev: Reader, sender: Sender<OrchestratorMessage>, inner: bool, addr: Ipv4Addr) -> impl FnMut() + 'static {
+fn process_packets(mut dev: Reader, sender: Sender<RawPacketMessage>, inner: bool, local_addr: IpAddr, tun_addr: IpAddr) -> impl FnMut() + 'static {
     move || {
         let mut buf = [0u8; 65535];
         loop {
@@ -70,28 +64,23 @@ fn process_packets(mut dev: Reader, sender: Sender<OrchestratorMessage>, inner: 
             let header = data[0];
             let version = header >> 4;
             if version == 4 {
-                if let Some(ip_header) = MutableIpv4Packet::owned((&buf[0..count]).to_vec()) {
-                    if let Err(err) = sender.send(if inner {
-                        OrchestratorMessage::Inner(
-                            if ip_header.get_source() == addr {
-                                Packet::outgoing
-                            } else {
-                                Packet::incoming
-                            }(ip_header)
-                        )
-                    } else {
-                        OrchestratorMessage::Outer(
-                            if ip_header.get_destination() == addr {
-                                Packet::incoming
-                            } else {
-                                Packet::outgoing
-                            }(ip_header)
-                        )
-                    }) {
-                        log::error!("failed to forward message: {:?}", err);
+                match RawPacketMessage::partial(data) {
+                    Ok(mut msg) => {
+                        msg.set_is_inner(inner);
+                        if inner {
+                            // if message is inner, it is incoming, iff dest addr == local_addr
+                            msg.set_is_incoming(msg.destination_addr() == local_addr);
+                        } else {
+                            // message is incoming, iff source addr != tun_addr
+                            msg.set_is_incoming(msg.destination_addr() == tun_addr);
+                        }
+                        if let Err(err) = sender.send(msg) {
+                            log::error!("failed to forward message: {:?}", err);
+                        }
                     }
-                } else {
-                    log::warn!("Got invalid ip message: {:?}", &buf[0..count]);
+                    Err(err) => {
+                        log::trace!("dropping invalid packet{:?}: {}", data, err);
+                    }
                 }
             }
         }
@@ -111,35 +100,22 @@ impl BridgeWriter {
         Self { in_writer, out_writer }
     }
 
-    pub fn send_packet_to_internet(&mut self, packet: &mut MutableIpv4Packet, addr: &str) -> Result<(), Error> {
-        packet.set_source(addr.parse()?);
-        Self::recalculate_checksums(packet);
-        Ok(self.out_writer.write_all(packet.packet())?)
+    pub fn send_packet_to_internet(&mut self, mut packet: RawPacketMessage, addr: IpAddr) -> Result<(), Error> {
+        // TODO: CREATE ERROR FOR THIS
+        packet.set_source_addr(addr)
+            .expect("failed to set source address");
+        self.out_writer.write_all(&packet.clone_packet())
+            .expect("failed to write data");
+        Ok(())
     }
 
-    pub fn send_packet_to_local(&mut self, packet: &mut MutableIpv4Packet, addr: &str) -> Result<(), Error> {
-        packet.set_destination(addr.parse()?);
-        Self::recalculate_checksums(packet);
-        Ok(self.in_writer.write_all(packet.packet())?)
-    }
-
-    fn recalculate_checksums(packet: &mut MutableIpv4Packet) {
-        use packet::{
-            tcp::Packet as TcpPacket,
-            ip::{
-                Packet as IPPacket,
-                v4::Packet as IPv4Packet,
-            },
-        };
-
-
-        let packet: &mut [u8] = packet.packet_mut();
-        let mut ip_packet = IPv4Packet::new(packet).unwrap();
-        let _ = ip_packet.update_checksum();
-        let (header, payload) = ip_packet.split_mut();
-        let ip_header = IPPacket::V4(IPv4Packet::no_payload(header).unwrap());
-        let mut tcp_packet = TcpPacket::new(payload).unwrap();
-        let _ = tcp_packet.update_checksum(&ip_header);
+    pub fn send_packet_to_local(&mut self, mut packet: RawPacketMessage, addr: IpAddr) -> Result<(), Error> {
+        // TODO: CREATE ERROR FOR THIS
+        packet.set_destination_addr(addr)
+            .expect("failed to set destination address");
+        self.in_writer.write_all(&packet.clone_packet())
+            .expect("failed to write data");
+        Ok(())
     }
 }
 

@@ -14,7 +14,7 @@ use failure::{Error, Fail};
 use riker::actors::*;
 use warp::{
     Filter,
-    http::Response
+    http::Response,
 };
 
 use crate::{
@@ -38,7 +38,7 @@ enum AppError {
 fn set_sysctl(ifaces: &[&str]) {
     for iface in ifaces {
         Command::new("sysctl")
-            .args(&["-w", &format!("net.ipv4.conf.{}.rp_filter=0", iface)])
+            .args(&["-w", &format!("net.ipv4.conf.{}.rp_filter=2", iface)])
             .output().unwrap();
     }
 }
@@ -62,8 +62,8 @@ async fn main() -> Result<(), Error> {
     let ((_, receiver), writer) = make_bridge(
         &app_config.tun0_address_space,
         &app_config.tun1_address_space,
-        &app_config.local_address,
-        &app_config.tun1_address,
+        app_config.local_address.parse()?,
+        app_config.tun1_address.parse()?,
     )?;
 
     log::info!("Created TUN bridge on {} <-> {} <-> {}",
@@ -97,8 +97,8 @@ async fn main() -> Result<(), Error> {
     // -- Start Actor system
     let system = ActorSystem::new()?;
     let orchestrator = system.actor_of(Props::new_args(PacketOrchestrator::new, PacketOrchestratorArgs {
-        local_address: app_config.local_address.clone(),
-        fake_address: app_config.tun1_address.clone(),
+        local_address: app_config.local_address.parse()?,
+        fake_address: app_config.tun1_address.parse()?,
         local_identity: identity.clone(),
         db: db.clone(),
         writer: Arc::new(Mutex::new(writer)),
@@ -124,16 +124,16 @@ async fn main() -> Result<(), Error> {
             match cloner().get_range(start, end) {
                 Ok(value) => {
                     serde_json::to_string(&value).expect("failed to serialize the array")
-                },
+                }
                 Err(e) => serde_json::to_string(&
                     format!("Failed to read database: {}", e)
                 ).unwrap()
             }
         })
         .map(|value| {
-           Response::builder()
-               .header("Content-Type", "application/json")
-               .body(value)
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .body(value)
         });
 
     warp::serve(endpoint)

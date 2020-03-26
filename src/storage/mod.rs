@@ -1,12 +1,11 @@
 use rocksdb::DB;
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 use failure::Error;
-use std::net::Ipv4Addr;
-use tezos_messages::p2p::encoding::peer::{PeerMessage, PeerMessageResponse};
+use std::net::IpAddr;
 use serde::{Serialize, Deserialize};
-use pnet::packet::Packet as _;
+use tezos_messages::p2p::encoding::peer::{PeerMessage, PeerMessageResponse};
 use tezos_messages::p2p::encoding::connection::ConnectionMessage;
-use crate::actors::packet_orchestrator::Packet;
+use crate::actors::peer_message::RawPacketMessage;
 
 #[derive(Clone, Debug)]
 pub struct MessageStore {
@@ -20,28 +19,28 @@ pub enum StoreMessage {
     /// Raw Tcp message, part of tcp connection handling.
     /// Not part of tezos node communication, but internet working.
     TcpMessage {
-        source: Ipv4Addr,
-        destination: Ipv4Addr,
+        source: IpAddr,
+        destination: IpAddr,
         packet: Vec<u8>,
     },
 
     /// Unencrypted message, which is part of tezos communication handshake
     ConnectionMessage {
-        source: Ipv4Addr,
-        destination: Ipv4Addr,
+        source: IpAddr,
+        destination: IpAddr,
         payload: ConnectionMessage,
     },
 
     /// Actual deciphered P2P message sent by some tezos node
     P2PMessage {
-        source: Ipv4Addr,
-        destination: Ipv4Addr,
+        source: IpAddr,
+        destination: IpAddr,
         payload: Vec<PeerMessage>,
     },
 }
 
 impl StoreMessage {
-    pub fn new_conn(source: Ipv4Addr, destination: Ipv4Addr, msg: &ConnectionMessage) -> Self {
+    pub fn new_conn(source: IpAddr, destination: IpAddr, msg: &ConnectionMessage) -> Self {
         let c = bincode::serialize(msg).unwrap();
         let payload = bincode::deserialize(&c).unwrap();
         Self::ConnectionMessage {
@@ -51,7 +50,7 @@ impl StoreMessage {
         }
     }
 
-    pub fn new_peer(source: Ipv4Addr, destination: Ipv4Addr, msg: &PeerMessageResponse) -> Self {
+    pub fn new_peer(source: IpAddr, destination: IpAddr, msg: &PeerMessageResponse) -> Self {
         let c = bincode::serialize(msg.messages()).unwrap();
         let payload = bincode::deserialize(&c).unwrap();
         Self::P2PMessage {
@@ -60,15 +59,12 @@ impl StoreMessage {
             payload,
         }
     }
-}
 
-impl From<Packet> for StoreMessage {
-    fn from(packet: Packet) -> Self {
-        let packet = packet.packet();
-        Self::TcpMessage {
-            source: packet.get_source(),
-            destination: packet.get_destination(),
-            packet: packet.packet().to_vec(),
+    pub fn new_tcp(msg: &RawPacketMessage) -> Self {
+        StoreMessage::TcpMessage {
+            source: msg.source_addr(),
+            destination: msg.destination_addr(),
+            packet: msg.clone_packet(),
         }
     }
 }

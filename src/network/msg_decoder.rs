@@ -11,7 +11,7 @@ use tezos_messages::p2p::{
 };
 use std::convert::TryFrom;
 use bytes::Buf;
-use crate::actors::packet_orchestrator::Packet;
+use crate::actors::peer_message::*;
 use crate::storage::{MessageStore, StoreMessage};
 
 pub struct EncryptedMessageDecoder {
@@ -39,16 +39,15 @@ impl EncryptedMessageDecoder {
         }
     }
 
-    pub fn recv_msg(&mut self, enc: &Packet) {
-        if enc.is_incoming() && !enc.is_empty() {
+    pub fn recv_msg(&mut self, enc: &RawPacketMessage) {
+        if enc.is_incoming() && enc.has_payload() {
             if self.enc_buf.is_empty() {
-                self.enc_buf.extend_from_slice(&enc.raw_msg());
+                self.enc_buf.extend_from_slice(&enc.payload());
             } else {
-                self.enc_buf.extend_from_slice(&enc.raw_msg()[2..]);
+                self.enc_buf.extend_from_slice(&enc.payload()[2..]);
             }
             if let Some(msg) = self.try_decrypt() {
-                let packet = enc.packet();
-                let _ = self.db.store_message(StoreMessage::new_peer(packet.get_source(), packet.get_destination(), &msg));
+                let _ = self.db.store_message(StoreMessage::new_peer(enc.source_addr(), enc.destination_addr(), &msg));
             }
         }
     }
