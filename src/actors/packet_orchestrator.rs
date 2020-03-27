@@ -56,13 +56,32 @@ impl PacketOrchestrator {
         log::info!("Spawned {}", peer_name);
         Ok(act_ref)
     }
+
+    fn relay(&mut self, msg: RawPacketMessage) {
+        if msg.is_incoming() {
+            let mut bridge = self.writer.lock()
+                .expect("Mutex poisoning");
+            let _ = bridge.send_packet_to_local(msg, self.local_address);
+        } else {
+            let mut bridge = self.writer.lock()
+                .expect("Mutex poisoning");
+            let _ = bridge.send_packet_to_internet(msg, self.fake_address);
+        }
+    }
 }
 
 impl Actor for PacketOrchestrator {
     type Msg = RawPacketMessage;
 
     fn recv(&mut self, ctx: &Context<RawPacketMessage>, msg: RawPacketMessage, _: Sender) {
-        let actor = if let Some(remote) = self.remotes.get_mut(&msg.remote_addr()) {
+        // 1.  Relay packet
+        // 1.1 TODO: Add Packet relay filtering ("Firewall Filter")
+        // 1.* TODO: swap steps 1 & 2 to enable firewall filtering on deserialized messages
+        self.relay(msg.clone());
+
+        // 2. Process packet (Decipher? -> Deserialize? -> Record)
+        // 2.1 TODO: Add Packet process filtering ("Record Filter")
+        if let Some(remote) = self.remotes.get_mut(&msg.remote_addr()) {
             remote
         } else {
             match self.spawn_peer(ctx, msg.remote_addr()) {
@@ -76,25 +95,6 @@ impl Actor for PacketOrchestrator {
                     return;
                 }
             }
-        };
-
-        match msg.character() {
-            PacketCharacter::InnerOutgoing | PacketCharacter::OuterIncoming => {
-                // InnerOutgoing/OuterIncoming == packet was just received from local/remote node => should be sent for processing.
-                actor.tell(msg, ctx.myself().into())
-            }
-            PacketCharacter::InnerIncoming => {
-                // InnerIncoming == packet was already processed and should be forwarded to the local node.
-                let mut bridge = self.writer.lock()
-                    .expect("Mutex poisoning");
-                let _ = bridge.send_packet_to_local(msg, self.local_address);
-            }
-            PacketCharacter::OuterOutgoing => {
-                // OuterOutgoing == packet was already processed and should be forwarded to the remote node.
-                let mut bridge = self.writer.lock()
-                    .expect("Mutex poisoning");
-                let _ = bridge.send_packet_to_internet(msg, self.fake_address);
-            }
-        }
+        }.tell(msg, ctx.myself().into());
     }
 }

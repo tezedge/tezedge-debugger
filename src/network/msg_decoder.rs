@@ -20,7 +20,8 @@ pub struct EncryptedMessageDecoder {
     remote_nonce: Nonce,
     peer_id: String,
     processing: bool,
-    enc_buf: Vec<u8>,
+    inc_buf: Vec<u8>,
+    out_buf: Vec<u8>,
     dec_buf: Vec<u8>,
     input_remaining: usize,
 }
@@ -33,7 +34,8 @@ impl EncryptedMessageDecoder {
             remote_nonce,
             peer_id,
             processing: false,
-            enc_buf: Default::default(),
+            inc_buf: Default::default(),
+            out_buf: Default::default(),
             dec_buf: Default::default(),
             input_remaining: 0,
         }
@@ -41,11 +43,13 @@ impl EncryptedMessageDecoder {
 
     pub fn recv_msg(&mut self, enc: &RawPacketMessage) {
         if enc.is_incoming() && enc.has_payload() {
-            if self.enc_buf.is_empty() {
-                self.enc_buf.extend_from_slice(&enc.payload());
+            // log::info!("Received encrypted message");
+            if self.inc_buf.is_empty() {
+                self.inc_buf.extend_from_slice(&enc.payload());
             } else {
-                self.enc_buf.extend_from_slice(&enc.payload()[2..]);
+                self.inc_buf.extend_from_slice(&enc.payload()[2..]);
             }
+
             if let Some(msg) = self.try_decrypt() {
                 let _ = self.db.store_message(StoreMessage::new_peer(enc.source_addr(), enc.destination_addr(), &msg));
             }
@@ -53,9 +57,9 @@ impl EncryptedMessageDecoder {
     }
 
     fn try_decrypt(&mut self) -> Option<PeerMessageResponse> {
-        let len = (&self.enc_buf[0..2]).get_u16() as usize;
-        if self.enc_buf[2..].len() >= len {
-            let chunk = match BinaryChunk::try_from(self.enc_buf[0..len + 2].to_vec()) {
+        let len = (&self.inc_buf[0..2]).get_u16() as usize;
+        if self.inc_buf[2..].len() >= len {
+            let chunk = match BinaryChunk::try_from(self.inc_buf[0..len + 2].to_vec()) {
                 Ok(chunk) => chunk,
                 Err(e) => {
                     log::error!("Failed to load binary chunk: {}", e);
@@ -63,11 +67,14 @@ impl EncryptedMessageDecoder {
                 }
             };
 
-            self.enc_buf.drain(0..len + 2);
-            if let Ok(msg) = decrypt(chunk.content(), &self.nonce_fetch_increment(), &self.precomputed_key) {
-                self.try_deserialize(msg)
-            } else {
-                None
+            self.inc_buf.drain(0..len + 2);
+            match decrypt(chunk.content(), &self.nonce_fetch_increment(), &self.precomputed_key) {
+                Ok(msg) => {
+                    self.try_deserialize(msg)
+                }
+                Err(_err) => {
+                    None
+                }
             }
         } else {
             None
@@ -84,21 +91,29 @@ impl EncryptedMessageDecoder {
         self.dec_buf.append(&mut msg);
 
         if self.input_remaining == 0 {
-            match PeerMessageResponse::from_bytes(self.dec_buf.clone()) {
-                Ok(msg) => {
-                    self.dec_buf.clear();
-                    Some(msg)
+            loop {
+                match PeerMessageResponse::from_bytes(self.dec_buf.clone()) {
+                    Ok(msg) => {
+                        self.dec_buf.clear();
+                        return if msg.messages().len() == 0 {
+                            None
+                        } else {
+                            Some(msg)
+                        };
+                    }
+                    Err(BinaryReaderError::Underflow { bytes }) => {
+                        self.input_remaining += bytes;
+                        return None;
+                    }
+                    Err(BinaryReaderError::Overflow { bytes }) => {
+                        self.dec_buf.drain(self.dec_buf.len() - bytes..);
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to deserialize message: {}", e);
+                        return None;
+                    }
                 }
-                Err(BinaryReaderError::Underflow { bytes }) => {
-                    self.input_remaining += bytes;
-                    None
-                }
-                Err(e) => {
-                    log::error!("failed to decrypt message: {}", e);
-                    self.dec_buf.clear();
-                    None
-                }
-            }
+            };
         } else { None }
     }
 

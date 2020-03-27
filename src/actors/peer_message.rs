@@ -273,6 +273,12 @@ impl RawPacketMessage {
         (self.is_incoming, self.is_inner).into()
     }
 
+    #[inline]
+    pub fn is_pure_ack(&self) -> bool {
+        use packet::tcp::flag::ACK;
+        self.tcp_packet().flags() == ACK
+    }
+
     fn new(buffer: Vec<u8>, is_incoming: bool, is_inner: bool) -> Result<Self, PacketError> {
         use packet::ErrorKind;
         let packet = IpPacket::new(buffer)?;

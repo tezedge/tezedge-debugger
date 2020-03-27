@@ -41,7 +41,7 @@ fn set_sysctl(ifaces: &[&str]) {
             .args(&["-w", &format!("net.ipv4.conf.{}.rp_filter=2", iface)])
             .output().unwrap();
     }
-    Commanad::new("sysctl")
+    Command::new("sysctl")
         .args(&["-w", "net.ipv4.ip_forward=1"])
         .output().unwrap();
 }

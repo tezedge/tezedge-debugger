@@ -78,7 +78,6 @@ impl Peer {
         self.db.store_message(StoreMessage::new_tcp(msg))
     }
 
-
     fn process_unencrypted_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
         // -> This *MUST* be one of connection messages exchanged between both nodes
         assert!(!self.initialized, "Connection trying to process encrypted messages as unencrypted");
@@ -90,26 +89,26 @@ impl Peer {
 
         if let Some((_, addr)) = self.conn_msgs.get(0) {
             if addr == &msg.source_addr() {
-                log::warn!("Received resent connection message");
-                return Ok(());
+                // Is duplicate
+                log::info!("Got duplicit connection message message: {:?} @ {}", conn_msg, msg.source_addr());
             }
         }
 
-        self.conn_msgs.push((conn_msg, msg.remote_addr()));
+        self.conn_msgs.push((conn_msg, msg.source_addr()));
 
         if self.conn_msgs.len() == 2 {
             self.initialized = true;
-            // self.upgrade()?;
-            // log::info!("Successfully upgraded peer {}: {} - {} -> ", self.addr, self.peer_id, self.local_identity.peer_id);
+            self.upgrade()?;
+            log::info!("Successfully upgraded peer {}",self.addr);
         }
 
         Ok(())
     }
 
-    fn process_encrypted_message(&mut self, _msg: &mut RawPacketMessage) -> Result<(), Error> {
-        // if let Some(ref mut decrypter) = self.decrypter {
-        //     decrypter.recv_msg(msg)
-        // }
+    fn process_encrypted_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
+        if let Some(ref mut decrypter) = self.decrypter {
+            decrypter.recv_msg(msg)
+        }
         Ok(())
     }
 
@@ -119,17 +118,22 @@ impl Peer {
         let first_pk = HashType::PublicKeyHash.bytes_to_string(&first.public_key());
         let is_incoming = first_pk != self.local_identity.public_key;
         let (received, sent) = if is_incoming {
-            (first, second)
-        } else {
             (second, first)
+        } else {
+            (first, second)
         };
 
+        let sent_data = BinaryChunk::from_content(&sent.cache_reader().get().unwrap())?;
+        let recv_data = BinaryChunk::from_content(&received.cache_reader().get().unwrap())?;
+
         let NoncePair { remote, .. } = generate_nonces(
-            &sent.cache_reader().get().unwrap(),
-            &received.cache_reader().get().unwrap(),
-            is_incoming,
+            &sent_data.raw(),
+            &recv_data.raw(),
+            !is_incoming,
         );
+
         let remote_pk = HashType::PublicKeyHash.bytes_to_string(received.public_key());
+
         let precomputed_key = precompute(
             &hex::encode(received.public_key()),
             &self.local_identity.secret_key,
@@ -148,20 +152,7 @@ impl Peer {
 impl Actor for Peer {
     type Msg = RawPacketMessage;
 
-    fn recv(&mut self, ctx: &Context<RawPacketMessage>, mut msg: RawPacketMessage, sender: Sender) {
-        match msg.character() {
-            PacketCharacter::InnerOutgoing | PacketCharacter::OuterIncoming => {
-                if let Some(actor) = sender {
-                    if let Err(_err) = self.process_message(&mut msg) {
-                        // log::error!("failed to process message: {}", err);
-                    }
-
-                    msg.flip_side();
-                    let sender: BasicActorRef = ctx.myself().into();
-                    let _ = actor.try_tell(msg, sender);
-                }
-            }
-            _ => log::warn!("peer can only receive inner-outgoing or outer-incoming communication"),
-        }
+    fn recv(&mut self, _: &Context<RawPacketMessage>, mut msg: RawPacketMessage, _: Sender) {
+        let _ = self.process_message(&mut msg);
     }
 }
