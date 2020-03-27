@@ -50,8 +50,10 @@ impl EncryptedMessageDecoder {
                 self.inc_buf.extend_from_slice(&enc.payload()[2..]);
             }
 
-            if let Some(msg) = self.try_decrypt() {
-                let _ = self.db.store_message(StoreMessage::new_peer(enc.source_addr(), enc.destination_addr(), &msg));
+            if self.inc_buf.len() > 2 {
+                if let Some(msg) = self.try_decrypt() {
+                    let _ = self.db.store_message(StoreMessage::new_peer(enc.source_addr(), enc.destination_addr(), &msg));
+                }
             }
         }
     }
