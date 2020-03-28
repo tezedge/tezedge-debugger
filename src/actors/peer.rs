@@ -39,6 +39,7 @@ pub struct Peer {
     is_dead: bool,
     waiting: bool,
     conn_msgs: Vec<(ConnectionMessage, IpAddr)>,
+    handshake: u8,
     local_identity: Identity,
     peer_id: String,
     public_key: Vec<u8>,
@@ -51,6 +52,7 @@ impl Peer {
             db: args.db,
             addr: args.addr,
             local_identity: args.local_identity,
+            handshake: 0,
             initialized: false,
             incoming: false,
             is_dead: false,
@@ -63,18 +65,19 @@ impl Peer {
     }
 
     fn process_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
-        if msg.is_push() {
+        if self.handshake == 3 {
             if self.initialized {
                 self.process_encrypted_message(msg)
             } else {
                 self.process_unencrypted_message(msg)
             }
         } else {
-            self.process_control_message(msg)
+            self.process_handshake_message(msg)
         }
     }
 
-    fn process_control_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
+    fn process_handshake_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
+        self.handshake += 1;
         self.db.store_message(StoreMessage::new_tcp(msg))
     }
 
@@ -97,7 +100,6 @@ impl Peer {
         self.conn_msgs.push((conn_msg, msg.source_addr()));
 
         if self.conn_msgs.len() == 2 {
-            self.initialized = true;
             self.upgrade()?;
             log::info!("Successfully upgraded peer {}",self.addr);
         }

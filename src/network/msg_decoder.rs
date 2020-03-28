@@ -43,12 +43,7 @@ impl EncryptedMessageDecoder {
 
     pub fn recv_msg(&mut self, enc: &RawPacketMessage) {
         if enc.is_incoming() && enc.has_payload() {
-            // log::info!("Received encrypted message");
-            if self.inc_buf.is_empty() {
-                self.inc_buf.extend_from_slice(&enc.payload());
-            } else {
-                self.inc_buf.extend_from_slice(&enc.payload()[2..]);
-            }
+            self.inc_buf.extend_from_slice(&enc.payload());
 
             if self.inc_buf.len() > 2 {
                 if let Some(msg) = self.try_decrypt() {
