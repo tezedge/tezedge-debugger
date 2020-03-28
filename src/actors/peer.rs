@@ -154,7 +154,13 @@ impl Peer {
 impl Actor for Peer {
     type Msg = RawPacketMessage;
 
-    fn recv(&mut self, _: &Context<RawPacketMessage>, mut msg: RawPacketMessage, _: Sender) {
+    fn recv(&mut self, ctx: &Context<RawPacketMessage>, mut msg: RawPacketMessage, sender: Sender) {
         let _ = self.process_message(&mut msg);
+        if let Some(sender) = sender {
+            msg.flip_side();
+            if let Err(_) = sender.try_tell(msg, ctx.myself()) {
+                log::error!("unable to reach packet orchestrator with processed packet")
+            }
+        }
     }
 }

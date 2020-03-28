@@ -124,8 +124,11 @@ async fn main() -> Result<(), Error> {
     // -- Initialize server
     let endpoint = warp::path!("data" / u64 / u64)
         .map(move |start, end| {
+            use storage::rpc_message::RpcMessage;
             match cloner().get_range(start, end) {
                 Ok(value) => {
+                    let value: Vec<RpcMessage> = value.into_iter()
+                        .map(|x| RpcMessage::from(x)).collect();
                     serde_json::to_string(&value).expect("failed to serialize the array")
                 }
                 Err(e) => serde_json::to_string(&

@@ -74,27 +74,29 @@ impl Actor for PacketOrchestrator {
     type Msg = RawPacketMessage;
 
     fn recv(&mut self, ctx: &Context<RawPacketMessage>, msg: RawPacketMessage, _: Sender) {
-        // 1.  Relay packet
-        // 1.1 TODO: Add Packet relay filtering ("Firewall Filter")
-        // 1.* TODO: swap steps 1 & 2 to enable firewall filtering on deserialized messages
-        self.relay(msg.clone());
-
-        // 2. Process packet (Decipher? -> Deserialize? -> Record)
-        // 2.1 TODO: Add Packet process filtering ("Record Filter")
-        if let Some(remote) = self.remotes.get_mut(&msg.remote_addr()) {
-            remote
-        } else {
-            match self.spawn_peer(ctx, msg.remote_addr()) {
-                Ok(actor) => {
-                    self.remotes.insert(msg.remote_addr(), actor);
-                    self.remotes.get_mut(&msg.remote_addr())
-                        .expect("just inserted actor disappeared")
-                }
-                Err(e) => {
-                    log::warn!("Failed to create actor for message coming from addr {}: {}", msg.remote_addr(), e);
-                    return;
-                }
+        match msg.character() {
+            PacketCharacter::InnerOutgoing | PacketCharacter::OuterIncoming => {
+                // Process packet first
+                if let Some(remote) = self.remotes.get_mut(&msg.remote_addr()) {
+                    remote
+                } else {
+                    match self.spawn_peer(ctx, msg.remote_addr()) {
+                        Ok(actor) => {
+                            self.remotes.insert(msg.remote_addr(), actor);
+                            self.remotes.get_mut(&msg.remote_addr())
+                                .expect("just inserted actor disappeared")
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to create actor for message coming from addr {}: {}", msg.remote_addr(), e);
+                            return;
+                        }
+                    }
+                }.tell(msg, ctx.myself().into());
             }
-        }.tell(msg, ctx.myself().into());
+            PacketCharacter::InnerIncoming | PacketCharacter::OuterOutgoing => {
+                // Just send it
+                self.relay(msg.clone());
+            }
+        }
     }
 }

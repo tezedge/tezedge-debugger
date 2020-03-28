@@ -24,6 +24,7 @@ tun = "0.4"
 bincode = "1.2"
 serde_json = "1.0"
 pnet = "0.25"
+num-bigint = "0.2"
 serde = { version="1.0", features=["derive"] }
 tokio = { version="0.2", features=["full"] }
 crypto = { version="*", git = "https://github.com/simplestaking/tezedge" }

@@ -2860,6 +2860,7 @@ dependencies = [
  "lazy_static 1.4.0",
  "log 0.4.8",
  "networking",
+ "num-bigint",
  "packet",
  "pnet",
  "riker 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
