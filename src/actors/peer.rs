@@ -17,10 +17,12 @@ use crate::{
 };
 use tezos_messages::p2p::{
     binary_message::BinaryChunk,
-    encoding::connection::ConnectionMessage,
 };
 use tezos_messages::p2p::binary_message::cache::CachedData;
-use crate::storage::StoreMessage;
+use crate::{
+    network::connection_message::ConnectionMessage,
+    storage::StoreMessage,
+};
 
 #[derive(Debug, Clone)]
 /// Argument structure to create new peer
@@ -117,7 +119,7 @@ impl Peer {
     fn upgrade(&mut self) -> Result<(), Error> {
         assert_eq!(self.conn_msgs.len(), 2, "trying to upgrade before all connection messages received");
         let ((first, _), (second, _)) = (&self.conn_msgs[0], &self.conn_msgs[1]);
-        let first_pk = HashType::PublicKeyHash.bytes_to_string(&first.public_key());
+        let first_pk = HashType::PublicKeyHash.bytes_to_string(&first.public_key);
         let is_incoming = first_pk != self.local_identity.public_key;
         let (received, sent) = if is_incoming {
             (second, first)
@@ -134,15 +136,15 @@ impl Peer {
             !is_incoming,
         );
 
-        let remote_pk = HashType::PublicKeyHash.bytes_to_string(received.public_key());
+        let remote_pk = HashType::PublicKeyHash.bytes_to_string(&received.public_key);
 
         let precomputed_key = precompute(
-            &hex::encode(received.public_key()),
+            &hex::encode(&received.public_key),
             &self.local_identity.secret_key,
         )?;
 
         self.decrypter = Some(EncryptedMessageDecoder::new(precomputed_key, remote, remote_pk.clone(), self.db.clone()));
-        self.public_key = received.public_key().clone();
+        self.public_key = received.public_key.clone();
         self.peer_id = remote_pk;
         self.incoming = is_incoming;
         self.initialized = true;

@@ -36,7 +36,7 @@ impl MessageStore {
             Ok(Default::default())
         } else {
             let mut ret = Vec::with_capacity((end - start) as usize);
-            for i in start..end {
+            for i in (start..end).rev() {
                 let key = i.to_ne_bytes();
                 if let Some(x) = self.db.get(&key)? {
                     ret.push(bincode::deserialize(&x)?);

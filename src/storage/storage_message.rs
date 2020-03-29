@@ -1,6 +1,9 @@
 use std::net::IpAddr;
-use tezos_messages::p2p::encoding::prelude::*;
-use crate::actors::prelude::*;
+use tezos_messages::p2p::encoding::peer::{PeerMessage, PeerMessageResponse};
+use crate::{
+    network::connection_message::ConnectionMessage,
+    actors::prelude::*,
+};
 use serde::{Serialize, Deserialize};
 
 /// Types of messages stored in database

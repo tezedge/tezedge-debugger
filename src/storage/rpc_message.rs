@@ -1,13 +1,12 @@
 use super::StoreMessage;
+use crate::network::connection_message::ConnectionMessage;
 use serde::Serialize;
 use std::net::IpAddr;
 use tezos_messages::p2p::encoding::prelude::*;
-use tezos_messages::p2p::encoding::{
-    version::Version,
-    connection::ConnectionMessage,
-};
+use tezos_messages::p2p::encoding::version::Version;
 use crypto::hash::HashType;
 use tezos_messages::p2p::encoding::operation_hashes_for_blocks::OperationHashesForBlock;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 
 #[derive(Debug, Serialize)]
@@ -15,16 +14,19 @@ use tezos_messages::p2p::encoding::operation_hashes_for_blocks::OperationHashesF
 /// Types of messages sent by external RPC, directly maps to the StoreMessage, with different naming
 pub enum RpcMessage {
     Packet {
+        ts: u128,
         source: IpAddr,
         destination: IpAddr,
         packet: String,
     },
     ConnectionMessage {
+        ts: u128,
         source: IpAddr,
         destination: IpAddr,
         message: MappedConnectionMessage,
     },
     P2pMessage {
+        ts: u128,
         source: IpAddr,
         destination: IpAddr,
         messages: Vec<MappedPeerMessage>,
@@ -33,9 +35,12 @@ pub enum RpcMessage {
 
 impl From<StoreMessage> for RpcMessage {
     fn from(value: StoreMessage) -> Self {
+        let start = SystemTime::now();
+        let ts = start.duration_since(UNIX_EPOCH).unwrap().as_millis();
         match value {
             StoreMessage::TcpMessage { source, destination, packet } => {
                 RpcMessage::Packet {
+                    ts,
                     source,
                     destination,
                     packet: hex::encode(packet),
@@ -43,6 +48,7 @@ impl From<StoreMessage> for RpcMessage {
             }
             StoreMessage::ConnectionMessage { source, destination, payload } => {
                 RpcMessage::ConnectionMessage {
+                    ts,
                     source,
                     destination,
                     message: payload.into(),
@@ -50,6 +56,7 @@ impl From<StoreMessage> for RpcMessage {
             }
             StoreMessage::P2PMessage { source, destination, payload } => {
                 RpcMessage::P2pMessage {
+                    ts,
                     source,
                     destination,
                     messages: payload.into_iter().map(|x| MappedPeerMessage::from(x)).collect(),
@@ -70,26 +77,14 @@ pub struct MappedConnectionMessage {
 
 impl From<ConnectionMessage> for MappedConnectionMessage {
     fn from(value: ConnectionMessage) -> Self {
-        let mut json = serde_json::to_value(value)
-            .expect("failed to serialized valid value");
-        let port = json.get_mut("port").unwrap().as_i64().unwrap() as u16;
-        let versions = serde_json::from_value(json.get_mut("versions").unwrap().take())
-            .unwrap();
-        let public_key: Vec<u8> = serde_json::from_value(json.get_mut("public_key").unwrap().take())
-            .unwrap();
-        let public_key = hex::encode(public_key);
-        let poows: Vec<u8> = serde_json::from_value(json.get_mut("proof_of_work_stamp").unwrap().take())
-            .unwrap();
-        let proof_of_work_stamp = hex::encode(poows);
-        let message_nonce: Vec<u8> = serde_json::from_value(json.get_mut("message_nonce").unwrap().take())
-            .unwrap();
-        let message_nonce = hex::encode(message_nonce);
+        let ConnectionMessage { port, versions, public_key, proof_of_work_stamp, message_nonce, .. } = value;
+
         Self {
             port,
             versions,
-            public_key,
-            proof_of_work_stamp,
-            message_nonce,
+            public_key: hex::encode(public_key),
+            proof_of_work_stamp: hex::encode(proof_of_work_stamp),
+            message_nonce: hex::encode(message_nonce),
         }
     }
 }

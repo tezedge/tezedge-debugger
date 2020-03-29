@@ -1,14 +1,16 @@
 use packet::{
     Error as PacketError,
     PacketMut as _,
-    ip::Packet as IpPacket,
+    ip::{
+        v4::Packet as IPv4Packet,
+        v6::Packet as IPv6Packet,
+        Packet as IpPacket,
+        Protocol,
+    },
     tcp::Packet as TcpPacket,
     Packet,
 };
-use std::net::{
-    Ipv6Addr, IpAddr,
-};
-use packet::ip::Protocol;
+use std::net::{Ipv6Addr, IpAddr};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PacketCharacter {
@@ -193,6 +195,25 @@ impl RawPacketMessage {
         } else {
             self.destination_addr()
         }
+    }
+
+    pub fn set_content<T: AsRef<[u8]>>(&mut self, new_content: T) -> Result<(), PacketError> {
+        let new_content = new_content.as_ref();
+        let mut new_msg = Vec::with_capacity(
+            self.ip_packet().header().len() +
+                self.tcp_packet().header().len() +
+                new_content.len()
+        );
+        new_msg.extend_from_slice(self.ip_packet().header());
+        new_msg.extend_from_slice(self.tcp_packet().header());
+        new_msg.extend_from_slice(new_content);
+        let packet = if self.is_ipv4() {
+            IpPacket::V4(IPv4Packet::new(new_msg)?)
+        } else {
+            IpPacket::V6(IPv6Packet::new(new_msg)?)
+        };
+        self.packet = packet;
+        self.update_checksums()
     }
 
     #[inline]
