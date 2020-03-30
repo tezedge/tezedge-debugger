@@ -76,19 +76,19 @@ async fn main() -> Result<(), Error> {
     );
 
     // -- Setup redirects
-    Command::new("ip")
-        .args(&["rule", "add", "fwmark", "1", "table", "1"])
-        .output().unwrap();
-    Command::new("ip")
-        .args(&["route", "add", "default", "dev", &app_config.tun0_name, "table", "1"])
-        .output().unwrap();
-    Command::new("iptables")
-        .args(&["-t", "mangle", "-A", "OUTPUT",
-            "--source", &app_config.local_address,
-            "-o", &app_config.interface, "-p", "tcp",
-            "--dport", &app_config.port.to_string(),
-            "-j", "MARK", "--set-mark", "1"])
-        .output().unwrap();
+    // Command::new("ip")
+    //     .args(&["rule", "add", "fwmark", "1", "table", "1"])
+    //     .output().unwrap();
+    // Command::new("ip")
+    //     .args(&["route", "add", "default", "dev", &app_config.tun0_name, "table", "1"])
+    //     .output().unwrap();
+    // Command::new("iptables")
+    //     .args(&["-t", "mangle", "-A", "OUTPUT",
+    //         "--source", &app_config.local_address,
+    //         "-o", &app_config.interface, "-p", "tcp",
+    //         "--dport", &app_config.port.to_string(),
+    //         "-j", "MARK", "--set-mark", "1"])
+    //     .output().unwrap();
     Command::new("iptables")
         .args(&["-t", "nat", "-A", "POSTROUTING",
             "--source", &app_config.tun1_address_space,
