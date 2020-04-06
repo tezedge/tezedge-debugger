@@ -3,6 +3,7 @@ pub mod msg_decoder;
 pub mod msg_encoder;
 pub mod tun_bridge;
 pub mod connection_message;
+mod health_checks;
 
 pub mod prelude {
     pub use super::connection_message::*;

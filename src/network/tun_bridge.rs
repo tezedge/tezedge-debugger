@@ -1,4 +1,5 @@
 use tun::{
+    Device,
     self, Configuration,
     platform::posix::{Reader, Writer},
 };
@@ -10,6 +11,7 @@ use std::{
 use failure::{Error, Fail};
 use flume::{Receiver, Sender, unbounded};
 use crate::actors::prelude::*;
+use crate::network::health_checks::device_ping_check;
 
 fn create_tun_device(device: &str) {
     Command::new("ip")
@@ -26,7 +28,10 @@ fn setup_tun_device(device: &str, ip: &str) {
         .output().unwrap();
 }
 
-pub fn make_bridge(in_addr_space: &str, out_addr_space: &str, local_addr: IpAddr, remote_addr: IpAddr) -> Result<((Sender<RawPacketMessage>, Receiver<RawPacketMessage>), BridgeWriter), Error> {
+pub fn make_bridge(in_addr_space: &str, out_addr_space: &str,
+                   in_addr: &str, out_addr: &str,
+                   local_addr: IpAddr, remote_addr: IpAddr) -> Result<((Sender<RawPacketMessage>, Receiver<RawPacketMessage>), BridgeWriter), Error>
+{
     create_tun_device("tun0");
     create_tun_device("tun1");
 
@@ -42,12 +47,19 @@ pub fn make_bridge(in_addr_space: &str, out_addr_space: &str, local_addr: IpAddr
     let in_send = tx.clone();
     let out_send = tx.clone();
 
-    let (in_reader, in_writer) = tun::platform::create(&in_conf)
-        .map_err(BridgeError::from)?
-        .split();
-    let (out_reader, out_writer) = tun::platform::create(&out_conf)
-        .map_err(BridgeError::from)?
-        .split();
+    let mut in_dev = tun::platform::create(&in_conf)
+        .map_err(BridgeError::from)?;
+    let mut out_dev = tun::platform::create(&out_conf)
+        .map_err(BridgeError::from)?;
+
+    // Run health-checks
+    in_dev = device_ping_check(in_dev, in_addr)?;
+    log::info!("Address for {} set correctly", in_dev.name());
+    out_dev = device_ping_check(out_dev, out_addr)?;
+    log::info!("Address for {} set correctly", out_dev.name());
+
+    let (in_reader, in_writer) = in_dev.split();
+    let (out_reader, out_writer) = out_dev.split();
 
     std::thread::spawn(process_packets(in_reader, in_send, true, local_addr, remote_addr));
     std::thread::spawn(process_packets(out_reader, out_send, false, local_addr, remote_addr));

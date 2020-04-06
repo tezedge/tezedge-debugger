@@ -65,6 +65,8 @@ async fn main() -> Result<(), Error> {
     let ((_, receiver), writer) = make_bridge(
         &app_config.tun0_address_space,
         &app_config.tun1_address_space,
+        &app_config.tun0_address,
+        &app_config.tun1_address,
         app_config.local_address.parse()?,
         app_config.tun1_address.parse()?,
     )?;
