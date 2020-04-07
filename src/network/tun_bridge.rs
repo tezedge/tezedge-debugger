@@ -11,7 +11,7 @@ use std::{
 use failure::{Error, Fail};
 use flume::{Receiver, Sender, unbounded};
 use crate::actors::prelude::*;
-use crate::network::health_checks::device_ping_check;
+use crate::network::health_checks::{device_address_check, internet_accessibility_check};
 
 fn create_tun_device(device: &str) {
     Command::new("ip")
@@ -53,10 +53,12 @@ pub fn make_bridge(in_addr_space: &str, out_addr_space: &str,
         .map_err(BridgeError::from)?;
 
     // Run health-checks
-    in_dev = device_ping_check(in_dev, in_addr)?;
+    in_dev = device_address_check(in_dev, in_addr)?;
     log::info!("Address for {} set correctly", in_dev.name());
-    out_dev = device_ping_check(out_dev, out_addr)?;
+    out_dev = device_address_check(out_dev, out_addr)?;
     log::info!("Address for {} set correctly", out_dev.name());
+    out_dev = internet_accessibility_check(out_dev, out_addr)?;
+    log::info!("Internet connection availability set correctly");
 
     let (in_reader, in_writer) = in_dev.split();
     let (out_reader, out_writer) = out_dev.split();
@@ -135,12 +137,12 @@ impl BridgeWriter {
 #[derive(Debug, Fail)]
 pub enum BridgeError {
     #[fail(display = "failed to create bridge device: {}", _0)]
-    CreateDeviceError(tun::ErrorKind),
+    CreateDeviceError(tun::Error),
 }
 
 impl From<tun::Error> for BridgeError {
     fn from(err: tun::Error) -> Self {
-        Self::CreateDeviceError(err.0)
+        Self::CreateDeviceError(err)
     }
 }
 
