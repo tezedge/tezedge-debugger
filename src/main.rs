@@ -63,7 +63,9 @@ async fn main() -> Result<(), MainError> {
     log::info!("Created RocksDB storage in: {}", app_config.storage_path);
 
     Command::new("iptables")
-        .args(&["-t", "nat", "-A", "POSTROUTING", "-j", "MASQUERADE"])
+        .args(&["-t", "nat", "-A", "POSTROUTING",
+            "-s", &app_config.tun1_address,
+            "-j", "MASQUERADE"])
         .output().unwrap();
     set_sysctl(&["all", "default", &app_config.tun0_name, &app_config.tun1_name, &app_config.interface]);
 
