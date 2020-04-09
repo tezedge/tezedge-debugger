@@ -88,6 +88,7 @@ async fn main() -> Result<(), MainError> {
     // -- Start Actor system
     let system = ActorSystem::new()?;
     let orchestrator = system.actor_of(Props::new_args(PacketOrchestrator::new, PacketOrchestratorArgs {
+        rpc_port: app_config.rpc_port,
         local_address: app_config.local_address.parse()?,
         fake_address: app_config.tun1_address.parse()?,
         local_identity: identity.clone(),
@@ -103,7 +104,7 @@ async fn main() -> Result<(), MainError> {
         }
     });
 
-    log::info!("Starting to analyze traffic on port {}", app_config.port);
+    log::info!("Started to analyze traffic through {} device", app_config.tun0_name);
 
     let cloner = move || {
         db.clone()

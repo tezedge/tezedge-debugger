@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Dependencies:
-# `cgroup-tools` required for cgcreate command
+# Shell  `cgroup-tools` required for cgcreate command
+# Python `pypacker` required for ping health-check
 net_cls_name="tezedge_proxy"
 net_cls_id=0x11000011
 net_cls_mark=11
@@ -12,6 +13,17 @@ cleanup="false"
 create_net_cls() {
   echo "Created new cgroup $net_cls_name"
   sudo cgcreate -g net_cls:/"${net_cls_name}"
+}
+
+valued_ping() {
+  sudo python3 -c 'import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+s.setsockopt(socket.SOL_IP, socket.IP_HDRINCL, 0)
+s.settimeout(1)
+packet = b"\x08\x00\xf7\xd3\x00*\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01"
+s.sendto(packet, ("8.8.8.8", 0))
+recv = s.recv(56)
+print(recv[-1])'
 }
 
 setup_net_cls() {
@@ -42,7 +54,6 @@ clean() {
 }
 
 run_in_net_cls() {
-  echo "Running $* in net_cls $net_cls_name"
   sudo -E env "PATH=$PATH" cgexec -g net_cls:/"${net_cls_name}" "$@"
 }
 
@@ -61,4 +72,19 @@ else
   # This should be handled somehow, probably, ...
 fi
 setup_net_cls
+ping_value=$(sudo -E env "PATH=$PATH" cgexec -g net_cls:/"${net_cls_name}" python3 -c 'import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+s.setsockopt(socket.SOL_IP, socket.IP_HDRINCL, 0)
+s.settimeout(1)
+packet = b"\x08\x00\xf7\xd3\x00*\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01"
+s.sendto(packet, ("8.8.8.8", 0))
+recv = s.recv(56)
+print(recv[-1])' 2>/dev/null)
+
+if [ "$ping_value" ]; then
+  echo "Failed health-check. Proxy not set correctly."
+  exit 1
+fi
+
+echo "Running $* in net_cls $net_cls_name"
 run_in_net_cls "$@"

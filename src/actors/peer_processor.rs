@@ -33,7 +33,7 @@ pub struct PeerArgs {
 }
 
 /// Actor representing communication over specific port, before proper communication is established.
-pub struct Peer {
+pub struct PeerProcessor {
     db: MessageStore,
     addr: IpAddr,
     initialized: bool,
@@ -48,7 +48,7 @@ pub struct Peer {
     decrypter: Option<EncryptedMessageDecoder>,
 }
 
-impl Peer {
+impl PeerProcessor {
     pub fn new(args: PeerArgs) -> Self {
         Self {
             db: args.db,
@@ -153,7 +153,7 @@ impl Peer {
     }
 }
 
-impl Actor for Peer {
+impl Actor for PeerProcessor {
     type Msg = RawPacketMessage;
 
     fn recv(&mut self, ctx: &Context<RawPacketMessage>, mut msg: RawPacketMessage, sender: Sender) {

@@ -9,14 +9,16 @@ use crate::{
     configuration::Identity,
     actors::{
         peer_message::*,
-        peer::{Peer, PeerArgs},
+        peer_processor::{PeerProcessor, PeerArgs},
     },
     storage::MessageStore,
     network::tun_bridge::BridgeWriter,
 };
+use crate::actors::rpc_processor::{RpcProcessor, RpcArgs};
 
 #[derive(Clone)]
 pub struct PacketOrchestratorArgs {
+    pub rpc_port: u16,
     pub local_identity: Identity,
     pub fake_address: IpAddr,
     pub local_address: IpAddr,
@@ -26,6 +28,8 @@ pub struct PacketOrchestratorArgs {
 
 /// Main packet router and process orchestrator
 pub struct PacketOrchestrator {
+    rpc_port: u16,
+    rpc_processor: Option<ActorRef<RawPacketMessage>>,
     remotes: HashMap<IpAddr, ActorRef<RawPacketMessage>>,
     local_identity: Identity,
     db: MessageStore,
@@ -37,6 +41,8 @@ pub struct PacketOrchestrator {
 impl PacketOrchestrator {
     pub fn new(args: PacketOrchestratorArgs) -> Self {
         Self {
+            rpc_port: args.rpc_port,
+            rpc_processor: None,
             remotes: Default::default(),
             local_identity: args.local_identity,
             db: args.db,
@@ -48,10 +54,19 @@ impl PacketOrchestrator {
 
     fn spawn_peer(&self, ctx: &Context<<Self as Actor>::Msg>, addr: IpAddr) -> Result<ActorRef<RawPacketMessage>, Error> {
         let peer_name = format!("peer-{}", addr).replace(".", "_");
-        let act_ref = ctx.actor_of(Props::new_args(Peer::new, PeerArgs {
+        let act_ref = ctx.actor_of(Props::new_args(PeerProcessor::new, PeerArgs {
             addr,
             local_identity: self.local_identity.clone(),
             db: self.db.clone(),
+        }), &peer_name)?;
+        log::info!("Spawned {}", peer_name);
+        Ok(act_ref)
+    }
+
+    fn spawn_rpc(&self, ctx: &Context<<Self as Actor>::Msg>, port: u16) -> Result<ActorRef<RawPacketMessage>, Error> {
+        let peer_name = format!("rpc-{}", port);
+        let act_ref = ctx.actor_of(Props::new_args(RpcProcessor::new, RpcArgs {
+            port
         }), &peer_name)?;
         log::info!("Spawned {}", peer_name);
         Ok(act_ref)
@@ -72,6 +87,17 @@ impl PacketOrchestrator {
 
 impl Actor for PacketOrchestrator {
     type Msg = RawPacketMessage;
+
+    fn pre_start(&mut self, ctx: &Context<Self::Msg>) {
+        match self.spawn_rpc(ctx, self.rpc_port) {
+            Ok(actor) => {
+                self.rpc_processor = Some(actor);
+            }
+            Err(err) => {
+                log::error!("Failed to create rpc processing actor for port {}: {}", self.rpc_port, err);
+            }
+        }
+    }
 
     fn recv(&mut self, ctx: &Context<RawPacketMessage>, msg: RawPacketMessage, _: Sender) {
         match msg.character() {
