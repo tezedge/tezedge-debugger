@@ -628,15 +628,6 @@ dependencies = [
 
 [[package]]
 name = "error-chain"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff511d5dc435d703f4971bc399647c9bc38e20cb41452e3b9feb4765419ed3f3"
-dependencies = [
- "backtrace",
-]
-
-[[package]]
-name = "error-chain"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d371106cc88ffdfb1eabd7111e432da544f16f3e2d7bf1dfe8bf575f1df045cd"
@@ -1411,6 +1402,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "main_error"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3516df0fb44d98fe6d6e859d224adfb7b6686447937e5b96308d6061595eed04"
+
+[[package]]
 name = "matches"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1611,6 +1608,19 @@ dependencies = [
  "tezos_encoding",
  "tezos_messages",
  "tokio 0.2.11",
+]
+
+[[package]]
+name = "nix"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50e4785f2c3b7589a0d0c1dd60285e1188adac4006e8abd6dd578e1567027363"
+dependencies = [
+ "bitflags 1.2.1",
+ "cc",
+ "cfg-if",
+ "libc",
+ "void",
 ]
 
 [[package]]
@@ -2859,6 +2869,7 @@ dependencies = [
  "itertools",
  "lazy_static 1.4.0",
  "log 0.4.8",
+ "main_error",
  "networking",
  "num-bigint",
  "packet",
@@ -2870,6 +2881,7 @@ dependencies = [
  "simple_logger",
  "tezos_encoding",
  "tezos_messages",
+ "timeout-readwrite",
  "tokio 0.2.11",
  "tun",
  "warp",
@@ -2912,6 +2924,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "thiserror"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0570dc61221295909abdb95c739f2e74325e14293b2026b0a7e195091ec54ae"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "227362df41d566be41a28f64401e07a043157c21c14b9785a0d8e256f940a8fd"
+dependencies = [
+ "proc-macro2 1.0.9",
+ "quote 1.0.2",
+ "syn 1.0.16",
+]
+
+[[package]]
 name = "thread_local"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2938,6 +2970,15 @@ dependencies = [
  "libc",
  "redox_syscall",
  "winapi 0.3.8",
+]
+
+[[package]]
+name = "timeout-readwrite"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15f9e83663e1c312cbc7980611fa82ed60d622a947de3546350b549e5d69f9bc"
+dependencies = [
+ "nix",
 ]
 
 [[package]]
@@ -3167,13 +3208,12 @@ dependencies = [
 
 [[package]]
 name = "tun"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c381483a1daa36ccc3452223bdcb3dbea7ad407d1ede80496b87707368ba755"
+version = "0.5.0"
+source = "git+https://github.com/Kyras/rust-tun#e927b666affc6e1f2e8862a6b53ca8c530cd34e3"
 dependencies = [
- "error-chain 0.11.0",
  "ioctl-sys",
  "libc",
+ "thiserror",
 ]
 
 [[package]]
@@ -3364,6 +3404,12 @@ name = "version_check"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "078775d0255232fb988e6fccf26ddc9d1ac274299aaedcedce21c6f72cc533ce"
+
+[[package]]
+name = "void"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
 name = "want"

@@ -10,7 +10,8 @@ use std::{
     sync::{Mutex, Arc},
 };
 
-use failure::{Error, Fail};
+use failure::Fail;
+use main_error::MainError;
 use riker::actors::*;
 use warp::{
     Filter,
@@ -47,7 +48,7 @@ fn set_sysctl(ifaces: &[&str]) {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> Result<(), MainError> {
     // -- Initialize logger
     simple_logger::init()?;
 
@@ -61,10 +62,19 @@ async fn main() -> Result<(), Error> {
     let db = app_config.open_database()?;
     log::info!("Created RocksDB storage in: {}", app_config.storage_path);
 
+    Command::new("iptables")
+        .args(&["-t", "nat", "-A", "POSTROUTING",
+            "-s", &app_config.tun1_address,
+            "-j", "MASQUERADE"])
+        .output().unwrap();
+    set_sysctl(&["all", "default", &app_config.tun0_name, &app_config.tun1_name, &app_config.interface]);
+
     // -- Create TUN devices
     let ((_, receiver), writer) = make_bridge(
         &app_config.tun0_address_space,
         &app_config.tun1_address_space,
+        &app_config.tun0_address,
+        &app_config.tun1_address,
         app_config.local_address.parse()?,
         app_config.tun1_address.parse()?,
     )?;
@@ -75,31 +85,10 @@ async fn main() -> Result<(), Error> {
         app_config.tun1_address,
     );
 
-    // -- Setup redirects
-    // Command::new("ip")
-    //     .args(&["rule", "add", "fwmark", "1", "table", "1"])
-    //     .output().unwrap();
-    // Command::new("ip")
-    //     .args(&["route", "add", "default", "dev", &app_config.tun0_name, "table", "1"])
-    //     .output().unwrap();
-    // Command::new("iptables")
-    //     .args(&["-t", "mangle", "-A", "OUTPUT",
-    //         "--source", &app_config.local_address,
-    //         "-o", &app_config.interface, "-p", "tcp",
-    //         "--dport", &app_config.port.to_string(),
-    //         "-j", "MARK", "--set-mark", "1"])
-    //     .output().unwrap();
-    Command::new("iptables")
-        .args(&["-t", "nat", "-A", "POSTROUTING",
-            "--source", &app_config.tun1_address_space,
-            "-o", &app_config.interface, "-j", "MASQUERADE"])
-        .output().unwrap();
-    set_sysctl(&["all", "default", &app_config.tun0_name, &app_config.tun1_name, &app_config.interface]);
-
-
     // -- Start Actor system
     let system = ActorSystem::new()?;
     let orchestrator = system.actor_of(Props::new_args(PacketOrchestrator::new, PacketOrchestratorArgs {
+        rpc_port: app_config.rpc_port,
         local_address: app_config.local_address.parse()?,
         fake_address: app_config.tun1_address.parse()?,
         local_identity: identity.clone(),
@@ -115,7 +104,7 @@ async fn main() -> Result<(), Error> {
         }
     });
 
-    log::info!("Starting to analyze traffic on port {}", app_config.port);
+    log::info!("Started to analyze traffic through {} device", app_config.tun0_name);
 
     let cloner = move || {
         db.clone()

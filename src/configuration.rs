@@ -25,8 +25,8 @@ pub struct AppConfig {
     /// local address associated with provided interface
     pub local_address: String,
     #[argh(option, default = "9732")]
-    /// tezedge p2p port
-    pub port: u16,
+    /// RPC port
+    pub rpc_port: u16,
     #[argh(option)]
     /// path to the local identity
     pub identity_file: String,
