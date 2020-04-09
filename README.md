@@ -10,7 +10,7 @@ grants them correct access rights.
 FAQ
 ===
 Resolving `Error: unable to access internet (check FAQ for more info): Did not received any response` problems.
-To successfully model the proxy, some per-application routing is necessary (and hard to make right in most cases), and 
+To successfully model the proxy, some per-application routing is necessary, and 
 because of that, there might be many problems, why you cannot access internet from the proxy (which renders it unusable).
 1. There is no internet connection. Try to check if `ping 8.8.8.8` does return any response.
 
