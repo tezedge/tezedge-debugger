@@ -5,7 +5,7 @@ use tun::{
 };
 use std::{
     io::{Read, Write},
-    process::Command,
+    // process::Command,
     net::IpAddr,
 };
 use failure::{Error, Fail};
@@ -13,19 +13,19 @@ use flume::{Receiver, Sender, unbounded};
 use crate::actors::prelude::*;
 use crate::network::health_checks::{device_address_check, internet_accessibility_check};
 
-fn create_tun_device(device: &str) {
-    Command::new("ip")
-        .args(&["tuntap", "add", "mode", "tun", "name", device])
-        .output().unwrap();
+fn create_tun_device(_device: &str) {
+    // Command::new("ip")
+    //     .args(&["tuntap", "add", "mode", "tun", "name", device])
+    //     .output().unwrap();
 }
 
-fn setup_tun_device(device: &str, ip: &str) {
-    Command::new("ip")
-        .args(&["link", "set", device, "up"])
-        .output().unwrap();
-    Command::new("ip")
-        .args(&["addr", "add", ip, "dev", device])
-        .output().unwrap();
+fn setup_tun_device(_device: &str, _ip: &str) {
+    // Command::new("ip")
+    //     .args(&["link", "set", device, "up"])
+    //     .output().unwrap();
+    // Command::new("ip")
+    //     .args(&["addr", "add", ip, "dev", device])
+    //     .output().unwrap();
 }
 
 pub fn make_bridge(in_addr_space: &str, out_addr_space: &str,

@@ -62,10 +62,22 @@ async fn main() -> Result<(), MainError> {
     let db = app_config.open_database()?;
     log::info!("Created RocksDB storage in: {}", app_config.storage_path);
 
+    // Command::new("iptables")
+    //     .args(&["-t", "nat", "-A", "POSTROUTING",
+    //         "-s", &app_config.tun1_address,
+    //         "-j", "MASQUERADE"])
+    //     .output().unwrap();
+    // set_sysctl(&["all", "default", &app_config.tun0_name, &app_config.tun1_name, &app_config.interface]);
+
     Command::new("iptables")
-        .args(&["-t", "nat", "-A", "POSTROUTING",
+        .args(&["-A", "FORWARD",
             "-s", &app_config.tun1_address,
-            "-j", "MASQUERADE"])
+            "-j", "ACCEPT"])
+        .output().unwrap();
+    Command::new("iptables")
+        .args(&["-A", "FORWARD",
+            "-d", &app_config.tun1_address,
+            "-j", "ACCEPT"])
         .output().unwrap();
     set_sysctl(&["all", "default", &app_config.tun0_name, &app_config.tun1_name, &app_config.interface]);
 
