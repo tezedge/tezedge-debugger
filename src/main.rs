@@ -6,7 +6,6 @@ mod network;
 mod storage;
 
 use std::{
-    process::Command,
     sync::{Mutex, Arc},
 };
 
@@ -36,17 +35,6 @@ enum AppError {
     InvalidPacket,
 }
 
-fn set_sysctl(ifaces: &[&str]) {
-    for iface in ifaces {
-        Command::new("sysctl")
-            .args(&["-w", &format!("net.ipv4.conf.{}.rp_filter=2", iface)])
-            .output().unwrap();
-    }
-    Command::new("sysctl")
-        .args(&["-w", "net.ipv4.ip_forward=1"])
-        .output().unwrap();
-}
-
 #[tokio::main]
 async fn main() -> Result<(), MainError> {
     // -- Initialize logger
@@ -61,25 +49,6 @@ async fn main() -> Result<(), MainError> {
     // -- Initialize RocksDB
     let db = app_config.open_database()?;
     log::info!("Created RocksDB storage in: {}", app_config.storage_path);
-
-    // Command::new("iptables")
-    //     .args(&["-t", "nat", "-A", "POSTROUTING",
-    //         "-s", &app_config.tun1_address,
-    //         "-j", "MASQUERADE"])
-    //     .output().unwrap();
-    // set_sysctl(&["all", "default", &app_config.tun0_name, &app_config.tun1_name, &app_config.interface]);
-
-    Command::new("iptables")
-        .args(&["-A", "FORWARD",
-            "-s", &app_config.tun1_address,
-            "-j", "ACCEPT"])
-        .output().unwrap();
-    Command::new("iptables")
-        .args(&["-A", "FORWARD",
-            "-d", &app_config.tun1_address,
-            "-j", "ACCEPT"])
-        .output().unwrap();
-    set_sysctl(&["all", "default", &app_config.tun0_name, &app_config.tun1_name, &app_config.interface]);
 
     // -- Create TUN devices
     let ((_, receiver), writer) = make_bridge(
@@ -145,7 +114,7 @@ async fn main() -> Result<(), MainError> {
 
     warp::serve(endpoint)
         // TODO: Add as config settings
-        .run(([127, 0, 0, 1], 5050))
+        .run(([0, 0, 0, 0], app_config.rpc_port))
         .await;
 
     Ok(())

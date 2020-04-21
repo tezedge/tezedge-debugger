@@ -12,32 +12,12 @@ use failure::{Error, Fail};
 use flume::{Receiver, Sender, unbounded};
 use crate::actors::prelude::*;
 use crate::network::health_checks::{device_address_check, internet_accessibility_check};
+use failure::_core::time::Duration;
 
-fn create_tun_device(_device: &str) {
-    // Command::new("ip")
-    //     .args(&["tuntap", "add", "mode", "tun", "name", device])
-    //     .output().unwrap();
-}
-
-fn setup_tun_device(_device: &str, _ip: &str) {
-    // Command::new("ip")
-    //     .args(&["link", "set", device, "up"])
-    //     .output().unwrap();
-    // Command::new("ip")
-    //     .args(&["addr", "add", ip, "dev", device])
-    //     .output().unwrap();
-}
-
-pub fn make_bridge(in_addr_space: &str, out_addr_space: &str,
+pub fn make_bridge(_in_addr_space: &str, _out_addr_space: &str,
                    in_addr: &str, out_addr: &str,
-                   local_addr: IpAddr, remote_addr: IpAddr) -> Result<((Sender<RawPacketMessage>, Receiver<RawPacketMessage>), BridgeWriter), Error>
+                   local_addr: IpAddr, remote_addr: IpAddr) -> Result<((Sender<SenderMessage>, Receiver<SenderMessage>), BridgeWriter), Error>
 {
-    create_tun_device("tun0");
-    create_tun_device("tun1");
-
-    setup_tun_device("tun0", in_addr_space);
-    setup_tun_device("tun1", out_addr_space);
-
     let mut in_conf = Configuration::default();
     let mut out_conf = Configuration::default();
     in_conf.name("tun0");
@@ -52,13 +32,21 @@ pub fn make_bridge(in_addr_space: &str, out_addr_space: &str,
     let mut out_dev = tun::platform::create(&out_conf)
         .map_err(BridgeError::from)?;
 
-    // Run health-checks
-    in_dev = device_address_check(in_dev, in_addr)?;
-    log::info!("Address for {} set correctly", in_dev.name());
-    out_dev = device_address_check(out_dev, out_addr)?;
-    log::info!("Address for {} set correctly", out_dev.name());
-    out_dev = internet_accessibility_check(out_dev, out_addr)?;
-    log::info!("Internet connection availability set correctly");
+    // Run health-checks -- retrying
+    loop {
+        match internet_accessibility_check(&mut out_dev, out_addr) {
+            Ok(_) => {
+                log::info!("Internet access set correctly");
+            }
+            Err(err) => {
+                log::info!("Internet unreachable: {}", err);
+                std::thread::sleep(Duration::from_secs(3));
+                continue;
+            }
+        };
+
+        break;
+    }
 
     let (in_reader, in_writer) = in_dev.split();
     let (out_reader, out_writer) = out_dev.split();
@@ -69,7 +57,7 @@ pub fn make_bridge(in_addr_space: &str, out_addr_space: &str,
     Ok(((tx, rx), BridgeWriter::new(in_writer, out_writer)))
 }
 
-fn process_packets(mut dev: Reader, sender: Sender<RawPacketMessage>, inner: bool, local_addr: IpAddr, tun_addr: IpAddr) -> impl FnMut() + 'static {
+fn process_packets(mut dev: Reader, sender: Sender<SenderMessage>, inner: bool, local_addr: IpAddr, tun_addr: IpAddr) -> impl FnMut() + 'static {
     move || {
         let mut buf = [0u8; 65535];
         loop {
@@ -88,12 +76,14 @@ fn process_packets(mut dev: Reader, sender: Sender<RawPacketMessage>, inner: boo
                             // message is incoming, iff source addr != tun_addr
                             msg.set_is_incoming(msg.destination_addr() == tun_addr);
                         }
-                        if let Err(err) = sender.send(msg) {
-                            log::error!("failed to forward message: {:?}", err);
+                        if let Err(err) = sender.send(SenderMessage::Process(msg)) {
+                            log::error!("failed to process message: {:?}", err);
                         }
                     }
-                    Err(err) => {
-                        log::trace!("dropping invalid packet {:?}: {}", data, err);
+                    Err(_) => {
+                        if let Err(err) = sender.send(SenderMessage::Forward(inner, data.to_vec())) {
+                            log::error!("failed to forward message: {:?}", err);
+                        }
                     }
                 }
             }
@@ -128,6 +118,18 @@ impl BridgeWriter {
         packet.set_destination_addr(addr)
             .expect("failed to set destination address");
         self.in_writer.write_all(&packet.clone_packet())
+            .expect("failed to write data");
+        Ok(())
+    }
+
+    pub fn forward_to_internet(&mut self, packet: &[u8]) -> Result<(), Error> {
+        self.out_writer.write_all(packet)
+            .expect("failed to write data");
+        Ok(())
+    }
+
+    pub fn forward_to_local(&mut self, packet: &[u8]) -> Result<(), Error> {
+        self.in_writer.write_all(packet)
             .expect("failed to write data");
         Ok(())
     }

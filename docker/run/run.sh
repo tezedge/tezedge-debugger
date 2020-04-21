@@ -3,10 +3,11 @@ IDENTITY=./identity/identity.json
 EXECUTABLE=./tezedge_proxy
 TUN=/dev/net/tun
 TUN0_NAME=tun0
-TUN0_ADDR=10.0.0.0
+TUN0_ADDR=10.0.1.0
 TUN1_NAME=tun1
 TUN1_ADDR=10.0.1.0
 ADDR_SPACE=24
+RPC_PORT=10000
 FILES=("$IDENTITY" "$EXECUTABLE" "$TUN")
 
 function clean() {
@@ -72,15 +73,31 @@ trap clean EXIT
 set_tun "$TUN0_NAME" "$TUN0_ADDR" "$ADDR_SPACE"
 set_tun "$TUN1_NAME" "$TUN1_ADDR" "$ADDR_SPACE"
 
+# Allow IP forwarding
+IP_FORWARD=$(cat "/proc/sys/net/ipv4/ip_forward")
+if [ "$IP_FORWARD" -ne 1 ]; then
+  sysctl -w "net.ipv4.ip_forward=1"
+fi
+
+# Make reverse path filtering more permissive
+DEVICES=("tun0" "eth0" "default")
+for DEVICE in ${DEVICES[*]}; do
+  RP_FILTER=$(cat "/proc/sys/net/ipv4/conf/$DEVICE/rp_filter")
+  if [ "$RP_FILTER" -ne 2 ]; then
+    sysctl -w "net.ipv4.conf.$DEVICE.rp_filter=2"
+  fi
+done
+
+# Allow forwarding from tun1
+iptables -P FORWARD ACCEPT
+iptables -t nat -A POSTROUTING -s "$TUN1_ADDR/$ADDR_SPACE" -j MASQUERADE
 
 # Test internet connectivity
 test_reachability "internet connection" "8.8.8.8"
-test_reachability "$TUN0_NAME" "$TUN0_ADDR"
-test_reachability "$TUN1_NAME" "$TUN1_ADDR"
 
 ${EXECUTABLE} --identity-file "$IDENTITY" \
-  --rpc-port 9732 \
+  --rpc-port "$RPC_PORT" \
   --interface eth0 \
-  --local-address 192.168.0.1 \
-  --tun0-name "$TUN0_NAME" --tun0-address-space "$TUN0_ADDR/$ADDR_SPACE" --tun0-address "$(nextip $TUN0_ADDR)" \
+  --local-address "$(nextip $TUN1_ADDR)" \
+  --tun0-name "$TUN0_NAME" --tun0-address-space "$TUN1_ADDR/$ADDR_SPACE" --tun0-address "$(nextip $TUN1_ADDR)" \
   --tun1-name "$TUN1_NAME" --tun1-address-space "$TUN1_ADDR/$ADDR_SPACE" --tun1-address "$(nextip $TUN1_ADDR)"

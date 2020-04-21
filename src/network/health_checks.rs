@@ -75,21 +75,24 @@ fn get_next_packet(dev: &mut Device, protocol: Protocol, timeout: Duration) -> R
 }
 
 /// Top-level health check for testing correct setup of tun addresses
-pub fn device_address_check(dev: Device, addr: &str) -> Result<Device, HealthCheckError> {
+pub fn device_address_check(dev: Device, addr: &str) -> Result<Device, (Device, HealthCheckError)> {
     let detail = format!("invalid setting detected on device {}", dev.name());
     // Address to ping
     log::info!("Checking address setting {} for {}", addr, dev.name());
     let handler = std::thread::spawn(move || {
         let mut dev = dev;
-        get_next_packet(&mut dev, Protocol::Icmp, Duration::from_secs(1))?;
-        Ok(dev)
+        if let Err(e) = get_next_packet(&mut dev, Protocol::Icmp, Duration::from_secs(1)) {
+            Err((dev, e))
+        } else {
+            Ok(dev)
+        }
     });
     Command::new("ping")
         .args(&["-4", "-c 1", "-w 1", addr])
         .output()
         .unwrap();
     Ok(handler.join().unwrap()
-        .map_err(|e: HealthCheckError| HealthCheckError::descriptive(detail.clone(), e))?)
+        .map_err(|(dev, e)| (dev, HealthCheckError::descriptive(detail.clone(), e)))?)
 }
 
 fn build_ping(addr: &str) -> Vec<u8> {
@@ -113,19 +116,20 @@ fn build_ping(addr: &str) -> Vec<u8> {
 }
 
 /// Top-level health check for testing if internet connection is reachable
-pub fn internet_accessibility_check(dev: Device, addr: &str) -> Result<Device, HealthCheckError> {
+pub fn internet_accessibility_check(dev: &mut Device, addr: &str) -> Result<(), HealthCheckError> {
     let detail = format!("unable to access internet (check FAQ for more info)");
     let addr = addr.to_string();
     log::info!("Checking internet accessibility on {}", dev.name());
-    let handler = std::thread::spawn(move || {
-        let mut dev = dev;
-        let addr = addr;
-        let packet = build_ping(&addr);
-        dev.write_all(&packet)
-            .map_err(HealthCheckError::send_failed)?;
-        get_next_packet(&mut dev, Protocol::Icmp, Duration::from_secs(1))?;
-        Ok(dev)
-    });
-    Ok(handler.join().unwrap()
-        .map_err(|e: HealthCheckError| HealthCheckError::descriptive(detail.clone(), e))?)
+
+    let mut dev = dev;
+    let addr = addr;
+    let packet = build_ping(&addr);
+    if let Err(e) = dev.write_all(&packet) {
+        return Err(HealthCheckError::send_failed(e));
+    }
+    if let Err(e) = get_next_packet(&mut dev, Protocol::Icmp, Duration::from_secs(1)) {
+        Err(HealthCheckError::descriptive(detail.clone(), e))
+    } else {
+        Ok(())
+    }
 }

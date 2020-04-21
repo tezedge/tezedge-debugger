@@ -160,7 +160,7 @@ impl Actor for PeerProcessor {
         let _ = self.process_message(&mut msg);
         if let Some(sender) = sender {
             msg.flip_side();
-            if let Err(_) = sender.try_tell(msg, ctx.myself()) {
+            if let Err(_) = sender.try_tell(SenderMessage::Process(msg), ctx.myself()) {
                 log::error!("unable to reach packet orchestrator with processed packet")
             }
         }
