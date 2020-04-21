@@ -86,7 +86,7 @@ impl PacketOrchestrator {
 }
 
 impl Actor for PacketOrchestrator {
-    type Msg = RawPacketMessage;
+    type Msg = SenderMessage;
 
     fn pre_start(&mut self, ctx: &Context<Self::Msg>) {
         match self.spawn_rpc(ctx, self.rpc_port) {
@@ -99,29 +99,41 @@ impl Actor for PacketOrchestrator {
         }
     }
 
-    fn recv(&mut self, ctx: &Context<RawPacketMessage>, msg: RawPacketMessage, _: Sender) {
-        match msg.character() {
-            PacketCharacter::InnerOutgoing | PacketCharacter::OuterIncoming => {
-                // Process packet first
-                if let Some(remote) = self.remotes.get_mut(&msg.remote_addr()) {
-                    remote
+    fn recv(&mut self, ctx: &Context<Self::Msg>, msg: Self::Msg, _: Sender) {
+        match msg {
+            SenderMessage::Process(msg) => match msg.character() {
+                PacketCharacter::InnerOutgoing | PacketCharacter::OuterIncoming => {
+                    // Process packet first
+                    if let Some(remote) = self.remotes.get_mut(&msg.remote_addr()) {
+                        remote
+                    } else {
+                        match self.spawn_peer(ctx, msg.remote_addr()) {
+                            Ok(actor) => {
+                                self.remotes.insert(msg.remote_addr(), actor);
+                                self.remotes.get_mut(&msg.remote_addr())
+                                    .expect("just inserted actor disappeared")
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to create actor for message coming from addr {}: {}", msg.remote_addr(), e);
+                                return;
+                            }
+                        }
+                    }.tell(msg, ctx.myself().into());
+                }
+                PacketCharacter::InnerIncoming | PacketCharacter::OuterOutgoing => {
+                    // Just send it
+                    self.relay(msg.clone());
+                }
+            },
+            SenderMessage::Forward(inner, data) => {
+                log::info!("Forwarding new packet");
+                let mut bridge = self.writer.lock()
+                    .expect("Mutex poisoning");
+                let _ = if inner {
+                    bridge.forward_to_internet(&data)
                 } else {
-                    match self.spawn_peer(ctx, msg.remote_addr()) {
-                        Ok(actor) => {
-                            self.remotes.insert(msg.remote_addr(), actor);
-                            self.remotes.get_mut(&msg.remote_addr())
-                                .expect("just inserted actor disappeared")
-                        }
-                        Err(e) => {
-                            log::warn!("Failed to create actor for message coming from addr {}: {}", msg.remote_addr(), e);
-                            return;
-                        }
-                    }
-                }.tell(msg, ctx.myself().into());
-            }
-            PacketCharacter::InnerIncoming | PacketCharacter::OuterOutgoing => {
-                // Just send it
-                self.relay(msg.clone());
+                    bridge.forward_to_local(&data)
+                };
             }
         }
     }

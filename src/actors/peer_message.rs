@@ -31,6 +31,12 @@ impl From<(bool, bool)> for PacketCharacter {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum SenderMessage {
+    Process(RawPacketMessage),
+    Forward(bool, Vec<u8>),
+}
+
 #[derive(Debug)]
 pub struct RawPacketMessage {
     is_incoming: bool,
