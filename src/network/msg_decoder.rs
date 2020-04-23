@@ -42,7 +42,7 @@ impl EncryptedMessageDecoder {
     }
 
     pub fn recv_msg(&mut self, enc: &RawPacketMessage) {
-        if enc.is_incoming() && enc.has_payload() {
+        if enc.has_payload() {
             self.inc_buf.extend_from_slice(&enc.payload());
 
             if self.inc_buf.len() > 2 {
