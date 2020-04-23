@@ -33,6 +33,16 @@ function unmount_ns() {
 }
 
 # == CHECK THAT REQUIRED FILES EXISTS ==
+
+if [ ! -d "$VOLUME" ]; then
+  err "Required director \"$VOLUME\" does not exists"
+fi
+
+if [ ! -d "/var/run/netns" ]; then
+  sudo ip netns add make_ns
+  sudo ip netns del make_ns
+fi
+
 for FILE in ${FILES[*]}; do
   if [ ! -f "$FILE" ]; then
     err "Required file \"$FILE\" does not exists"
