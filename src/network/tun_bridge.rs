@@ -1,5 +1,4 @@
 use tun::{
-    Device,
     self, Configuration,
     platform::posix::{Reader, Writer},
 };
@@ -11,11 +10,11 @@ use std::{
 use failure::{Error, Fail};
 use flume::{Receiver, Sender, unbounded};
 use crate::actors::prelude::*;
-use crate::network::health_checks::{device_address_check, internet_accessibility_check};
+use crate::network::health_checks::internet_accessibility_check;
 use failure::_core::time::Duration;
 
 pub fn make_bridge(_in_addr_space: &str, _out_addr_space: &str,
-                   in_addr: &str, out_addr: &str,
+                   _in_addr: &str, out_addr: &str,
                    local_addr: IpAddr, remote_addr: IpAddr) -> Result<((Sender<SenderMessage>, Receiver<SenderMessage>), BridgeWriter), Error>
 {
     let mut in_conf = Configuration::default();
@@ -27,7 +26,7 @@ pub fn make_bridge(_in_addr_space: &str, _out_addr_space: &str,
     let in_send = tx.clone();
     let out_send = tx.clone();
 
-    let mut in_dev = tun::platform::create(&in_conf)
+    let in_dev = tun::platform::create(&in_conf)
         .map_err(BridgeError::from)?;
     let mut out_dev = tun::platform::create(&out_conf)
         .map_err(BridgeError::from)?;

@@ -45,7 +45,8 @@ pub struct PeerProcessor {
     local_identity: Identity,
     peer_id: String,
     public_key: Vec<u8>,
-    decrypter: Option<EncryptedMessageDecoder>,
+    incoming_decrypter: Option<EncryptedMessageDecoder>,
+    outgoing_decrypter: Option<EncryptedMessageDecoder>,
 }
 
 impl PeerProcessor {
@@ -62,7 +63,8 @@ impl PeerProcessor {
             conn_msgs: Default::default(),
             peer_id: Default::default(),
             public_key: Default::default(),
-            decrypter: None,
+            incoming_decrypter: None,
+            outgoing_decrypter: None,
         }
     }
 
@@ -110,7 +112,12 @@ impl PeerProcessor {
     }
 
     fn process_encrypted_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
-        if let Some(ref mut decrypter) = self.decrypter {
+        let decrypter = if msg.is_incoming() {
+            &mut self.incoming_decrypter
+        } else {
+            &mut self.outgoing_decrypter
+        };
+        if let Some(ref mut decrypter) = decrypter {
             decrypter.recv_msg(msg)
         }
         Ok(())
@@ -130,7 +137,7 @@ impl PeerProcessor {
         let sent_data = BinaryChunk::from_content(&sent.cache_reader().get().unwrap())?;
         let recv_data = BinaryChunk::from_content(&received.cache_reader().get().unwrap())?;
 
-        let NoncePair { remote, .. } = generate_nonces(
+        let NoncePair { remote, local } = generate_nonces(
             &sent_data.raw(),
             &recv_data.raw(),
             !is_incoming,
@@ -143,7 +150,8 @@ impl PeerProcessor {
             &self.local_identity.secret_key,
         )?;
 
-        self.decrypter = Some(EncryptedMessageDecoder::new(precomputed_key, remote, remote_pk.clone(), self.db.clone()));
+        self.incoming_decrypter = Some(EncryptedMessageDecoder::new(precomputed_key.clone(), remote, remote_pk.clone(), self.db.clone()));
+        self.outgoing_decrypter = Some(EncryptedMessageDecoder::new(precomputed_key, local, remote_pk.clone(), self.db.clone()));
         self.public_key = received.public_key.clone();
         self.peer_id = remote_pk;
         self.incoming = is_incoming;

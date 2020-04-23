@@ -126,7 +126,6 @@ impl Actor for PacketOrchestrator {
                 }
             },
             SenderMessage::Forward(inner, data) => {
-                log::info!("Forwarding new packet");
                 let mut bridge = self.writer.lock()
                     .expect("Mutex poisoning");
                 let _ = if inner {
