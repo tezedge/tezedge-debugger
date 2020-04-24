@@ -104,6 +104,15 @@ impl Actor for PacketOrchestrator {
             SenderMessage::Process(msg) => match msg.character() {
                 PacketCharacter::InnerOutgoing | PacketCharacter::OuterIncoming => {
                     // Process packet first
+                    if msg.is_incoming() && msg.tcp_packet().destination() == 8732 || msg.is_outgoing() && msg.tcp_packet().source() == 8732 {
+                        if let Some(ref mut remote) = self.rpc_processor {
+                            remote.tell(msg, ctx.myself().into())
+                        } else {
+                            self.relay(msg);
+                        }
+                        return;
+                    }
+
                     if let Some(remote) = self.remotes.get_mut(&msg.remote_addr()) {
                         remote
                     } else {
@@ -120,11 +129,11 @@ impl Actor for PacketOrchestrator {
                         }
                     }.tell(msg, ctx.myself().into());
                 }
-                PacketCharacter::InnerIncoming | PacketCharacter::OuterOutgoing => {
-                    // Just send it
-                    self.relay(msg.clone());
-                }
+                _ => self.relay(msg),
             },
+            SenderMessage::Relay(msg) => {
+                self.relay(msg);
+            }
             SenderMessage::Forward(inner, data) => {
                 let mut bridge = self.writer.lock()
                     .expect("Mutex poisoning");

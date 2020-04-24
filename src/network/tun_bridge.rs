@@ -62,28 +62,21 @@ fn process_packets(mut dev: Reader, sender: Sender<SenderMessage>, inner: bool, 
         loop {
             let count = dev.read(&mut buf).unwrap();
             let data = &buf[0..count];
-            let header = data[0];
-            let version = header >> 4;
-            if version == 4 {
-                match RawPacketMessage::partial(data) {
-                    Ok(mut msg) => {
-                        msg.set_is_inner(inner);
-                        if inner {
-                            // if message is inner, it is incoming, iff dest addr == local_addr
-                            msg.set_is_incoming(msg.destination_addr() == local_addr);
-                        } else {
-                            // message is incoming, iff source addr != tun_addr
-                            msg.set_is_incoming(msg.destination_addr() == tun_addr);
-                        }
-                        if let Err(err) = sender.send(SenderMessage::Process(msg)) {
-                            log::error!("failed to process message: {:?}", err);
-                        }
-                    }
-                    Err(_) => {
-                        if let Err(err) = sender.send(SenderMessage::Forward(inner, data.to_vec())) {
-                            log::error!("failed to forward message: {:?}", err);
-                        }
-                    }
+            if let Ok(mut msg) = RawPacketMessage::partial(data) {
+                msg.set_is_inner(inner);
+                if inner {
+                    // if message is inner, it is incoming, iff dest addr == local_addr
+                    msg.set_is_incoming(msg.destination_addr() == local_addr);
+                } else {
+                    // message is incoming, iff source addr != tun_addr
+                    msg.set_is_incoming(msg.destination_addr() == tun_addr);
+                }
+                if let Err(err) = sender.send(SenderMessage::Process(msg)) {
+                    log::error!("failed to forward message: {:?}", err);
+                }
+            } else {
+                if let Err(err) = sender.send(SenderMessage::Forward(inner, data.to_vec())) {
+                    log::error!("failed to forward message: {:?}", err);
                 }
             }
         }
@@ -122,14 +115,12 @@ impl BridgeWriter {
     }
 
     pub fn forward_to_internet(&mut self, packet: &[u8]) -> Result<(), Error> {
-        self.out_writer.write_all(packet)
-            .expect("failed to write data");
+        let _ = self.out_writer.write_all(packet);
         Ok(())
     }
 
     pub fn forward_to_local(&mut self, packet: &[u8]) -> Result<(), Error> {
-        self.in_writer.write_all(packet)
-            .expect("failed to write data");
+        let _ = self.in_writer.write_all(packet);
         Ok(())
     }
 }

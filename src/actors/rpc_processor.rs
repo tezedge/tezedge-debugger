@@ -20,6 +20,7 @@ impl RpcProcessor {
     }
 
     fn process_message(&mut self, _msg: &mut RawPacketMessage) -> Result<(), Error> {
+        log::info!("Received RPC request {:?}", _msg);
         Ok(())
     }
 }
@@ -31,7 +32,7 @@ impl Actor for RpcProcessor {
         let _ = self.process_message(&mut msg);
         if let Some(sender) = sender {
             msg.flip_side();
-            if let Err(_) = sender.try_tell(SenderMessage::Process(msg), ctx.myself()) {
+            if let Err(_) = sender.try_tell(SenderMessage::Relay(msg), ctx.myself()) {
                 log::error!("unable to reach packet orchestrator with processed packet")
             }
         }

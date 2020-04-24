@@ -34,6 +34,7 @@ impl From<(bool, bool)> for PacketCharacter {
 #[derive(Debug, Clone)]
 pub enum SenderMessage {
     Process(RawPacketMessage),
+    Relay(RawPacketMessage),
     Forward(bool, Vec<u8>),
 }
 
