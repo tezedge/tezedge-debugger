@@ -62,14 +62,14 @@ fn process_packets(mut dev: Reader, sender: Sender<SenderMessage>, inner: bool, 
         loop {
             let count = dev.read(&mut buf).unwrap();
             let data = &buf[0..count];
-            if let Ok(mut msg) = RawPacketMessage::partial(data) {
+            if let Some(mut msg) = RawPacketMessage::partial(data) {
                 msg.set_is_inner(inner);
                 if inner {
                     // if message is inner, it is incoming, iff dest addr == local_addr
-                    msg.set_is_incoming(msg.destination_addr() == local_addr);
+                    msg.set_is_incoming(msg.destination_addr().ip() == local_addr);
                 } else {
                     // message is incoming, iff source addr != tun_addr
-                    msg.set_is_incoming(msg.destination_addr() == tun_addr);
+                    msg.set_is_incoming(msg.destination_addr().ip() == tun_addr);
                 }
                 if let Err(err) = sender.send(SenderMessage::Process(msg)) {
                     log::error!("failed to forward message: {:?}", err);
@@ -96,20 +96,14 @@ impl BridgeWriter {
         Self { in_writer, out_writer }
     }
 
-    pub fn send_packet_to_internet(&mut self, mut packet: RawPacketMessage, addr: IpAddr) -> Result<(), Error> {
-        // TODO: CREATE ERROR FOR THIS
-        packet.set_source_addr(addr)
-            .expect("failed to set source address");
-        self.out_writer.write_all(&packet.clone_packet())
+    pub fn send_packet_to_internet(&mut self, packet: RawPacketMessage, _addr: IpAddr) -> Result<(), Error> {
+        self.out_writer.write_all(packet.buffer())
             .expect("failed to write data");
         Ok(())
     }
 
-    pub fn send_packet_to_local(&mut self, mut packet: RawPacketMessage, addr: IpAddr) -> Result<(), Error> {
-        // TODO: CREATE ERROR FOR THIS
-        packet.set_destination_addr(addr)
-            .expect("failed to set destination address");
-        self.in_writer.write_all(&packet.clone_packet())
+    pub fn send_packet_to_local(&mut self, packet: RawPacketMessage, _addr: IpAddr) -> Result<(), Error> {
+        self.in_writer.write_all(packet.buffer())
             .expect("failed to write data");
         Ok(())
     }

@@ -1,11 +1,11 @@
 use std::{
     fs, path::Path, sync::Arc,
 };
-use rocksdb::DB;
 use argh::FromArgs;
 use failure::Error;
 use serde::{Serialize, Deserialize};
 use crate::storage::MessageStore;
+use storage::persistent::{KeyValueSchema, open_kv};
 
 
 #[derive(FromArgs, Debug, Clone, PartialEq)]
@@ -68,7 +68,14 @@ impl AppConfig {
 
     pub fn open_database(&self) -> Result<MessageStore, Error> {
         let path = Path::new(&self.storage_path);
-        Ok(MessageStore::new(Arc::new(DB::open_default(path)?)))
+        let schemas = vec![
+            crate::storage::RpcMessageStorage::descriptor(),
+            crate::storage::P2PMessageStorage::descriptor(),
+            crate::storage::RpcMessageSecondaryIndex::descriptor(),
+            crate::storage::P2PMessageSecondaryIndex::descriptor(),
+        ];
+        let rocksdb = Arc::new(open_kv(path, schemas)?);
+        Ok(MessageStore::new(rocksdb))
     }
 }
 

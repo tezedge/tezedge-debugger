@@ -1,7 +1,7 @@
 use failure::Error;
 use riker::actors::*;
 use std::{
-    net::IpAddr,
+    net::SocketAddr,
     convert::TryFrom,
 };
 use crypto::{
@@ -24,10 +24,10 @@ use crate::{
     storage::StoreMessage,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 /// Argument structure to create new peer
 pub struct PeerArgs {
-    pub addr: IpAddr,
+    pub addr: SocketAddr,
     pub local_identity: Identity,
     pub db: MessageStore,
 }
@@ -35,12 +35,12 @@ pub struct PeerArgs {
 /// Actor representing communication over specific port, before proper communication is established.
 pub struct PeerProcessor {
     db: MessageStore,
-    addr: IpAddr,
+    addr: SocketAddr,
     initialized: bool,
     incoming: bool,
     is_dead: bool,
     waiting: bool,
-    conn_msgs: Vec<(ConnectionMessage, IpAddr)>,
+    conn_msgs: Vec<(ConnectionMessage, SocketAddr)>,
     handshake: u8,
     local_identity: Identity,
     peer_id: String,
@@ -82,7 +82,9 @@ impl PeerProcessor {
 
     fn process_handshake_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
         self.handshake += 1;
-        self.db.store_message(StoreMessage::new_tcp(msg))
+        // Disable Raw TCP packet storing for now
+        // self.db.store_p2p_message(&StoreMessage::new_tcp(&msg), msg.remote_addr())
+        Ok(())
     }
 
     fn process_unencrypted_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
@@ -92,7 +94,7 @@ impl PeerProcessor {
         let chunk = BinaryChunk::try_from(msg.payload().to_vec())?;
         let conn_msg = ConnectionMessage::try_from(chunk)?;
 
-        self.db.store_message(StoreMessage::new_conn(msg.source_addr(), msg.destination_addr(), &conn_msg))?;
+        self.db.store_p2p_message(&StoreMessage::new_conn(msg.source_addr(), msg.destination_addr(), &conn_msg), msg.remote_addr())?;
 
         if let Some((_, addr)) = self.conn_msgs.get(0) {
             if addr == &msg.source_addr() {
@@ -126,7 +128,7 @@ impl PeerProcessor {
     fn upgrade(&mut self) -> Result<(), Error> {
         assert_eq!(self.conn_msgs.len(), 2, "trying to upgrade before all connection messages received");
         let ((first, _), (second, _)) = (&self.conn_msgs[0], &self.conn_msgs[1]);
-        let first_pk = HashType::PublicKeyHash.bytes_to_string(&first.public_key);
+        let first_pk = HashType::CryptoboxPublicKeyHash.bytes_to_string(&first.public_key);
         let is_incoming = first_pk != self.local_identity.public_key;
         let (received, sent) = if is_incoming {
             (second, first)
@@ -143,7 +145,7 @@ impl PeerProcessor {
             !is_incoming,
         );
 
-        let remote_pk = HashType::PublicKeyHash.bytes_to_string(&received.public_key);
+        let remote_pk = HashType::CryptoboxPublicKeyHash.bytes_to_string(&received.public_key);
 
         let precomputed_key = precompute(
             &hex::encode(&received.public_key),

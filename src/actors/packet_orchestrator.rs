@@ -3,7 +3,7 @@ use riker::actors::*;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    net::IpAddr,
+    net::{IpAddr, SocketAddr},
 };
 use crate::{
     configuration::Identity,
@@ -30,7 +30,7 @@ pub struct PacketOrchestratorArgs {
 pub struct PacketOrchestrator {
     rpc_port: u16,
     rpc_processor: Option<ActorRef<RawPacketMessage>>,
-    remotes: HashMap<IpAddr, ActorRef<RawPacketMessage>>,
+    remotes: HashMap<SocketAddr, ActorRef<RawPacketMessage>>,
     local_identity: Identity,
     db: MessageStore,
     writer: Arc<Mutex<BridgeWriter>>,
@@ -52,8 +52,10 @@ impl PacketOrchestrator {
         }
     }
 
-    fn spawn_peer(&self, ctx: &Context<<Self as Actor>::Msg>, addr: IpAddr) -> Result<ActorRef<RawPacketMessage>, Error> {
-        let peer_name = format!("peer-{}", addr).replace(".", "_");
+    fn spawn_peer(&self, ctx: &Context<<Self as Actor>::Msg>, addr: SocketAddr) -> Result<ActorRef<RawPacketMessage>, Error> {
+        let peer_name = format!("peer-{}", addr).replace(|c: char| {
+            c == '.' || c == ':'
+        }, "_");
         let act_ref = ctx.actor_of(Props::new_args(PeerProcessor::new, PeerArgs {
             addr,
             local_identity: self.local_identity.clone(),
@@ -66,7 +68,8 @@ impl PacketOrchestrator {
     fn spawn_rpc(&self, ctx: &Context<<Self as Actor>::Msg>, port: u16) -> Result<ActorRef<RawPacketMessage>, Error> {
         let peer_name = format!("rpc-{}", port);
         let act_ref = ctx.actor_of(Props::new_args(RpcProcessor::new, RpcArgs {
-            port
+            port,
+            db: self.db.clone(),
         }), &peer_name)?;
         log::info!("Spawned {}", peer_name);
         Ok(act_ref)
@@ -104,7 +107,7 @@ impl Actor for PacketOrchestrator {
             SenderMessage::Process(msg) => match msg.character() {
                 PacketCharacter::InnerOutgoing | PacketCharacter::OuterIncoming => {
                     // Process packet first
-                    if msg.is_incoming() && msg.tcp_packet().destination() == 8732 || msg.is_outgoing() && msg.tcp_packet().source() == 8732 {
+                    if msg.is_incoming() && msg.tcp_packet().dst_port() == 8732 || msg.is_outgoing() && msg.tcp_packet().src_port() == 8732 {
                         if let Some(ref mut remote) = self.rpc_processor {
                             remote.tell(msg, ctx.myself().into())
                         } else {

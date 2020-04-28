@@ -1,37 +1,46 @@
 use super::StoreMessage;
 use crate::network::connection_message::ConnectionMessage;
-use serde::Serialize;
-use std::net::IpAddr;
+use serde::{Serialize, Deserialize};
+use std::net::SocketAddr;
 use tezos_messages::p2p::encoding::prelude::*;
 use tezos_messages::p2p::encoding::version::Version;
 use crypto::hash::HashType;
 use tezos_messages::p2p::encoding::operation_hashes_for_blocks::OperationHashesForBlock;
 use std::time::{SystemTime, UNIX_EPOCH};
+use storage::persistent::BincodeEncoded;
 
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 /// Types of messages sent by external RPC, directly maps to the StoreMessage, with different naming
 pub enum RpcMessage {
     Packet {
         ts: u128,
-        source: IpAddr,
-        destination: IpAddr,
+        source: SocketAddr,
+        destination: SocketAddr,
         packet: String,
     },
     ConnectionMessage {
         ts: u128,
-        source: IpAddr,
-        destination: IpAddr,
+        source: SocketAddr,
+        destination: SocketAddr,
         message: MappedConnectionMessage,
     },
     P2pMessage {
         ts: u128,
-        source: IpAddr,
-        destination: IpAddr,
+        source: SocketAddr,
+        destination: SocketAddr,
         messages: Vec<MappedPeerMessage>,
     },
+    RestMessage {
+        ts: u128,
+        source: SocketAddr,
+        destination: SocketAddr,
+        message: RESTMessage,
+    },
 }
+
+impl BincodeEncoded for RpcMessage {}
 
 impl From<StoreMessage> for RpcMessage {
     fn from(value: StoreMessage) -> Self {
@@ -62,11 +71,32 @@ impl From<StoreMessage> for RpcMessage {
                     messages: payload.into_iter().map(|x| MappedPeerMessage::from(x)).collect(),
                 }
             }
+            StoreMessage::RestMessage { source, destination, payload } => {
+                RpcMessage::RestMessage {
+                    ts,
+                    source,
+                    destination,
+                    message: payload,
+                }
+            }
         }
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum RESTMessage {
+    Request {
+        method: String,
+        path: String,
+        payload: String,
+    },
+    Response {
+        status: String,
+        payload: String,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedConnectionMessage {
     pub port: u16,
     pub versions: Vec<Version>,
@@ -89,7 +119,7 @@ impl From<ConnectionMessage> for MappedConnectionMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MappedPeerMessage {
     Disconnect,
@@ -142,7 +172,7 @@ impl From<PeerMessage> for MappedPeerMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedOperationsForBlocksMessage {
     operations_for_block: MappedOperationsForBlock,
     operation_hashes_path: Path,
@@ -159,7 +189,7 @@ impl From<OperationsForBlocksMessage> for MappedOperationsForBlocksMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedOperation {
     branch: String,
     data: String,
@@ -174,7 +204,7 @@ impl From<&Operation> for MappedOperation {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedGetOperationsForBlocksMessage {
     get_operations_for_blocks: Vec<MappedOperationsForBlock>
 }
@@ -187,7 +217,7 @@ impl From<GetOperationsForBlocksMessage> for MappedGetOperationsForBlocksMessage
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedOperationsForBlock {
     hash: String,
     validation_pass: i8,
@@ -202,7 +232,7 @@ impl From<&OperationsForBlock> for MappedOperationsForBlock {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedOperationHashesForBlocksMessage {
     operation_hashes_for_block: MappedOperationHashesForBlock,
     operation_hashes_path: Path,
@@ -219,7 +249,7 @@ impl From<OperationHashesForBlocksMessage> for MappedOperationHashesForBlocksMes
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedGetOperationHashesForBlocksMessage {
     get_operation_hashes_for_blocks: Vec<MappedOperationHashesForBlock>
 }
@@ -233,7 +263,7 @@ impl From<GetOperationHashesForBlocksMessage> for MappedGetOperationHashesForBlo
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedOperationHashesForBlock {
     hash: String,
     validation_pass: i8,
@@ -248,7 +278,7 @@ impl From<&OperationHashesForBlock> for MappedOperationHashesForBlock {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedGetProtocolsMessage {
     get_protocols: Vec<String>,
 }
@@ -263,7 +293,7 @@ impl From<GetProtocolsMessage> for MappedGetProtocolsMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedOperationMessage {
     branch: String,
     data: String,
@@ -280,7 +310,7 @@ impl From<OperationMessage> for MappedOperationMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedGetOperationsMessage {
     get_operations: Vec<String>
 }
@@ -296,7 +326,7 @@ impl From<GetOperationsMessage> for MappedGetOperationsMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedBlockHeaderMessage {
     block_header: MappedBlockHeader,
 }
@@ -309,7 +339,7 @@ impl From<BlockHeaderMessage> for MappedBlockHeaderMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedGetBlockHeadersMessage {
     get_block_headers: Vec<String>
 }
@@ -322,7 +352,7 @@ impl From<GetBlockHeadersMessage> for MappedGetBlockHeadersMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedCurrentHeadMessage {
     chain_id: String,
     current_block_header: MappedBlockHeader,
@@ -339,7 +369,7 @@ impl From<CurrentHeadMessage> for MappedCurrentHeadMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedMempool {
     known_valid: Vec<String>,
     pending: Vec<String>,
@@ -354,7 +384,7 @@ impl From<&Mempool> for MappedMempool {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedGetCurrentHeadMessage {
     chain_id: String
 }
@@ -367,7 +397,7 @@ impl From<GetCurrentHeadMessage> for MappedGetCurrentHeadMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedDeactivateMessage {
     deactivate: String,
 }
@@ -380,7 +410,7 @@ impl From<DeactivateMessage> for MappedDeactivateMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedCurrentBranchMessage {
     chain_id: String,
     current_branch: MappedCurrentBranch,
@@ -395,7 +425,7 @@ impl From<CurrentBranchMessage> for MappedCurrentBranchMessage {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedCurrentBranch {
     current_head: MappedBlockHeader,
     history: Vec<String>,
@@ -410,7 +440,7 @@ impl From<CurrentBranch> for MappedCurrentBranch {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedBlockHeader {
     level: i32,
     proto: u8,
@@ -439,7 +469,7 @@ impl From<BlockHeader> for MappedBlockHeader {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MappedGetCurrentBranchMessage {
     pub chain_id: String
 }
