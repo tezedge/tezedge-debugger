@@ -80,7 +80,7 @@ impl PeerProcessor {
         }
     }
 
-    fn process_handshake_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
+    fn process_handshake_message(&mut self, _msg: &mut RawPacketMessage) -> Result<(), Error> {
         self.handshake += 1;
         // Disable Raw TCP packet storing for now
         // self.db.store_p2p_message(&StoreMessage::new_tcp(&msg), msg.remote_addr())
@@ -94,7 +94,7 @@ impl PeerProcessor {
         let chunk = BinaryChunk::try_from(msg.payload().to_vec())?;
         let conn_msg = ConnectionMessage::try_from(chunk)?;
 
-        self.db.store_p2p_message(&StoreMessage::new_conn(msg.source_addr(), msg.destination_addr(), &conn_msg), msg.remote_addr())?;
+        self.db.store_p2p_message(&StoreMessage::new_conn(msg.remote_addr(), msg.is_incoming(), &conn_msg))?;
 
         if let Some((_, addr)) = self.conn_msgs.get(0) {
             if addr == &msg.source_addr() {

@@ -14,59 +14,64 @@ pub enum StoreMessage {
     /// Raw Tcp message, part of tcp connection handling.
     /// Not part of tezos node communication, but internet working.
     TcpMessage {
-        source: SocketAddr,
-        destination: SocketAddr,
+        incoming: bool,
+        remote_addr: SocketAddr,
         packet: Vec<u8>,
     },
 
     /// Unencrypted message, which is part of tezos communication handshake
     ConnectionMessage {
-        source: SocketAddr,
-        destination: SocketAddr,
+        incoming: bool,
+        remote_addr: SocketAddr,
         payload: ConnectionMessage,
     },
 
     /// Actual deciphered P2P message sent by some tezos node
     P2PMessage {
-        source: SocketAddr,
-        destination: SocketAddr,
+        incoming: bool,
+        remote_addr: SocketAddr,
         payload: Vec<PeerMessage>,
     },
 
     /// RPC Request/Response
     RestMessage {
-        source: SocketAddr,
-        destination: SocketAddr,
+        incoming: bool,
+        remote_addr: SocketAddr,
         payload: RESTMessage,
     },
 }
 
 impl StoreMessage {
-    pub fn new_conn(source: SocketAddr, destination: SocketAddr, msg: &ConnectionMessage) -> Self {
-        let c = bincode::serialize(msg).unwrap();
-        let payload = bincode::deserialize(&c).unwrap();
-        Self::ConnectionMessage {
-            source,
-            destination,
-            payload,
+    pub fn new_conn(remote_addr: SocketAddr, incoming: bool, msg: &ConnectionMessage) -> Self {
+        StoreMessage::ConnectionMessage {
+            incoming,
+            remote_addr,
+            payload: msg.clone(),
         }
     }
 
-    pub fn new_peer(source: SocketAddr, destination: SocketAddr, msg: &PeerMessageResponse) -> Self {
+    pub fn new_peer(remote_addr: SocketAddr, incoming: bool, msg: &PeerMessageResponse) -> Self {
         let c = bincode::serialize(msg.messages()).unwrap();
         let payload = bincode::deserialize(&c).unwrap();
-        Self::P2PMessage {
-            source,
-            destination,
+        StoreMessage::P2PMessage {
+            remote_addr,
+            incoming,
             payload,
         }
     }
 
     pub fn new_tcp(msg: &RawPacketMessage) -> Self {
-        Self::TcpMessage {
-            source: msg.source_addr(),
-            destination: msg.destination_addr(),
+        StoreMessage::TcpMessage {
+            remote_addr: msg.remote_addr(),
+            incoming: msg.is_incoming(),
             packet: msg.clone_packet(),
+        }
+    }
+
+    pub fn remote_addr(&self) -> SocketAddr {
+        match self {
+            StoreMessage::RestMessage { remote_addr, .. } | StoreMessage::ConnectionMessage { remote_addr, .. } |
+            StoreMessage::P2PMessage { remote_addr, .. } | StoreMessage::TcpMessage { remote_addr, .. } => remote_addr.clone()
         }
     }
 }

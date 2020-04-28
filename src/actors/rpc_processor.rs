@@ -46,10 +46,10 @@ impl RpcProcessor {
             if let Some(payload) = parser.process_message(msg.payload()) {
                 log::info!("Stored new message: {:?}", payload);
                 let _ = self.db.store_rpc_message(&StoreMessage::RestMessage {
-                    source: msg.source_addr(),
-                    destination: msg.destination_addr(),
+                    remote_addr: msg.remote_addr(),
+                    incoming: msg.is_incoming(),
                     payload,
-                }, msg.remote_addr());
+                });
                 self.requests.remove(&msg.remote_addr());
             }
         } else {
@@ -57,10 +57,10 @@ impl RpcProcessor {
             if let Some(payload) = parser.process_message(msg.payload()) {
                 log::info!("Stored new message: {:?}", payload);
                 let _ = self.db.store_rpc_message(&StoreMessage::RestMessage {
-                    source: msg.source_addr(),
-                    destination: msg.destination_addr(),
+                    remote_addr: msg.remote_addr(),
+                    incoming: msg.is_incoming(),
                     payload,
-                }, msg.remote_addr());
+                });
                 self.responses.remove(&msg.remote_addr());
             }
         }
@@ -292,7 +292,6 @@ impl ResponseParser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::rpc_message::RESTMessage::Response;
 
     #[test]
     fn parse_request() {
