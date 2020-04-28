@@ -13,6 +13,7 @@ use std::convert::TryFrom;
 use bytes::Buf;
 use crate::actors::peer_message::*;
 use crate::storage::{MessageStore, StoreMessage};
+use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 
 pub struct EncryptedMessageDecoder {
     db: MessageStore,
@@ -20,10 +21,16 @@ pub struct EncryptedMessageDecoder {
     remote_nonce: Nonce,
     peer_id: String,
     processing: bool,
+    metadata: bool,
     inc_buf: Vec<u8>,
     out_buf: Vec<u8>,
     dec_buf: Vec<u8>,
     input_remaining: usize,
+}
+
+pub enum EncryptedMessage {
+    Metadata(MetadataMessage),
+    PeerResponse(PeerMessageResponse),
 }
 
 impl EncryptedMessageDecoder {
@@ -34,6 +41,7 @@ impl EncryptedMessageDecoder {
             remote_nonce,
             peer_id,
             processing: false,
+            metadata: false,
             inc_buf: Default::default(),
             out_buf: Default::default(),
             dec_buf: Default::default(),
@@ -47,13 +55,20 @@ impl EncryptedMessageDecoder {
 
             if self.inc_buf.len() > 2 {
                 if let Some(msg) = self.try_decrypt() {
-                    let _ = self.db.store_p2p_message(&StoreMessage::new_peer(enc.remote_addr(), enc.is_incoming(), &msg));
+                    match msg {
+                        EncryptedMessage::PeerResponse(msg) => {
+                            let _ = self.db.store_p2p_message(&StoreMessage::new_peer(enc.remote_addr(), enc.is_incoming(), &msg));
+                        }
+                        EncryptedMessage::Metadata(msg) => {
+                            let _ = self.db.store_p2p_message(&StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg));
+                        }
+                    }
                 }
             }
         }
     }
 
-    fn try_decrypt(&mut self) -> Option<PeerMessageResponse> {
+    fn try_decrypt(&mut self) -> Option<EncryptedMessage> {
         let len = (&self.inc_buf[0..2]).get_u16() as usize;
         if self.inc_buf[2..].len() >= len {
             let chunk = match BinaryChunk::try_from(self.inc_buf[0..len + 2].to_vec()) {
@@ -78,14 +93,55 @@ impl EncryptedMessageDecoder {
         }
     }
 
-    fn try_deserialize(&mut self, mut msg: Vec<u8>) -> Option<PeerMessageResponse> {
+    fn try_deserialize(&mut self, mut msg: Vec<u8>) -> Option<EncryptedMessage> {
+        if !self.metadata {
+            Some(EncryptedMessage::Metadata(self.try_deserialize_meta(&mut msg)?))
+        } else {
+            Some(EncryptedMessage::PeerResponse(self.try_deserialize_p2p(&mut msg)?))
+        }
+    }
+
+    fn try_deserialize_meta(&mut self, msg: &mut Vec<u8>) -> Option<MetadataMessage> {
         if self.input_remaining >= msg.len() {
             self.input_remaining -= msg.len();
         } else {
             self.input_remaining = 0;
         }
 
-        self.dec_buf.append(&mut msg);
+        self.dec_buf.append(msg);
+
+        if self.input_remaining == 0 {
+            loop {
+                match MetadataMessage::from_bytes(self.dec_buf.clone()) {
+                    Ok(msg) => {
+                        self.dec_buf.clear();
+                        self.metadata = true;
+                        return Some(msg);
+                    }
+                    Err(BinaryReaderError::Underflow { bytes }) => {
+                        self.input_remaining += bytes;
+                        return None;
+                    }
+                    Err(BinaryReaderError::Overflow { bytes }) => {
+                        self.dec_buf.drain(self.dec_buf.len() - bytes..);
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to deserialize message: {}", e);
+                        return None;
+                    }
+                }
+            };
+        } else { None }
+    }
+
+    fn try_deserialize_p2p(&mut self, msg: &mut Vec<u8>) -> Option<PeerMessageResponse> {
+        if self.input_remaining >= msg.len() {
+            self.input_remaining -= msg.len();
+        } else {
+            self.input_remaining = 0;
+        }
+
+        self.dec_buf.append(msg);
 
         if self.input_remaining == 0 {
             loop {

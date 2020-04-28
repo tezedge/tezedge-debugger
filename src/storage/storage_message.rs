@@ -7,6 +7,7 @@ use crate::{
 use serde::{Serialize, Deserialize};
 use crate::storage::rpc_message::RESTMessage;
 use storage::persistent::BincodeEncoded;
+use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 
 /// Types of messages stored in database
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,21 +19,23 @@ pub enum StoreMessage {
         remote_addr: SocketAddr,
         packet: Vec<u8>,
     },
-
+    Metadata {
+        incoming: bool,
+        remote_addr: SocketAddr,
+        message: MetadataMessage,
+    },
     /// Unencrypted message, which is part of tezos communication handshake
     ConnectionMessage {
         incoming: bool,
         remote_addr: SocketAddr,
         payload: ConnectionMessage,
     },
-
     /// Actual deciphered P2P message sent by some tezos node
     P2PMessage {
         incoming: bool,
         remote_addr: SocketAddr,
         payload: Vec<PeerMessage>,
     },
-
     /// RPC Request/Response
     RestMessage {
         incoming: bool,
@@ -68,10 +71,19 @@ impl StoreMessage {
         }
     }
 
+    pub fn new_metadata(remote_addr: SocketAddr, incoming: bool, message: MetadataMessage) -> Self {
+        StoreMessage::Metadata {
+            incoming,
+            remote_addr,
+            message,
+        }
+    }
+
     pub fn remote_addr(&self) -> SocketAddr {
         match self {
             StoreMessage::RestMessage { remote_addr, .. } | StoreMessage::ConnectionMessage { remote_addr, .. } |
-            StoreMessage::P2PMessage { remote_addr, .. } | StoreMessage::TcpMessage { remote_addr, .. } => remote_addr.clone()
+            StoreMessage::P2PMessage { remote_addr, .. } | StoreMessage::TcpMessage { remote_addr, .. } |
+            StoreMessage::Metadata { remote_addr, .. } => remote_addr.clone()
         }
     }
 }

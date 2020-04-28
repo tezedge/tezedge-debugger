@@ -1,10 +1,8 @@
 #!/bin/bash
 VOLUME="$PWD/identity"
 IDENTITY_FILE="$VOLUME/identity.json"
-CONFIG_FILE="$VOLUME/tezedge.config"
 PROXY_RPC_PORT=10000
 NODE_RPC_PORT=10001
-FILES=("$IDENTITY_FILE" "$CONFIG_FILE")
 
 trap clean EXIT
 
@@ -44,11 +42,13 @@ if [ ! -d "/var/run/netns" ]; then
   sudo ip netns del make_ns
 fi
 
-for FILE in ${FILES[*]}; do
-  if [ ! -f "$FILE" ]; then
-    err "Required file \"$FILE\" does not exists"
-  fi
-done
+docker pull kyras/tezedge_tezos:latest
+docker pull kyras/tezedge_proxy:latest
+
+# Check identity
+if [ ! -f "$IDENTITY_FILE" ]; then
+  docker run --volume "$VOLUME:/root/identity" -it kyras/tezedge_tezos:latest /bin/bash -c "./tezos-node identity generate && cp /root/.tezos-node/identity.json /root/identity"
+fi
 
 # == START PROXY IN DETACHED MODE ==
 PROXY_ID=$(docker run -d --cap-add=NET_ADMIN -p "$PROXY_RPC_PORT:10000" -p "$NODE_RPC_PORT:8732" --volume "$VOLUME:/home/appuser/proxy/identity" --device /dev/net/tun:/dev/net/tun -it kyras/tezedge_proxy:latest)

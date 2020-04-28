@@ -20,6 +20,13 @@ pub enum RpcMessage {
         remote_addr: SocketAddr,
         packet: String,
     },
+    Metadata {
+        incoming: bool,
+        timestamp: u128,
+        id: u64,
+        remote_addr: SocketAddr,
+        message: MetadataMessage,
+    },
     ConnectionMessage {
         incoming: bool,
         timestamp: u128,
@@ -86,6 +93,23 @@ impl RpcMessage {
                     message: payload.clone(),
                 }
             }
+            StoreMessage::Metadata { remote_addr, incoming, message } => {
+                RpcMessage::Metadata {
+                    id,
+                    timestamp,
+                    remote_addr: remote_addr.clone(),
+                    incoming: incoming.clone(),
+                    message: message.clone(),
+                }
+            }
+        }
+    }
+
+    pub fn fix_id(&mut self) {
+        match self {
+            RpcMessage::Packet { ref mut id, .. } | RpcMessage::Metadata { ref mut id, .. } |
+            RpcMessage::P2PMessage { ref mut id, .. } | RpcMessage::ConnectionMessage { ref mut id, .. } |
+            RpcMessage::RestMessage { ref mut id, .. } => { *id = std::u64::MAX - *id }
         }
     }
 }

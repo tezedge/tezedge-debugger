@@ -51,7 +51,7 @@ impl MessageStore {
         Ok(self.rpc_db.get_range(offset, count)?)
     }
 
-    pub fn get_rpc_host_range(&mut self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, Error> {
+    pub fn get_rpc_host_range(&mut self, offset: u64, count: u64, host: IpAddr) -> Result<Vec<RpcMessage>, Error> {
         Ok(self.rpc_db.get_host_range(offset, count, host)?)
     }
 }
@@ -121,7 +121,10 @@ impl P2PMessageStorage {
         let end = start.saturating_add(count);
         for index in start..=end {
             match self.kv.get(&index) {
-                Ok(Some(value)) => ret.push(value.into()),
+                Ok(Some(mut value)) => {
+                    value.fix_id();
+                    ret.push(value)
+                }
                 Ok(None) => {
                     log::info!("No value at index: {}", index);
                     continue;
@@ -139,7 +142,10 @@ impl P2PMessageStorage {
         let mut ret = Vec::with_capacity(idx.len());
         for index in idx.iter() {
             match self.kv.get(index) {
-                Ok(Some(value)) => ret.push(value.into()),
+                Ok(Some(mut value)) => {
+                    value.fix_id();
+                    ret.push(value.into())
+                }
                 Ok(None) => {
                     log::info!("No value at index: {}", index);
                     continue;
@@ -184,19 +190,13 @@ impl P2PMessageSecondaryIndex {
     }
 
     pub fn get_for_host(&self, sock_addr: SocketAddr, offset: u64, limit: u64) -> Result<Vec<u64>, StorageError> {
-        use circular_queue::CircularQueue;
-        let key = P2PMessageSecondaryKey::new(sock_addr, offset as u64);
+        let key = P2PMessageSecondaryKey::new(sock_addr, 0);
         let (offset, limit) = (offset as usize, limit as usize);
 
         let mut ret = Vec::with_capacity(limit);
 
-        let mut queue: CircularQueue<u64> = CircularQueue::with_capacity(offset + limit);
-        for index in self.kv.prefix_iterator(&key)?.map(|(_, val)| val) {
-            queue.push(index?);
-        }
-
-        for index in queue.iter().skip(offset) {
-            ret.push(*index)
+        for index in self.kv.prefix_iterator(&key)?.skip(offset).take(limit).map(|(_, val)| val) {
+            ret.push(index?)
         }
 
         Ok(ret)
@@ -370,7 +370,10 @@ impl RpcMessageStorage {
         let end = start.saturating_add(count);
         for index in start..=end {
             match self.kv.get(&index) {
-                Ok(Some(value)) => ret.push(value.into()),
+                Ok(Some(mut value)) => {
+                    value.fix_id();
+                    ret.push(value.into())
+                }
                 Ok(None) => {
                     log::info!("No value at index: {}", index);
                     continue;
@@ -383,12 +386,15 @@ impl RpcMessageStorage {
         Ok(ret)
     }
 
-    pub fn get_host_range(&self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, StorageError> {
+    pub fn get_host_range(&self, offset: u64, count: u64, host: IpAddr) -> Result<Vec<RpcMessage>, StorageError> {
         let idx = self.host_index.get_for_host(host, offset, count)?;
         let mut ret = Vec::with_capacity(idx.len());
         for index in idx.iter() {
             match self.kv.get(index) {
-                Ok(Some(value)) => ret.push(value.into()),
+                Ok(Some(mut value)) => {
+                    value.fix_id();
+                    ret.push(value.into())
+                }
                 Ok(None) => {
                     log::info!("No value at index: {}", index);
                     continue;
@@ -423,30 +429,26 @@ impl RpcMessageSecondaryIndex {
 
     #[inline]
     pub fn put(&mut self, sock_addr: SocketAddr, index: u64) -> Result<(), StorageError> {
-        let key = RpcMessageSecondaryKey::new(sock_addr, index);
+        let key = RpcMessageSecondaryKey::new(sock_addr.ip(), index);
         Ok(self.kv.put(&key, &index)?)
     }
 
     pub fn get(&self, sock_addr: SocketAddr, index: u64) -> Result<Option<u64>, StorageError> {
-        let key = RpcMessageSecondaryKey::new(sock_addr, index);
+        let key = RpcMessageSecondaryKey::new(sock_addr.ip(), index);
         Ok(self.kv.get(&key)?)
     }
 
-    pub fn get_for_host(&self, sock_addr: SocketAddr, offset: u64, limit: u64) -> Result<Vec<u64>, StorageError> {
-        use circular_queue::CircularQueue;
-        let key = RpcMessageSecondaryKey::new(sock_addr, offset as u64);
+    pub fn get_for_host(&self, sock_addr: IpAddr, offset: u64, limit: u64) -> Result<Vec<u64>, StorageError> {
+        let key = RpcMessageSecondaryKey::new(sock_addr, 0);
         let (offset, limit) = (offset as usize, limit as usize);
 
         let mut ret = Vec::with_capacity(limit);
 
-        let mut queue: CircularQueue<u64> = CircularQueue::with_capacity(offset + limit);
-        for index in self.kv.prefix_iterator(&key)?.map(|(_, val)| val) {
-            queue.push(index?);
+        for index in self.kv.prefix_iterator(&key)?.skip(offset).take(limit).map(|(_, val)| val) {
+            ret.push(index?)
         }
 
-        for index in queue.iter().skip(offset) {
-            ret.push(*index)
-        }
+        println!("idxs: {:?}", key);
 
         Ok(ret)
     }
@@ -458,7 +460,7 @@ impl KeyValueSchema for RpcMessageSecondaryIndex {
 
     fn descriptor() -> ColumnFamilyDescriptor {
         let mut cf_opts = Options::default();
-        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(16 + 2));
+        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(16));
         cf_opts.set_memtable_prefix_bloom_ratio(0.2);
         ColumnFamilyDescriptor::new(Self::name(), cf_opts)
     }
@@ -471,22 +473,18 @@ impl KeyValueSchema for RpcMessageSecondaryIndex {
 #[derive(Debug, Clone)]
 pub struct RpcMessageSecondaryKey {
     pub addr: u128,
-    pub port: u16,
     pub index: u64,
 }
 
 impl RpcMessageSecondaryKey {
-    pub fn new(sock_addr: SocketAddr, index: u64) -> Self {
-        let addr = sock_addr.ip();
-        let port = sock_addr.port();
+    pub fn new(sock_addr: IpAddr, index: u64) -> Self {
         Self {
-            addr: encode_address(&addr),
-            port,
+            addr: encode_address(&sock_addr),
             index,
         }
     }
 
-    pub fn prefix(sock_addr: SocketAddr) -> Self {
+    pub fn prefix(sock_addr: IpAddr) -> Self {
         Self::new(sock_addr, 0)
     }
 }
@@ -495,11 +493,10 @@ impl RpcMessageSecondaryKey {
 impl Decoder for RpcMessageSecondaryKey {
     #[inline]
     fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
-        if bytes.len() != 26 {
+        if bytes.len() != 24 {
             return Err(SchemaError::DecodeError);
         }
         let addr_value = &bytes[0..16];
-        let port_value = &bytes[16..16 + 2];
         let index_value = &bytes[16 + 2..];
         // index
         let mut index = [0u8; 8];
@@ -507,12 +504,6 @@ impl Decoder for RpcMessageSecondaryKey {
             *x = *y;
         }
         let index = u64::from_be_bytes(index);
-        // port
-        let mut port = [0u8; 2];
-        for (x, y) in port.iter_mut().zip(port_value) {
-            *x = *y;
-        }
-        let port = u16::from_be_bytes(port);
         // addr
         let mut addr = [0u8; 16];
         for (x, y) in addr.iter_mut().zip(addr_value) {
@@ -522,7 +513,6 @@ impl Decoder for RpcMessageSecondaryKey {
 
         Ok(Self {
             addr,
-            port,
             index,
         })
     }
@@ -532,12 +522,11 @@ impl Decoder for RpcMessageSecondaryKey {
 impl Encoder for RpcMessageSecondaryKey {
     #[inline]
     fn encode(&self) -> Result<Vec<u8>, SchemaError> {
-        let mut buf = Vec::with_capacity(26);
+        let mut buf = Vec::with_capacity(24);
         buf.extend_from_slice(&self.addr.to_be_bytes());
-        buf.extend_from_slice(&self.port.to_be_bytes());
         buf.extend_from_slice(&self.index.to_be_bytes());
 
-        if buf.len() != 26 {
+        if buf.len() != 24 {
             println!("{:?} - {:?}", self, buf);
             Err(SchemaError::EncodeError)
         } else {
@@ -597,7 +586,7 @@ pub mod tests {
     }
 
     #[test]
-    fn read_range() {
+    fn rpc_read_range() {
         let mut db = create_test_db(function!());
         let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
         for x in 0usize..10 {
@@ -617,6 +606,41 @@ pub mod tests {
         let msgs = db.0.get_rpc_range(0, 10).unwrap();
         assert_eq!(msgs.len(), 10);
         for (msg, idx) in msgs.iter().zip(9..=0) {
+            match msg {
+                RpcMessage::RestMessage { message, .. } => {
+                    match message {
+                        RESTMessage::Response { payload, .. } => {
+                            assert_eq!(payload, &format!("{}", idx));
+                        }
+                        _ => assert!(false, "Expected response message")
+                    }
+                }
+                _ => assert!(false, "Expected rest message")
+            }
+        }
+    }
+
+    #[test]
+    fn rpc_read_range_host() {
+        let mut db = create_test_db(function!());
+        let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
+        for x in 0usize..10 {
+            let ret = db.0.store_rpc_message(
+                &StoreMessage::RestMessage {
+                    incoming: true,
+                    remote_addr: sock,
+                    payload: RESTMessage::Response {
+                        status: "200".to_string(),
+                        payload: format!("{}", x),
+                    },
+                });
+            if ret.is_err() {
+                assert!(false, "failed to store message: {}", ret.unwrap_err())
+            }
+        }
+        let msgs = db.0.get_rpc_host_range(5, 10, "0.0.0.0".parse().unwrap()).unwrap();
+        assert_eq!(msgs.len(), 5);
+        for (msg, idx) in msgs.iter().zip(9..=5) {
             match msg {
                 RpcMessage::RestMessage { message, .. } => {
                     match message {
