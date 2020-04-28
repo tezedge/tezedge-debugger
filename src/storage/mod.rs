@@ -29,13 +29,13 @@ impl MessageStore {
         }
     }
 
-    pub fn store_p2p_message(&mut self, data: &StoreMessage, remote_addr: SocketAddr) -> Result<(), Error> {
-        self.p2p_db.store_message(&data, remote_addr)
+    pub fn store_p2p_message(&mut self, data: &StoreMessage) -> Result<(), Error> {
+        self.p2p_db.store_message(&data)
             .map_err(|e| e.into())
     }
 
-    pub fn store_rpc_message(&mut self, data: &StoreMessage, remote_addr: SocketAddr) -> Result<(), Error> {
-        self.rpc_db.store_message(&data, remote_addr)
+    pub fn store_rpc_message(&mut self, data: &StoreMessage) -> Result<(), Error> {
+        self.rpc_db.store_message(&data)
             .map_err(|e| e.into())
     }
 
@@ -99,23 +99,36 @@ impl P2PMessageStorage {
         P2P_SEQ.fetch_sub(1, Ordering::SeqCst)
     }
 
-    pub fn store_message(&mut self, msg: &StoreMessage, remote_addr: SocketAddr) -> Result<(), StorageError> {
+    fn index() -> u64 {
+        P2P_SEQ.load(Ordering::SeqCst)
+    }
+
+    pub fn store_message(&mut self, msg: &StoreMessage) -> Result<(), StorageError> {
         let index = Self::index_next();
+        let remote_addr = msg.remote_addr();
+        let msg = RpcMessage::from_store(msg, index);
 
         self.host_index.put(remote_addr, index)?;
-        self.kv.put(&index, msg)?;
+        self.kv.put(&index, &msg)?;
         Ok(self.inc_count())
     }
 
     pub fn get_range(&self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, StorageError> {
         let count = std::cmp::max(count, 100);
         let mut ret = Vec::with_capacity(count as usize);
-        let end: u64 = std::u64::MAX;
-        let start = end.saturating_sub(offset).saturating_sub(count);
-        for index in (start..start + count).rev() {
+        let end: u64 = Self::index();
+        let start = end.saturating_add(offset.saturating_add(1));
+        let end = start.saturating_add(count);
+        for index in start..=end {
             match self.kv.get(&index) {
                 Ok(Some(value)) => ret.push(value.into()),
-                _ => continue,
+                Ok(None) => {
+                    log::info!("No value at index: {}", index);
+                    continue;
+                }
+                Err(err) => {
+                    log::info!("Failed to load value at index {}: {}",index, err)
+                }
             }
         }
         Ok(ret)
@@ -127,7 +140,13 @@ impl P2PMessageStorage {
         for index in idx.iter() {
             match self.kv.get(index) {
                 Ok(Some(value)) => ret.push(value.into()),
-                _ => continue,
+                Ok(None) => {
+                    log::info!("No value at index: {}", index);
+                    continue;
+                }
+                Err(err) => {
+                    log::info!("Failed to load value at index {}: {}",index, err)
+                }
             }
         }
         Ok(ret)
@@ -136,7 +155,7 @@ impl P2PMessageStorage {
 
 impl KeyValueSchema for P2PMessageStorage {
     type Key = u64;
-    type Value = StoreMessage;
+    type Value = RpcMessage;
 
     fn name() -> &'static str { "p2p_message_storage" }
 }
@@ -313,24 +332,30 @@ impl RpcMessageStorage {
     }
 
     fn count(&self) -> u64 {
-        P2P_COUNT.load(Ordering::SeqCst)
+        RPC_COUNT.load(Ordering::SeqCst)
     }
 
     fn start(&self) -> u64 {
-        P2P_SEQ.load(Ordering::SeqCst).saturating_add(1)
+        RPC_SEQ.load(Ordering::SeqCst).saturating_add(1)
     }
 
     fn inc_count(&self) {
-        P2P_COUNT.fetch_add(1, Ordering::SeqCst);
+        RPC_COUNT.fetch_add(1, Ordering::SeqCst);
     }
 
     fn index_next() -> u64 {
-        P2P_SEQ.fetch_sub(1, Ordering::SeqCst)
+        RPC_SEQ.fetch_sub(1, Ordering::SeqCst)
     }
 
-    pub fn store_message(&mut self, msg: &StoreMessage, remote_addr: SocketAddr) -> Result<(), StorageError> {
+    fn index() -> u64 {
+        RPC_SEQ.load(Ordering::SeqCst)
+    }
+
+    pub fn store_message(&mut self, msg: &StoreMessage) -> Result<(), StorageError> {
         let index = Self::index_next();
-        let rpc_msg = msg.clone().into();
+        let remote_addr = msg.remote_addr();
+        let rpc_msg = RpcMessage::from_store(msg, index);
+
 
         self.host_index.put(remote_addr, index)?;
         self.kv.put(&index, &rpc_msg)?;
@@ -340,12 +365,19 @@ impl RpcMessageStorage {
     pub fn get_range(&self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, StorageError> {
         let count = std::cmp::max(count, 100);
         let mut ret = Vec::with_capacity(count as usize);
-        let end: u64 = std::u64::MAX;
-        let start = end.saturating_sub(offset).saturating_sub(count);
-        for index in (start..start + count).rev() {
+        let end: u64 = Self::index();
+        let start = end.saturating_add(offset.saturating_add(1));
+        let end = start.saturating_add(count);
+        for index in start..=end {
             match self.kv.get(&index) {
                 Ok(Some(value)) => ret.push(value.into()),
-                _ => continue,
+                Ok(None) => {
+                    log::info!("No value at index: {}", index);
+                    continue;
+                }
+                Err(err) => {
+                    log::info!("Failed to load value at index {}: {}",index, err)
+                }
             }
         }
         Ok(ret)
@@ -356,8 +388,14 @@ impl RpcMessageStorage {
         let mut ret = Vec::with_capacity(idx.len());
         for index in idx.iter() {
             match self.kv.get(index) {
-                Ok(Some(value)) => ret.push(value),
-                _ => continue,
+                Ok(Some(value)) => ret.push(value.into()),
+                Ok(None) => {
+                    log::info!("No value at index: {}", index);
+                    continue;
+                }
+                Err(err) => {
+                    log::info!("Failed to load value at index {}: {}",index, err)
+                }
             }
         }
         Ok(ret)
@@ -513,7 +551,6 @@ pub mod tests {
     use super::*;
     use std::path::Path;
     use std::sync::Arc;
-    use itertools::zip;
     use crate::storage::rpc_message::RESTMessage;
     use storage::persistent::open_kv;
 
@@ -554,7 +591,7 @@ pub mod tests {
         use std::path::Path;
         let path = function!();
         {
-            let db = create_test_db(path);
+            let _ = create_test_db(path);
         }
         assert!(!Path::new(path).exists())
     }
@@ -564,23 +601,22 @@ pub mod tests {
         let mut db = create_test_db(function!());
         let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
         for x in 0usize..10 {
-            let ret = db.0.rpc_db.store_message(
+            let ret = db.0.store_rpc_message(
                 &StoreMessage::RestMessage {
-                    source: sock,
-                    destination: sock,
+                    incoming: true,
+                    remote_addr: sock,
                     payload: RESTMessage::Response {
                         status: "200".to_string(),
                         payload: format!("{}", x),
                     },
-                }, sock,
-            );
+                });
             if ret.is_err() {
                 assert!(false, "failed to store message: {}", ret.unwrap_err())
             }
         }
-        let msgs = db.0.rpc_db.get_range(0, 10).unwrap();
+        let msgs = db.0.get_rpc_range(0, 10).unwrap();
         assert_eq!(msgs.len(), 10);
-        for (msg, idx) in msgs.iter().zip(10..0) {
+        for (msg, idx) in msgs.iter().zip(9..=0) {
             match msg {
                 RpcMessage::RestMessage { message, .. } => {
                     match message {
@@ -593,17 +629,5 @@ pub mod tests {
                 _ => assert!(false, "Expected rest message")
             }
         }
-        // for x in 0usize..1000 {
-        //     db.0.store(x.to_ne_bytes());
-        // }
-        // let range = db.0.get_range(0, 1000).expect("failed to get range");
-        // for (db, index) in zip(range, 0usize..1000) {
-        //     let mut bytes = [0u8; 8];
-        //     for i in 0..8 {
-        //         bytes[i] = db[i];
-        //     }
-        //     let val = usize::from_ne_bytes(bytes);
-        //     assert_eq!(val, index)
-        // }
     }
 }
