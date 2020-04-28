@@ -74,7 +74,7 @@ sudo ip netns exec "$NODE_ID" ip route del 0/0
 sudo ip netns exec "$NODE_ID" ip route del 172.17.0.0/16
 sudo ip netns exec "$NODE_ID" ip route add default via 10.0.1.1
 echo "Moved tun0 from proxy container to node container"
-until curl --output /dev/null --silent --head --fail "localhost:$PROXY_RPC_PORT/data/0/0"; do
+until curl -X GET --output /dev/null --silent --head --fail "localhost:$PROXY_RPC_PORT/rpc/0/0"; do
   sleep 1
 done
 echo "Proxy running successfully on port $PROXY_RPC_PORT"

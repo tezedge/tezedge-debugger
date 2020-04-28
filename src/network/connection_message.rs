@@ -13,7 +13,7 @@ use std::{
 use serde::{Serialize, Deserialize};
 use tezos_encoding::encoding::{Field, HasEncoding, Encoding};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ConnectionMessage {
     pub port: u16,
     pub versions: Vec<Version>,

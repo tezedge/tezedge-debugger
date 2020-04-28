@@ -87,23 +87,20 @@ async fn main() -> Result<(), MainError> {
 
     log::info!("Started to analyze traffic through {} device", app_config.tun0_name);
 
+    let tmp = db.clone();
     let cloner = move || {
-        db.clone()
+        tmp.clone()
     };
 
     // -- Initialize server
-    let endpoint = warp::path!("data" / u64 / u64)
-        .map(move |start, end| {
-            use storage::rpc_message::RpcMessage;
-            match cloner().get_range(start, end) {
-                Ok(value) => {
-                    let value: Vec<RpcMessage> = value.into_iter()
-                        .map(|x| RpcMessage::from(x)).collect();
-                    serde_json::to_string(&value).expect("failed to serialize the array")
-                }
-                Err(e) => serde_json::to_string(&
-                    format!("Failed to read database: {}", e)
-                ).unwrap()
+    let p2p_raw = warp::path!("p2p" / u64 / u64)
+        .map(move |offset, count| {
+            match cloner().get_p2p_range(offset, count) {
+                Ok(value) => serde_json::to_string(&value)
+                    .expect("failed to serialize the array"),
+                Err(e) => serde_json::to_string(
+                    &format!("Failed to read database: {}", e)
+                ).unwrap(),
             }
         })
         .map(|value| {
@@ -112,7 +109,82 @@ async fn main() -> Result<(), MainError> {
                 .body(value)
         });
 
-    warp::serve(endpoint)
+    let tmp = db.clone();
+    let cloner = move || {
+        tmp.clone()
+    };
+
+    let p2p_host = warp::path!("p2p" / u64 / u64 / String)
+        .map(move |offset, count, host: String| {
+            match host.parse() {
+                Ok(addr) => match cloner().get_p2p_host_range(offset, count, addr) {
+                    Ok(value) => serde_json::to_string(&value)
+                        .expect("failed to serialize the array"),
+                    Err(e) => serde_json::to_string(
+                        &format!("Failed to read database: {}", e),
+                    ).unwrap()
+                },
+                Err(e) => serde_json::to_string(
+                    &format!("Invalid socket address: {}", e),
+                ).unwrap(),
+            }
+        })
+        .map(|value| {
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .body(value)
+        });
+
+    let tmp = db.clone();
+    let cloner = move || {
+        tmp.clone()
+    };
+
+    let rpc_raw = warp::path!("rpc" / u64 / u64)
+        .map(move |offset, count| {
+            match cloner().get_rpc_range(offset, count) {
+                Ok(value) => serde_json::to_string(&value)
+                    .expect("failed to serialize the array"),
+                Err(e) => serde_json::to_string(
+                    &format!("Failed to read database: {}", e)
+                ).unwrap(),
+            }
+        })
+        .map(|value| {
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .body(value)
+        });
+
+    let tmp = db.clone();
+    let cloner = move || {
+        tmp.clone()
+    };
+
+    let rpc_host = warp::path!("rpc" / u64 / u64 / String)
+        .map(move |offset, count, host: String| {
+            match host.parse() {
+                Ok(addr) => match cloner().get_rpc_host_range(offset, count, addr) {
+                    Ok(value) => serde_json::to_string(&value)
+                        .expect("failed to serialize the array"),
+                    Err(e) => serde_json::to_string(
+                        &format!("Failed to read database: {}", e),
+                    ).unwrap()
+                },
+                Err(e) => serde_json::to_string(
+                    &format!("Invalid socket address: {}", e),
+                ).unwrap(),
+            }
+        })
+        .map(|value| {
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .body(value)
+        });
+
+    let router = warp::get().and(p2p_raw.or(p2p_host).or(rpc_raw).or(rpc_host));
+
+    warp::serve(router)
         // TODO: Add as config settings
         .run(([0, 0, 0, 0], app_config.rpc_port))
         .await;

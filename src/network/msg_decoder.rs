@@ -47,7 +47,7 @@ impl EncryptedMessageDecoder {
 
             if self.inc_buf.len() > 2 {
                 if let Some(msg) = self.try_decrypt() {
-                    let _ = self.db.store_message(StoreMessage::new_peer(enc.source_addr(), enc.destination_addr(), &msg));
+                    let _ = self.db.store_p2p_message(&StoreMessage::new_peer(enc.source_addr(), enc.destination_addr(), &msg), enc.remote_addr());
                 }
             }
         }

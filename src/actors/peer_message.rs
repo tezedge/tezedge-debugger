@@ -1,16 +1,6 @@
-use packet::{
-    Error as PacketError,
-    PacketMut as _,
-    ip::{
-        v4::Packet as IPv4Packet,
-        v6::Packet as IPv6Packet,
-        Packet as IpPacket,
-        Protocol,
-    },
-    tcp::Packet as TcpPacket,
-    Packet,
-};
-use std::net::{Ipv6Addr, IpAddr};
+use ip_packet::IpPacket;
+use smoltcp::wire::TcpPacket;
+use std::net::SocketAddr;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PacketCharacter {
@@ -38,165 +28,75 @@ pub enum SenderMessage {
     Forward(bool, Vec<u8>),
 }
 
+
 #[derive(Debug)]
 pub struct RawPacketMessage {
     is_incoming: bool,
     is_inner: bool,
-    packet: IpPacket<Vec<u8>>,
+    packet: IpPacket,
 }
 
 impl RawPacketMessage {
-    pub fn inner_incoming<T: Into<Vec<u8>>>(packet: T) -> Result<Self, PacketError> {
-        Self::new(packet.into(), true, true)
+    pub fn inner_incoming<T: AsRef<[u8]>>(packet: T) -> Option<Self> {
+        Self::new(packet.as_ref(), true, true)
     }
 
-    pub fn inner_outgoing<T: Into<Vec<u8>>>(packet: T) -> Result<Self, PacketError> {
-        Self::new(packet.into(), false, true)
+    pub fn inner_outgoing<T: AsRef<[u8]>>(packet: T) -> Option<Self> {
+        Self::new(packet.as_ref(), false, true)
     }
 
-    pub fn outer_incoming<T: Into<Vec<u8>>>(packet: T) -> Result<Self, PacketError> {
-        Self::new(packet.into(), true, false)
+    pub fn outer_incoming<T: AsRef<[u8]>>(packet: T) -> Option<Self> {
+        Self::new(packet.as_ref(), true, false)
     }
 
-    pub fn outer_outgoing<T: Into<Vec<u8>>>(packet: T) -> Result<Self, PacketError> {
-        Self::new(packet.into(), false, false)
+    pub fn outer_outgoing<T: AsRef<[u8]>>(packet: T) -> Option<Self> {
+        Self::new(packet.as_ref(), false, false)
     }
 
-    pub fn partial<T: Into<Vec<u8>>>(packet: T) -> Result<Self, PacketError> {
+    pub fn partial<T: AsRef<[u8]>>(packet: T) -> Option<Self> {
         Self::outer_outgoing(packet)
+    }
+
+    pub fn buffer(&self) -> &[u8] {
+        self.packet.buffer()
     }
 
     #[inline]
     pub fn clone_packet(&self) -> Vec<u8> {
-        let ip_packet = self.ip_packet();
-        let (header, payload) = ip_packet.split();
-        let mut packet = Vec::with_capacity(header.len() + payload.len());
-        packet.extend_from_slice(header);
-        packet.extend_from_slice(payload);
-        packet
+        self.buffer().to_vec()
     }
 
     #[inline]
     pub fn tcp_packet(&self) -> TcpPacket<&[u8]> {
-        TcpPacket::new(self.packet.payload())
-            .expect("Non-tcp packet found, even though all packet are checked on creation")
+        self.packet.tcp_packet()
     }
 
     #[inline]
-    pub fn tcp_packet_mut(&mut self) -> TcpPacket<&mut [u8]> {
-        TcpPacket::new(self.packet.payload_mut())
-            .expect("Non-tcp packet found, even though all packet are checked on creation")
-    }
-
-    #[inline]
-    pub fn update_tcp_packet_checksum(&mut self) -> Result<(), PacketError> {
-        if let IpPacket::V4(ref mut packet) = self.ip_packet_mut() {
-            let checksum: u16 = {
-                use pnet::packet::tcp::{TcpPacket as PnetTcpPacket, ipv4_checksum};
-                let src = packet.source();
-                let dst = packet.destination();
-                let tcp_packet = packet.payload();
-                let tcp_packet = PnetTcpPacket::new(tcp_packet).unwrap();
-                ipv4_checksum(&tcp_packet, &src, &dst)
-            };
-
-            self.tcp_packet_mut().set_checksum(checksum)?;
-
-            // use packet::ip::v4::Packet as IPv4Packet;
-            // let (ip_header, tcp_packet) = packet.split_mut();
-            // let ip_header = IpPacket::V4(IPv4Packet::no_payload(ip_header)?);
-            // let mut tcp_packet = TcpPacket::new(tcp_packet)?;
-            // tcp_packet.update_checksum(&ip_header)?;
-            Ok(())
-        } else {
-            // TODO: Add IPv6 support
-            Ok(())
-        }
-    }
-
-    #[inline]
-    pub fn ip_packet(&self) -> &IpPacket<Vec<u8>> {
+    pub fn ip_packet(&self) -> &IpPacket {
         &self.packet
     }
 
-    #[inline]
-    pub fn ip_packet_mut(&mut self) -> &mut IpPacket<Vec<u8>> {
-        &mut self.packet
-    }
 
     #[inline]
-    pub fn update_ip_packet_checksum(&mut self) -> Result<(), PacketError> {
-        let raw = self.clone_packet();
-        if let IpPacket::V4(ref mut packet) = self.ip_packet_mut() {
-            use pnet::packet::{
-                ipv4::{Ipv4Packet as PnetIpv4Packet, checksum}
-            };
-            let ppacket = PnetIpv4Packet::new(&raw).unwrap();
-            let checksum = checksum(&ppacket);
-            packet.set_checksum(checksum)?;
-            Ok(())
-        } else {
-            // TODO: Add IPv6 support
-            Ok(())
+    pub fn source_addr(&self) -> SocketAddr {
+        let port = self.tcp_packet().src_port();
+        match self.packet {
+            IpPacket::V4(ref packet) => SocketAddr::new(packet.src_addr().0.into(), port),
+            IpPacket::V6(ref packet) => SocketAddr::new(packet.src_addr().0.into(), port),
         }
     }
 
     #[inline]
-    pub fn update_checksums(&mut self) -> Result<(), PacketError> {
-        self.update_ip_packet_checksum()?;
-        self.update_tcp_packet_checksum()
-    }
-
-    #[inline]
-    pub fn source_addr(&self) -> IpAddr {
-        if let IpPacket::V4(ref packet) = self.packet {
-            packet.source().into()
-        } else {
-            // TODO: Write actual IPv6 support
-            Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0).into()
+    pub fn destination_addr(&self) -> SocketAddr {
+        let port = self.tcp_packet().dst_port();
+        match self.packet {
+            IpPacket::V4(ref packet) => SocketAddr::new(packet.dst_addr().0.into(), port),
+            IpPacket::V6(ref packet) => SocketAddr::new(packet.dst_addr().0.into(), port),
         }
     }
 
     #[inline]
-    pub fn set_source_addr(&mut self, addr: IpAddr) -> Result<(), PacketError> {
-        // TODO: Add IPv6 support
-        if let IpPacket::V4(ref mut packet) = self.ip_packet_mut() {
-            if let IpAddr::V4(addr) = addr {
-                packet.set_source(addr)?;
-            }
-        }
-        self.update_checksums()?;
-        Ok(())
-    }
-
-    #[inline]
-    pub fn destination_addr(&self) -> IpAddr {
-        if let IpPacket::V4(ref packet) = self.packet {
-            packet.destination().into()
-        } else {
-            // TODO: Write actual IPv6 support
-            Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0).into()
-        }
-    }
-
-    #[inline]
-    pub fn set_destination_addr(&mut self, addr: IpAddr) -> Result<(), PacketError> {
-        // TODO: Add IPv6 support
-        let mut was_updated = false;
-        if let IpPacket::V4(ref mut packet) = self.ip_packet_mut() {
-            if let IpAddr::V4(addr) = addr {
-                packet.set_destination(addr)?;
-                was_updated = true;
-            }
-        }
-        if was_updated {
-            self.update_checksums()?;
-        }
-        Ok(())
-    }
-
-    #[inline]
-    pub fn remote_addr(&self) -> IpAddr {
+    pub fn remote_addr(&self) -> SocketAddr {
         if self.is_incoming {
             self.source_addr()
         } else {
@@ -204,31 +104,9 @@ impl RawPacketMessage {
         }
     }
 
-    pub fn set_content<T: AsRef<[u8]>>(&mut self, new_content: T) -> Result<(), PacketError> {
-        let new_content = new_content.as_ref();
-        let mut new_msg = Vec::with_capacity(
-            self.ip_packet().header().len() +
-                self.tcp_packet().header().len() +
-                new_content.len()
-        );
-        new_msg.extend_from_slice(self.ip_packet().header());
-        new_msg.extend_from_slice(self.tcp_packet().header());
-        new_msg.extend_from_slice(new_content);
-        let packet = if self.is_ipv4() {
-            IpPacket::V4(IPv4Packet::new(new_msg)?)
-        } else {
-            IpPacket::V6(IPv6Packet::new(new_msg)?)
-        };
-        self.packet = packet;
-        self.update_checksums()
-    }
-
     #[inline]
     pub fn payload(&self) -> &[u8] {
-        let raw_pl_len = self.tcp_packet().payload().len();
-        let tcp_pl_len = self.packet.payload().len();
-        let tcp_h_len = tcp_pl_len - raw_pl_len;
-        &self.packet.payload()[tcp_h_len..]
+        self.packet.tcp_packet().payload()
     }
 
     #[inline]
@@ -238,8 +116,7 @@ impl RawPacketMessage {
 
     #[inline]
     pub fn is_push(&self) -> bool {
-        use packet::tcp::flag::PSH;
-        self.tcp_packet().flags().intersects(PSH)
+        self.tcp_packet().psh()
     }
 
     #[inline]
@@ -301,24 +178,9 @@ impl RawPacketMessage {
         (self.is_incoming, self.is_inner).into()
     }
 
-    #[inline]
-    pub fn is_pure_ack(&self) -> bool {
-        use packet::tcp::flag::ACK;
-        self.tcp_packet().flags() == ACK
-    }
-
-    fn new(buffer: Vec<u8>, is_incoming: bool, is_inner: bool) -> Result<Self, PacketError> {
-        use packet::ErrorKind;
-        let packet = IpPacket::new(buffer)?;
-        if let IpPacket::V4(ref packet) = packet {
-            if packet.protocol() != Protocol::Tcp {
-                let err: PacketError = ErrorKind::Msg("received non-TCP packet".to_string()).into();
-                Err(err)?;
-            }
-        }
-        TcpPacket::new(packet.payload())?;
-        Ok(Self {
-            packet,
+    fn new(buffer: &[u8], is_incoming: bool, is_inner: bool) -> Option<Self> {
+        Some(Self {
+            packet: IpPacket::new(buffer)?,
             is_inner,
             is_incoming,
         })
@@ -330,8 +192,65 @@ impl Clone for RawPacketMessage {
         Self {
             is_incoming: self.is_incoming,
             is_inner: self.is_inner,
-            packet: IpPacket::new(self.clone_packet())
+            packet: IpPacket::new(self.packet.buffer())
                 .expect("failed to clone valid packet from valid packet"),
+        }
+    }
+}
+
+mod ip_packet {
+    use smoltcp::{
+        wire::{
+            Ipv4Packet, Ipv6Packet, TcpPacket, IpProtocol as Protocol,
+        },
+    };
+
+    #[derive(Debug, Clone)]
+    pub enum IpPacket {
+        V4(Ipv4Packet<Vec<u8>>),
+        V6(Ipv6Packet<Vec<u8>>),
+    }
+
+    impl IpPacket {
+        pub fn new(buf: &[u8]) -> Option<Self> {
+            if buf.len() == 0 {
+                return None;
+            }
+            let ver = buf[0] >> 4;
+
+            if ver == 4 {
+                let packet = Ipv4Packet::new_checked(buf).ok()?;
+                if packet.protocol() != Protocol::Tcp {
+                    return None;
+                }
+                Some(Self::V4(Ipv4Packet::new_unchecked(buf.to_vec())))
+            } else if ver == 6 {
+                let packet = Ipv6Packet::new_checked(buf).ok()?;
+                if packet.next_header() != Protocol::Tcp {
+                    return None;
+                }
+                Some(Self::V6(Ipv6Packet::new_unchecked(buf.to_vec())))
+            } else {
+                None
+            }
+        }
+
+        pub fn payload(&self) -> &[u8] {
+            match self {
+                Self::V4(ref packet) => Ipv4Packet::new_unchecked(packet.as_ref()).payload(),
+                Self::V6(ref packet) => Ipv6Packet::new_unchecked(packet.as_ref()).payload(),
+            }
+        }
+
+        pub fn buffer(&self) -> &[u8] {
+            match self {
+                Self::V4(ref packet) => packet.as_ref(),
+                Self::V6(ref packet) => packet.as_ref(),
+            }
+        }
+
+        pub fn tcp_packet(&self) -> TcpPacket<&[u8]> {
+            TcpPacket::new_unchecked(self.payload())
         }
     }
 }

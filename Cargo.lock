@@ -299,7 +299,17 @@ checksum = "31850b4a4d6bae316f7a09e691c944c28299298837edc0a03f755618c23cbc01"
 dependencies = [
  "num-integer",
  "num-traits 0.2.11",
+ "serde 1.0.104",
  "time",
+]
+
+[[package]]
+name = "circular-queue"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b0aadaeed21c6fc5ff19687407640db71f9236e2eb6c66ec426b82497645c7a"
+dependencies = [
+ "version_check 0.9.1",
 ]
 
 [[package]]
@@ -346,6 +356,20 @@ dependencies = [
  "atty",
  "lazy_static 1.4.0",
  "winapi 0.3.8",
+]
+
+[[package]]
+name = "commitlog"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa0861eaf1d6f05437649378e26c1763d29124d300212471b69136f0de20d566"
+dependencies = [
+ "byteorder",
+ "bytes 0.4.12",
+ "crc32c",
+ "log 0.4.8",
+ "memmap",
+ "page_size",
 ]
 
 [[package]]
@@ -407,6 +431,12 @@ name = "core-foundation-sys"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b3a71ab494c0b5b860bdc8407ae08978052417070c2ced38573a9157ad75b8ac"
+
+[[package]]
+name = "crc32c"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77ba37ef26c12988c1cee882d522d65e1d5d2ad8c3864665b88ee92767ed84c5"
 
 [[package]]
 name = "crc32fast"
@@ -491,7 +521,7 @@ dependencies = [
 [[package]]
 name = "crypto"
 version = "0.1.0"
-source = "git+https://github.com/simplestaking/tezedge#60f22d6a3c80befe21403c36fcf3b833b94c12f8"
+source = "git+https://github.com/simplestaking/tezedge#0b0e8f37b447ba96a87f71d606d0da8583b69fe2"
 dependencies = [
  "base58",
  "failure",
@@ -573,17 +603,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dns-lookup"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13988670860b076248c74e1b54444efc4f1dec70c8bb25da4b7c0024396b72bf"
-dependencies = [
- "libc",
- "socket2",
- "winapi 0.3.8",
-]
-
-[[package]]
 name = "dtoa"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -602,6 +621,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd8d03faa7fe0c1431609dfad7bbe827af30f82e1e2ae6f7ee4fca6bd764bc28"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "enum-iterator"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de783877b4c72e6ec1c1b4b32eb4a6446e7b8021c8b1898e419f973fd09c4291"
+dependencies = [
+ "enum-iterator-derive",
+]
+
+[[package]]
+name = "enum-iterator-derive"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb3f06af72cbd86aa47dc2efeac193199e1ad3d2c4b4c8ee39175a6d643eb5e6"
+dependencies = [
+ "proc-macro2 1.0.9",
+ "quote 1.0.2",
+ "syn 1.0.16",
 ]
 
 [[package]]
@@ -1408,6 +1447,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3516df0fb44d98fe6d6e859d224adfb7b6686447937e5b96308d6061595eed04"
 
 [[package]]
+name = "managed"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdcec5e97041c7f0f1c5b7d93f12e57293c831c646f4cc7a5db59460c7ea8de6"
+
+[[package]]
 name = "matches"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1424,6 +1469,16 @@ name = "memchr"
 version = "2.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3728d817d99e5ac407411fa471ff9800a778d88a24685968b36824eaf4bee400"
+
+[[package]]
+name = "memmap"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6585fd95e7bb50d6cc31e20d4cf9afb4e2ba16c5846fc76793f11218da9c475b"
+dependencies = [
+ "libc",
+ "winapi 0.3.8",
+]
 
 [[package]]
 name = "memoffset"
@@ -1594,17 +1649,16 @@ dependencies = [
 [[package]]
 name = "networking"
 version = "0.1.0"
-source = "git+https://github.com/simplestaking/tezedge#60f22d6a3c80befe21403c36fcf3b833b94c12f8"
+source = "git+https://github.com/simplestaking/tezedge#0b0e8f37b447ba96a87f71d606d0da8583b69fe2"
 dependencies = [
  "bytes 0.5.4",
  "crypto",
- "dns-lookup",
  "failure",
  "futures 0.3.4",
  "hex",
  "riker 0.3.2 (git+https://github.com/simplestaking/riker.git?branch=slog-support)",
- "riker-patterns",
  "slog",
+ "storage",
  "tezos_encoding",
  "tezos_messages",
  "tokio 0.2.11",
@@ -1685,6 +1739,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocaml"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6030f4e6d82ed5a401021c654a0af51c91b166f6879532ab4cdd195e7b83179"
+
+[[package]]
 name = "opaque-debug"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1733,6 +1793,16 @@ dependencies = [
  "byteorder",
  "error-chain 0.10.0",
  "hwaddr",
+]
+
+[[package]]
+name = "page_size"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eebde548fbbf1ea81a99b128872779c437752fb99f217c45245e1a61dcd9edcd"
+dependencies = [
+ "libc",
+ "winapi 0.3.8",
 ]
 
 [[package]]
@@ -2353,16 +2423,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "riker-patterns"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1443c41d24a37ef2e23d6add715786b22e38286ae61a7df9d135c2c62b892264"
-dependencies = [
- "futures-preview",
- "riker 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "rle-decode-fast"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2663,6 +2723,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c2fb2ec9bcd216a5b0d0ccf31ab17b5ed1d627960edff65bbe95d3ce221cefc"
 
 [[package]]
+name = "smoltcp"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fe46639fd2ec79eadf8fe719f237a7a0bd4dac5d957f1ca5bbdbc1c3c39e53a"
+dependencies = [
+ "bitflags 1.2.1",
+ "byteorder",
+ "libc",
+ "log 0.4.8",
+ "managed",
+]
+
+[[package]]
 name = "socket2"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2690,6 +2763,31 @@ name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
+
+[[package]]
+name = "storage"
+version = "0.1.0"
+source = "git+https://github.com/simplestaking/tezedge#0b0e8f37b447ba96a87f71d606d0da8583b69fe2"
+dependencies = [
+ "bincode",
+ "bytes 0.5.4",
+ "circular-queue",
+ "commitlog",
+ "crypto",
+ "derive_builder",
+ "failure",
+ "getset",
+ "hex",
+ "lazy_static 1.4.0",
+ "rocksdb",
+ "serde 1.0.104",
+ "serde_json",
+ "slog",
+ "tezos_api",
+ "tezos_context",
+ "tezos_encoding",
+ "tezos_messages",
+]
 
 [[package]]
 name = "string"
@@ -2862,6 +2960,7 @@ dependencies = [
  "argh",
  "bincode",
  "bytes 0.5.4",
+ "circular-queue",
  "crypto",
  "failure",
  "flume",
@@ -2879,6 +2978,8 @@ dependencies = [
  "serde 1.0.104",
  "serde_json",
  "simple_logger",
+ "smoltcp",
+ "storage",
  "tezos_encoding",
  "tezos_messages",
  "timeout-readwrite",
@@ -2888,9 +2989,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "tezos_api"
+version = "0.1.0"
+source = "git+https://github.com/simplestaking/tezedge#0b0e8f37b447ba96a87f71d606d0da8583b69fe2"
+dependencies = [
+ "chrono",
+ "crypto",
+ "enum-iterator",
+ "failure",
+ "lazy_static 1.4.0",
+ "ocaml",
+ "serde 1.0.104",
+ "slog",
+ "tezos_encoding",
+ "tezos_messages",
+]
+
+[[package]]
+name = "tezos_context"
+version = "0.0.1"
+source = "git+https://github.com/simplestaking/tezedge#0b0e8f37b447ba96a87f71d606d0da8583b69fe2"
+dependencies = [
+ "crossbeam",
+ "lazy_static 1.4.0",
+ "serde 1.0.104",
+]
+
+[[package]]
 name = "tezos_encoding"
 version = "0.1.0"
-source = "git+https://github.com/simplestaking/tezedge#60f22d6a3c80befe21403c36fcf3b833b94c12f8"
+source = "git+https://github.com/simplestaking/tezedge#0b0e8f37b447ba96a87f71d606d0da8583b69fe2"
 dependencies = [
  "bitvec",
  "byteorder",
@@ -2898,20 +3026,19 @@ dependencies = [
  "chrono",
  "crypto",
  "failure",
- "futures 0.3.4",
  "hex",
  "num-bigint",
  "num-traits 0.2.11",
  "serde 1.0.104",
- "serde_json",
 ]
 
 [[package]]
 name = "tezos_messages"
 version = "0.1.0"
-source = "git+https://github.com/simplestaking/tezedge#60f22d6a3c80befe21403c36fcf3b833b94c12f8"
+source = "git+https://github.com/simplestaking/tezedge#0b0e8f37b447ba96a87f71d606d0da8583b69fe2"
 dependencies = [
  "bytes 0.5.4",
+ "chrono",
  "crypto",
  "derive_builder",
  "failure",
