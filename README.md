@@ -28,8 +28,8 @@ generated inside said folder. Currently, script will run three containers:
 * `tezedge_explorer` - UI for presenting data from debugger on `localhost:8080`
 * `tezos_node` - on P2P port `9732` and its own [RPC](https://tezos.gitlab.io/api/rpc.html) on port `18732`
 
-Debugger API
-============
+(WIP) Debugger API
+==================
 RPC endpoint of debugger are split into two parts P2P messages on `/p2p/*` endpoints and RPC messages on `/rpc/*` endpoint.
 ### P2P
 #### `/p2p/{offset}/{count}(/{host})?`
