@@ -113,7 +113,6 @@ impl P2PMessageStorage {
     }
 
     pub fn get_range(&self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, StorageError> {
-        let count = std::cmp::min(count, 100);
         let mut ret = Vec::with_capacity(count as usize);
         let end: u64 = Self::index();
         let start = end.saturating_add(offset.saturating_add(1));
@@ -134,7 +133,6 @@ impl P2PMessageStorage {
     }
 
     pub fn get_host_range(&self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, StorageError> {
-        let count = std::cmp::min(count, 100);
         let idx = self.host_index.get_for_host(host, offset, count)?;
         let mut ret = Vec::with_capacity(idx.len());
         for index in idx.iter() {
@@ -355,7 +353,6 @@ impl RpcMessageStorage {
     }
 
     pub fn get_range(&self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, StorageError> {
-        let count = std::cmp::min(count, 100);
         let mut ret = Vec::with_capacity(count as usize);
         let end: u64 = Self::index();
         let start = end.saturating_add(offset.saturating_add(1));
@@ -376,7 +373,6 @@ impl RpcMessageStorage {
     }
 
     pub fn get_host_range(&self, offset: u64, count: u64, host: IpAddr) -> Result<Vec<RpcMessage>, StorageError> {
-        let count = std::cmp::min(count, 100);
         let idx = self.host_index.get_for_host(host, offset, count)?;
         let mut ret = Vec::with_capacity(idx.len());
         for index in idx.iter() {
