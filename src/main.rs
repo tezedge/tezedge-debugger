@@ -104,12 +104,12 @@ async fn main() -> Result<(), MainError> {
                     &format!("Failed to read database: {}", e)
                 ).unwrap(),
             }
-        })
-        .map(|value| {
-            Response::builder()
-                .header("Content-Type", "application/json")
-                .body(value)
-        });
+        }).map(|value| {
+        Response::builder()
+            .header("Content-Type", "application/json")
+            .header("Access-Control-Allow-Origin", "*")
+            .body(value)
+    });
 
     let tmp = db.clone();
     let cloner = move || {
@@ -132,12 +132,12 @@ async fn main() -> Result<(), MainError> {
                     &format!("Invalid socket address: {}", e),
                 ).unwrap(),
             }
-        })
-        .map(|value| {
-            Response::builder()
-                .header("Content-Type", "application/json")
-                .body(value)
-        });
+        }).map(|value| {
+        Response::builder()
+            .header("Content-Type", "application/json")
+            .header("Access-Control-Allow-Origin", "*")
+            .body(value)
+    });
 
     let tmp = db.clone();
     let cloner = move || {
@@ -155,12 +155,12 @@ async fn main() -> Result<(), MainError> {
                     &format!("Failed to read database: {}", e)
                 ).unwrap(),
             }
-        })
-        .map(|value| {
-            Response::builder()
-                .header("Content-Type", "application/json")
-                .body(value)
-        });
+        }).map(|value| {
+        Response::builder()
+            .header("Content-Type", "application/json")
+            .header("Access-Control-Allow-Origin", "*")
+            .body(value)
+    });
 
     let tmp = db.clone();
     let cloner = move || {
@@ -183,12 +183,12 @@ async fn main() -> Result<(), MainError> {
                     &format!("Invalid socket address: {}", e),
                 ).unwrap(),
             }
-        })
-        .map(|value| {
-            Response::builder()
-                .header("Content-Type", "application/json")
-                .body(value)
-        });
+        }).map(|value| {
+        Response::builder()
+            .header("Content-Type", "application/json")
+            .header("Access-Control-Allow-Origin", "*")
+            .body(value)
+    });
 
     let router = warp::get().and(p2p_raw.or(p2p_host).or(rpc_raw).or(rpc_host));
 
