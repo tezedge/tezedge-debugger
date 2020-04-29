@@ -27,7 +27,7 @@ num-bigint = "0.2"
 main_error = "0.1"
 smoltcp = "0.6"
 timeout-readwrite = "0.3"
-circular-queue = "0.2"
+chrono = "0.4"
 serde = { version="1.0", features=["derive"] }
 tokio = { version="0.2", features=["full"] }
 tun = { version = "*", git = "https://github.com/Kyras/rust-tun" }

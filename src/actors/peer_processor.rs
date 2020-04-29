@@ -94,7 +94,7 @@ impl PeerProcessor {
         let chunk = BinaryChunk::try_from(msg.payload().to_vec())?;
         let conn_msg = ConnectionMessage::try_from(chunk)?;
 
-        self.db.store_p2p_message(&StoreMessage::new_conn(msg.remote_addr(), msg.is_incoming(), &conn_msg))?;
+        self.db.store_p2p_message(&StoreMessage::new_connection(msg.remote_addr(), msg.is_incoming(), &conn_msg))?;
 
         if let Some((_, addr)) = self.conn_msgs.get(0) {
             if addr == &msg.source_addr() {

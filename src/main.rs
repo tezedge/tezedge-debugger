@@ -96,8 +96,10 @@ async fn main() -> Result<(), MainError> {
     let p2p_raw = warp::path!("p2p" / u64 / u64)
         .map(move |offset, count| {
             match cloner().get_p2p_range(offset, count) {
-                Ok(value) => serde_json::to_string(&value)
-                    .expect("failed to serialize the array"),
+                Ok(value) => {
+                    serde_json::to_string(&value)
+                        .expect("failed to serialize the array")
+                }
                 Err(e) => serde_json::to_string(
                     &format!("Failed to read database: {}", e)
                 ).unwrap(),
@@ -118,8 +120,10 @@ async fn main() -> Result<(), MainError> {
         .map(move |offset, count, host: String| {
             match host.parse() {
                 Ok(addr) => match cloner().get_p2p_host_range(offset, count, addr) {
-                    Ok(value) => serde_json::to_string(&value)
-                        .expect("failed to serialize the array"),
+                    Ok(value) => {
+                        serde_json::to_string(&value)
+                            .expect("failed to serialize the array")
+                    }
                     Err(e) => serde_json::to_string(
                         &format!("Failed to read database: {}", e),
                     ).unwrap()
@@ -143,8 +147,10 @@ async fn main() -> Result<(), MainError> {
     let rpc_raw = warp::path!("rpc" / u64 / u64)
         .map(move |offset, count| {
             match cloner().get_rpc_range(offset, count) {
-                Ok(value) => serde_json::to_string(&value)
-                    .expect("failed to serialize the array"),
+                Ok(value) => {
+                    serde_json::to_string(&value)
+                        .expect("failed to serialize the array")
+                }
                 Err(e) => serde_json::to_string(
                     &format!("Failed to read database: {}", e)
                 ).unwrap(),
@@ -165,8 +171,10 @@ async fn main() -> Result<(), MainError> {
         .map(move |offset, count, host: String| {
             match host.parse() {
                 Ok(addr) => match cloner().get_rpc_host_range(offset, count, addr) {
-                    Ok(value) => serde_json::to_string(&value)
-                        .expect("failed to serialize the array"),
+                    Ok(value) => {
+                        serde_json::to_string(&value)
+                            .expect("failed to serialize the array")
+                    }
                     Err(e) => serde_json::to_string(
                         &format!("Failed to read database: {}", e),
                     ).unwrap()

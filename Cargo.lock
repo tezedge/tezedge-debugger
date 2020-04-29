@@ -2960,7 +2960,7 @@ dependencies = [
  "argh",
  "bincode",
  "bytes 0.5.4",
- "circular-queue",
+ "chrono",
  "crypto",
  "failure",
  "flume",

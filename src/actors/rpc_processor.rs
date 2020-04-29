@@ -2,7 +2,7 @@ use failure::Error;
 use riker::actors::*;
 use crate::actors::peer_message::{RawPacketMessage, SenderMessage};
 use crate::storage::{MessageStore, StoreMessage};
-use crate::storage::rpc_message::RESTMessage;
+use crate::storage::storage_message::RESTMessage;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
@@ -44,23 +44,13 @@ impl RpcProcessor {
         if msg.is_incoming() {
             let parser = self.get_request_parser(msg.remote_addr());
             if let Some(payload) = parser.process_message(msg.payload()) {
-                log::info!("Stored new message: {:?}", payload);
-                let _ = self.db.store_rpc_message(&StoreMessage::RestMessage {
-                    remote_addr: msg.remote_addr(),
-                    incoming: msg.is_incoming(),
-                    payload,
-                });
+                let _ = self.db.store_rpc_message(&StoreMessage::new_rest(msg.remote_addr(), msg.is_incoming(), payload));
                 self.requests.remove(&msg.remote_addr());
             }
         } else {
             let parser = self.get_response_parser(msg.remote_addr());
             if let Some(payload) = parser.process_message(msg.payload()) {
-                log::info!("Stored new message: {:?}", payload);
-                let _ = self.db.store_rpc_message(&StoreMessage::RestMessage {
-                    remote_addr: msg.remote_addr(),
-                    incoming: msg.is_incoming(),
-                    payload,
-                });
+                let _ = self.db.store_rpc_message(&StoreMessage::new_rest(msg.remote_addr(), msg.is_incoming(), payload));
                 self.responses.remove(&msg.remote_addr());
             }
         }

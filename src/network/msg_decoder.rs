@@ -57,7 +57,7 @@ impl EncryptedMessageDecoder {
                 if let Some(msg) = self.try_decrypt() {
                     match msg {
                         EncryptedMessage::PeerResponse(msg) => {
-                            let _ = self.db.store_p2p_message(&StoreMessage::new_peer(enc.remote_addr(), enc.is_incoming(), &msg));
+                            let _ = self.db.store_p2p_message(&StoreMessage::new_p2p(enc.remote_addr(), enc.is_incoming(), &msg));
                         }
                         EncryptedMessage::Metadata(msg) => {
                             let _ = self.db.store_p2p_message(&StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg));

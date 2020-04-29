@@ -6,11 +6,12 @@ use tezos_messages::p2p::encoding::prelude::*;
 use tezos_messages::p2p::encoding::version::Version;
 use crypto::hash::HashType;
 use tezos_messages::p2p::encoding::operation_hashes_for_blocks::OperationHashesForBlock;
-use std::time::{SystemTime, UNIX_EPOCH};
 use storage::persistent::BincodeEncoded;
+use crate::storage::RESTMessage;
 
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 /// Types of messages sent by external RPC, directly maps to the StoreMessage, with different naming
 pub enum RpcMessage {
     Packet {
@@ -34,7 +35,7 @@ pub enum RpcMessage {
         remote_addr: SocketAddr,
         message: MappedConnectionMessage,
     },
-    P2PMessage {
+    P2pMessage {
         incoming: bool,
         timestamp: u128,
         id: u64,
@@ -46,7 +47,7 @@ pub enum RpcMessage {
         timestamp: u128,
         id: u64,
         remote_addr: SocketAddr,
-        message: RESTMessage,
+        message: MappedRESTMessage,
     },
 }
 
@@ -54,49 +55,48 @@ impl BincodeEncoded for RpcMessage {}
 
 impl RpcMessage {
     pub fn from_store(msg: &StoreMessage, id: u64) -> Self {
-        let start = SystemTime::now();
-        let timestamp = start.duration_since(UNIX_EPOCH).unwrap().as_millis();
+        let id = Self::fix_id(id);
         match msg {
-            StoreMessage::TcpMessage { remote_addr, incoming, packet } => {
+            StoreMessage::TcpMessage { remote_addr, incoming, packet, timestamp } => {
                 RpcMessage::Packet {
                     id,
-                    timestamp,
+                    timestamp: timestamp.clone(),
                     remote_addr: remote_addr.clone(),
                     incoming: incoming.clone(),
                     packet: hex::encode(packet),
                 }
             }
-            StoreMessage::ConnectionMessage { remote_addr, incoming, payload } => {
+            StoreMessage::ConnectionMessage { remote_addr, incoming, payload, timestamp } => {
                 RpcMessage::ConnectionMessage {
                     id,
-                    timestamp,
+                    timestamp: timestamp.clone(),
                     remote_addr: remote_addr.clone(),
                     incoming: incoming.clone(),
                     message: payload.clone().into(),
                 }
             }
-            StoreMessage::P2PMessage { remote_addr, incoming, payload } => {
-                RpcMessage::P2PMessage {
+            StoreMessage::P2PMessage { remote_addr, incoming, payload, timestamp } => {
+                RpcMessage::P2pMessage {
                     id,
-                    timestamp,
+                    timestamp: timestamp.clone(),
                     remote_addr: remote_addr.clone(),
                     incoming: incoming.clone(),
                     message: payload.into_iter().map(|x| MappedPeerMessage::from(x.clone())).collect(),
                 }
             }
-            StoreMessage::RestMessage { remote_addr, incoming, payload } => {
+            StoreMessage::RestMessage { remote_addr, incoming, payload, timestamp } => {
                 RpcMessage::RestMessage {
                     id,
-                    timestamp,
+                    timestamp: timestamp.clone(),
                     remote_addr: remote_addr.clone(),
                     incoming: incoming.clone(),
-                    message: payload.clone(),
+                    message: payload.clone().into(),
                 }
             }
-            StoreMessage::Metadata { remote_addr, incoming, message } => {
+            StoreMessage::Metadata { remote_addr, incoming, message, timestamp } => {
                 RpcMessage::Metadata {
                     id,
-                    timestamp,
+                    timestamp: timestamp.clone(),
                     remote_addr: remote_addr.clone(),
                     incoming: incoming.clone(),
                     message: message.clone(),
@@ -105,17 +105,14 @@ impl RpcMessage {
         }
     }
 
-    pub fn fix_id(&mut self) {
-        match self {
-            RpcMessage::Packet { ref mut id, .. } | RpcMessage::Metadata { ref mut id, .. } |
-            RpcMessage::P2PMessage { ref mut id, .. } | RpcMessage::ConnectionMessage { ref mut id, .. } |
-            RpcMessage::RestMessage { ref mut id, .. } => { *id = std::u64::MAX - *id }
-        }
+    fn fix_id(id: u64) -> u64 {
+        std::u64::MAX.saturating_sub(id)
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum RESTMessage {
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum MappedRESTMessage {
     Request {
         method: String,
         path: String,
@@ -127,8 +124,14 @@ pub enum RESTMessage {
     },
 }
 
-
-impl BincodeEncoded for RESTMessage {}
+impl From<RESTMessage> for MappedRESTMessage {
+    fn from(value: RESTMessage) -> Self {
+        match value {
+            RESTMessage::Response { status, payload } => Self::Response { status, payload },
+            RESTMessage::Request { method, path, payload } => Self::Request { method, path, payload }
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MappedConnectionMessage {
@@ -154,6 +157,7 @@ impl From<ConnectionMessage> for MappedConnectionMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum MappedPeerMessage {
     Disconnect,
     Bootstrap,
