@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use failure::Error;
 use riker::actors::*;
 use crate::actors::peer_message::{RawPacketMessage, SenderMessage};
@@ -7,6 +10,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 
 #[derive(Clone)]
+/// Argument structure to create new RPC message processor
 pub struct RpcArgs {
     pub port: u16,
     pub db: MessageStore,
@@ -21,6 +25,7 @@ pub struct RpcProcessor {
 }
 
 impl RpcProcessor {
+    /// Create new Processor from given args
     pub fn new(args: RpcArgs) -> Self {
         Self {
             port: args.port,
@@ -30,16 +35,19 @@ impl RpcProcessor {
         }
     }
 
+    /// Get inner request parser for specific host
     fn get_request_parser(&mut self, addr: SocketAddr) -> &mut RequestParser {
         let parser = self.requests.entry(addr);
         parser.or_insert(RequestParser::new())
     }
 
+    /// Get inner response parser for specific host
     fn get_response_parser(&mut self, addr: SocketAddr) -> &mut ResponseParser {
         let parser = self.responses.entry(addr);
         parser.or_insert(ResponseParser::new())
     }
 
+    /// Process RPC message (request or response), and store it if necessary
     fn process_message(&mut self, msg: &RawPacketMessage) -> Result<(), Error> {
         if msg.is_incoming() {
             let parser = self.get_request_parser(msg.remote_addr());
@@ -72,11 +80,13 @@ impl Actor for RpcProcessor {
     }
 }
 
+/// Request HTTP Header
 pub struct RequestHeader {
     method: String,
     path: String,
 }
 
+/// Parser for HTTP request from TCP packet(s)
 pub struct RequestParser {
     header: Option<RequestHeader>,
     buffer: String,
@@ -84,6 +94,7 @@ pub struct RequestParser {
 }
 
 impl RequestParser {
+    /// Create new parser for single request
     pub fn new() -> Self {
         Self {
             header: None,
@@ -92,6 +103,7 @@ impl RequestParser {
         }
     }
 
+    /// Process packet which is part of this request, if it was last, return parsed Request
     pub fn process_message(&mut self, data: &[u8]) -> Option<RESTMessage> {
         if self.header.is_some() {
             self.continue_processing(data)
@@ -100,6 +112,7 @@ impl RequestParser {
         }
     }
 
+    /// If Request was fragmented, continue processing until last packet is received
     fn continue_processing(&mut self, data: &[u8]) -> Option<RESTMessage> {
         if let Ok(str) = std::str::from_utf8(data) {
             self.buffer.push_str(str);
@@ -114,6 +127,7 @@ impl RequestParser {
         }
     }
 
+    /// If this is a new request process it as if it was segmented
     fn start_processing(&mut self, data: &[u8]) -> Option<RESTMessage> {
         if data.len() == 0 {
             None
@@ -160,6 +174,7 @@ impl RequestParser {
         }
     }
 
+    /// Flush buffer and finish parsing
     fn flush_buffer(&mut self) -> Option<RESTMessage> {
         if let Some(header) = std::mem::replace(&mut self.header, None) {
             Some(RESTMessage::Request {
@@ -173,15 +188,18 @@ impl RequestParser {
         }
     }
 
+    /// Remove all data from inner buffers
     fn clean_buffer(&mut self) {
         self.buffer.clear()
     }
 }
 
+/// Response HTTP header
 pub struct ResponseHeader {
     status: String,
 }
 
+/// Parser for  HTTP response from TCP packet(s)
 pub struct ResponseParser {
     header: Option<ResponseHeader>,
     buffer: String,
@@ -189,6 +207,7 @@ pub struct ResponseParser {
 }
 
 impl ResponseParser {
+    /// Create new http response parser
     pub fn new() -> Self {
         Self {
             header: None,
@@ -197,6 +216,7 @@ impl ResponseParser {
         }
     }
 
+    /// Process packet which is part of this response, if it was last, return parsed Request
     pub fn process_message(&mut self, data: &[u8]) -> Option<RESTMessage> {
         if self.header.is_some() {
             self.continue_processing(data)
@@ -205,6 +225,7 @@ impl ResponseParser {
         }
     }
 
+    /// If response was fragmented, continue processing until last packet is received
     fn continue_processing(&mut self, data: &[u8]) -> Option<RESTMessage> {
         if let Ok(str) = std::str::from_utf8(data) {
             self.buffer.push_str(str);
@@ -219,6 +240,7 @@ impl ResponseParser {
         }
     }
 
+    /// If this is a new response process it as if it was segmented
     fn start_processing(&mut self, data: &[u8]) -> Option<RESTMessage> {
         if data.len() == 0 {
             None
@@ -261,6 +283,7 @@ impl ResponseParser {
         }
     }
 
+    /// Flush buffers and finalize parsing, if possible
     fn flush_buffer(&mut self) -> Option<RESTMessage> {
         if let Some(header) = std::mem::replace(&mut self.header, None) {
             Some(RESTMessage::Response {
@@ -273,6 +296,7 @@ impl ResponseParser {
         }
     }
 
+    /// Remove all data from buffers
     fn clean_buffer(&mut self) {
         self.buffer.clear()
     }

@@ -15,6 +15,7 @@ use crate::actors::peer_message::*;
 use crate::storage::{MessageStore, StoreMessage};
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 
+/// P2P Message decrypter from captured connection messages
 pub struct EncryptedMessageDecoder {
     db: MessageStore,
     precomputed_key: PrecomputedKey,
@@ -28,12 +29,16 @@ pub struct EncryptedMessageDecoder {
     input_remaining: usize,
 }
 
+/// Types of encrypted messages
 pub enum EncryptedMessage {
+    /// Metadata describing the node (usually first message received/send, p2p communication start after receiving metadata)
     Metadata(MetadataMessage),
+    /// P2P message
     PeerResponse(PeerMessageResponse),
 }
 
 impl EncryptedMessageDecoder {
+    /// Create new message decoder from precomputed key (made from public/private key pair) and nonce
     pub fn new(precomputed_key: PrecomputedKey, remote_nonce: Nonce, peer_id: String, db: MessageStore) -> Self {
         Self {
             db,
@@ -49,6 +54,7 @@ impl EncryptedMessageDecoder {
         }
     }
 
+    /// Process received message, if complete message is received, decypher, deserialize and store it.
     pub fn recv_msg(&mut self, enc: &RawPacketMessage) {
         if enc.has_payload() {
             self.inc_buf.extend_from_slice(&enc.payload());
@@ -68,6 +74,8 @@ impl EncryptedMessageDecoder {
         }
     }
 
+    /// Try decrypting buffer containig (hopefully) complete message. Encrypted message is deserialized
+    /// IFF all packets from message are received and all correct keys are used to decrypt
     fn try_decrypt(&mut self) -> Option<EncryptedMessage> {
         let len = (&self.inc_buf[0..2]).get_u16() as usize;
         if self.inc_buf[2..].len() >= len {
@@ -93,6 +101,8 @@ impl EncryptedMessageDecoder {
         }
     }
 
+    /// Try deserializing decyphered message, this will work IFF encrypted received message
+    /// was correctly serialized
     fn try_deserialize(&mut self, mut msg: Vec<u8>) -> Option<EncryptedMessage> {
         if !self.metadata {
             Some(EncryptedMessage::Metadata(self.try_deserialize_meta(&mut msg)?))
@@ -101,6 +111,7 @@ impl EncryptedMessageDecoder {
         }
     }
 
+    /// Try to deserialized metadata message
     fn try_deserialize_meta(&mut self, msg: &mut Vec<u8>) -> Option<MetadataMessage> {
         if self.input_remaining >= msg.len() {
             self.input_remaining -= msg.len();
@@ -134,6 +145,7 @@ impl EncryptedMessageDecoder {
         } else { None }
     }
 
+    /// Try to deserialized p2p message
     fn try_deserialize_p2p(&mut self, msg: &mut Vec<u8>) -> Option<PeerMessageResponse> {
         if self.input_remaining >= msg.len() {
             self.input_remaining -= msg.len();
@@ -171,11 +183,13 @@ impl EncryptedMessageDecoder {
     }
 
     #[inline]
+    /// Increment internal nonce after decrypting message
     fn nonce_fetch_increment(&mut self) -> Nonce {
         let incremented = self.remote_nonce.increment();
         std::mem::replace(&mut self.remote_nonce, incremented)
     }
 
+    /// Store decrypted message
     fn store_message(&mut self, msg: PeerMessageResponse) {
         log::trace!("Message received: {:?}", msg);
     }

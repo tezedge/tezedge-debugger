@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use failure::Error;
 use riker::actors::*;
 use std::{
@@ -17,6 +20,7 @@ use crate::{
 use crate::actors::rpc_processor::{RpcProcessor, RpcArgs};
 
 #[derive(Clone)]
+/// Arguments required to create PacketOrchestrator actor
 pub struct PacketOrchestratorArgs {
     pub rpc_port: u16,
     pub local_identity: Identity,
@@ -26,7 +30,8 @@ pub struct PacketOrchestratorArgs {
     pub writer: Arc<Mutex<BridgeWriter>>,
 }
 
-/// Main packet router and process orchestrator
+/// The actor responsible for routing, forwarding and relaying packets between other actors and
+/// networking bridge
 pub struct PacketOrchestrator {
     rpc_port: u16,
     rpc_processor: Option<ActorRef<RawPacketMessage>>,
@@ -39,6 +44,7 @@ pub struct PacketOrchestrator {
 }
 
 impl PacketOrchestrator {
+    /// Create new PacketOrchestrator actor from given arguments
     pub fn new(args: PacketOrchestratorArgs) -> Self {
         Self {
             rpc_port: args.rpc_port,
@@ -52,6 +58,7 @@ impl PacketOrchestrator {
         }
     }
 
+    /// Spawn new actor for processing packets from specific remote peer
     fn spawn_peer(&self, ctx: &Context<<Self as Actor>::Msg>, addr: SocketAddr) -> Result<ActorRef<RawPacketMessage>, Error> {
         let peer_name = format!("peer-{}", addr).replace(|c: char| {
             c == '.' || c == ':'
@@ -65,6 +72,7 @@ impl PacketOrchestrator {
         Ok(act_ref)
     }
 
+    /// Spawn actor for processing node RPC request/responses
     fn spawn_rpc(&self, ctx: &Context<<Self as Actor>::Msg>, port: u16) -> Result<ActorRef<RawPacketMessage>, Error> {
         let peer_name = format!("rpc-{}", port);
         let act_ref = ctx.actor_of(Props::new_args(RpcProcessor::new, RpcArgs {
@@ -75,6 +83,7 @@ impl PacketOrchestrator {
         Ok(act_ref)
     }
 
+    /// Relay packet to other side of tun bridge
     fn relay(&mut self, msg: RawPacketMessage) {
         if msg.is_incoming() {
             let mut bridge = self.writer.lock()

@@ -1,3 +1,8 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
+/// Defines RpcMessage type, used only by Proxy RPC endpoints, maps directly to the StoreMessage
+
 use super::StoreMessage;
 use crate::network::connection_message::ConnectionMessage;
 use serde::{Serialize, Deserialize};
@@ -9,10 +14,8 @@ use tezos_messages::p2p::encoding::operation_hashes_for_blocks::OperationHashesF
 use storage::persistent::BincodeEncoded;
 use crate::storage::RESTMessage;
 
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-/// Types of messages sent by external RPC, directly maps to the StoreMessage, with different naming
 pub enum RpcMessage {
     Packet {
         incoming: bool,

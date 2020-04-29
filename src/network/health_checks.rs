@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::time::{Duration, Instant};
 use failure::Fail;
 use packet::ip::{
@@ -15,6 +18,7 @@ use std::io::{Read, Write};
 use std::net::Ipv4Addr;
 
 #[derive(Debug, Fail)]
+/// Error related to health-checks of running proxy
 pub enum HealthCheckError {
     #[fail(display = "Did not received any response")]
     NoResponse,
@@ -38,20 +42,28 @@ pub enum HealthCheckError {
 }
 
 impl HealthCheckError {
+    /// Create new error describing incorrect network setup
     pub fn incorrect_setup<T: ToString>(reason: T) -> Self {
         HealthCheckError::IncorrectDeviceSetup { reason: reason.to_string() }
     }
+
+    /// Create new error incurred due to a timeout on interface
     pub fn timeout<T: ToString>(activity: T) -> Self {
         HealthCheckError::TimeOut { activity: activity.to_string() }
     }
-    pub fn descriptive<T: ToString>(detail: T, reason: Self) -> Self {
-        HealthCheckError::Comprehensive { detail: detail.to_string(), inner: Box::new(reason) }
-    }
+
+    /// Create new error incurred by failure on network
     pub fn send_failed(inner: std::io::Error) -> Self {
         HealthCheckError::SendFailed { inner }
     }
+
+    /// Create more descriptive error for simple HealthCheckErrors
+    pub fn descriptive<T: ToString>(detail: T, reason: Self) -> Self {
+        HealthCheckError::Comprehensive { detail: detail.to_string(), inner: Box::new(reason) }
+    }
 }
 
+/// Get next packet from tun device (synchronously) with specific timeout
 fn get_next_packet(dev: &mut Device, protocol: Protocol, timeout: Duration) -> Result<IPv4Packet<Vec<u8>>, HealthCheckError> {
     let mut buf = [0u8; 65535];
     let now = Instant::now();
@@ -95,6 +107,7 @@ pub fn device_address_check(dev: Device, addr: &str) -> Result<Device, (Device, 
         .map_err(|(dev, e)| (dev, HealthCheckError::descriptive(detail.clone(), e)))?)
 }
 
+/// Build ping packet for specific address
 fn build_ping(addr: &str) -> Vec<u8> {
     use pnet::packet::{
         ipv4::{Ipv4Packet as PnetIpv4Packet, checksum}
