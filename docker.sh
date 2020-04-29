@@ -1,8 +1,8 @@
 #!/bin/bash
 VOLUME="$PWD/identity"
 IDENTITY_FILE="$VOLUME/identity.json"
-PROXY_RPC_PORT=10000
-NODE_RPC_PORT=10001
+PROXY_RPC_PORT=18732
+NODE_RPC_PORT=17732
 
 trap clean EXIT
 
@@ -12,6 +12,10 @@ function clean() {
   fi
   if docker kill "$NODE_ID" &>/dev/null; then
     echo "Killed node container"
+  fi
+
+  if docker kill "$EXPLORER_ID" &>/dev/null; then
+    echo "Killed explorer container"
   fi
 }
 
@@ -44,6 +48,7 @@ fi
 
 docker pull kyras/tezedge_tezos:latest
 docker pull kyras/tezedge_proxy:latest
+docker pull simplestakingcom/tezedge-node-explorer
 
 # Check identity
 if [ ! -f "$IDENTITY_FILE" ]; then
@@ -51,7 +56,7 @@ if [ ! -f "$IDENTITY_FILE" ]; then
 fi
 
 # == START PROXY IN DETACHED MODE ==
-PROXY_ID=$(docker run -d --cap-add=NET_ADMIN -p "$PROXY_RPC_PORT:10000" -p "$NODE_RPC_PORT:8732" --volume "$VOLUME:/home/appuser/proxy/identity" --device /dev/net/tun:/dev/net/tun -it kyras/tezedge_proxy:latest)
+PROXY_ID=$(docker run -d --cap-add=NET_ADMIN -p "$PROXY_RPC_PORT:10000" -p "$NODE_RPC_PORT:8732" -p "19732:9732" -p "4927:4927" --volume "$VOLUME:/home/appuser/proxy/identity" --device /dev/net/tun:/dev/net/tun -it kyras/tezedge_proxy:latest)
 docker exec "$PROXY_ID" iptables -t nat -A PREROUTING -p tcp --dport 8732 -j DNAT --to-destination 10.0.1.1
 echo "Spawned proxy in container $PROXY_ID"
 sleep 1
@@ -82,4 +87,6 @@ unmount_ns "$NODE_ID"
 unmount_ns "$PROXY_ID"
 # 4. start node in existing container
 #docker exec -it "$NODE_ID" /bin/bash
+EXPLORER_ID=$(docker run -d -p "8080:8080" simplestakingcom/tezedge-node-explorer:latest)
+echo "Running explorer on port 8080 in container $EXPLORER_ID"
 docker exec "$NODE_ID" ./tezos-node run --rpc-addr 0.0.0.0:8732
