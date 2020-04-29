@@ -32,7 +32,7 @@ Debugger API
 ============
 RPC endpoint of debugger are split into two parts P2P messages on `/p2p/*` endpoints and RPC messages on `/rpc/*` endpoint.
 ### P2P
-####`/p2p/{offset}/{count}(/{host})?`
+#### `/p2p/{offset}/{count}(/{host})?`
 ##### Description
 Endpoint for checking all P2P communication on running node. 
 Messages are always sorted from newest to oldest.
