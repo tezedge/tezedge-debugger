@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use tun::{
     self, Configuration,
     platform::posix::{Reader, Writer},
@@ -13,6 +16,7 @@ use crate::actors::prelude::*;
 use crate::network::health_checks::internet_accessibility_check;
 use failure::_core::time::Duration;
 
+/// Create new TUN based bridge for intercepting packet on network
 pub fn make_bridge(_in_addr_space: &str, _out_addr_space: &str,
                    _in_addr: &str, out_addr: &str,
                    local_addr: IpAddr, remote_addr: IpAddr) -> Result<((Sender<SenderMessage>, Receiver<SenderMessage>), BridgeWriter), Error>
@@ -56,6 +60,7 @@ pub fn make_bridge(_in_addr_space: &str, _out_addr_space: &str,
     Ok(((tx, rx), BridgeWriter::new(in_writer, out_writer)))
 }
 
+/// Process packet on tun device, if it is TCP packet send it for processing, otherwise mark it for forwarding
 fn process_packets(mut dev: Reader, sender: Sender<SenderMessage>, inner: bool, local_addr: IpAddr, tun_addr: IpAddr) -> impl FnMut() + 'static {
     move || {
         let mut buf = [0u8; 65535];
@@ -92,27 +97,32 @@ pub struct BridgeWriter {
 }
 
 impl BridgeWriter {
+    /// Create new packet writer
     pub fn new(in_writer: Writer, out_writer: Writer) -> Self {
         Self { in_writer, out_writer }
     }
 
+    /// "Send" packet to outer tun device, ergo internets
     pub fn send_packet_to_internet(&mut self, packet: RawPacketMessage, _addr: IpAddr) -> Result<(), Error> {
         self.out_writer.write_all(packet.buffer())
             .expect("failed to write data");
         Ok(())
     }
 
+    /// "Send" packet to inner tun device, ergo local node
     pub fn send_packet_to_local(&mut self, packet: RawPacketMessage, _addr: IpAddr) -> Result<(), Error> {
         self.in_writer.write_all(packet.buffer())
             .expect("failed to write data");
         Ok(())
     }
 
+    /// "Forward" send bytes to outer tun device
     pub fn forward_to_internet(&mut self, packet: &[u8]) -> Result<(), Error> {
         let _ = self.out_writer.write_all(packet);
         Ok(())
     }
 
+    /// "Forward" send bytes to inner tun device
     pub fn forward_to_local(&mut self, packet: &[u8]) -> Result<(), Error> {
         let _ = self.in_writer.write_all(packet);
         Ok(())
@@ -121,6 +131,7 @@ impl BridgeWriter {
 
 
 #[derive(Debug, Fail)]
+/// Error occured during tun bridge creation
 pub enum BridgeError {
     #[fail(display = "failed to create bridge device: {}", _0)]
     CreateDeviceError(tun::Error),
@@ -131,5 +142,3 @@ impl From<tun::Error> for BridgeError {
         Self::CreateDeviceError(err)
     }
 }
-
-pub type IpAddrTuple = (u8, u8, u8, u8);

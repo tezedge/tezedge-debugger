@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 pub mod storage_message;
 pub mod rpc_message;
 

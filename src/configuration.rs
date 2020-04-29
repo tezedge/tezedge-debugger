@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::{
     fs, path::Path, sync::Arc,
 };
@@ -57,15 +60,18 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    /// Create application config from environment
     pub fn from_env() -> Self {
         argh::from_env()
     }
 
+    /// Load identity specified in --identity argument
     pub fn load_identity(&self) -> Result<Identity, Error> {
         let content = fs::read_to_string(&self.identity_file)?;
         Ok(serde_json::from_str(&content)?)
     }
 
+    /// Open new databes specified in --storage-path argument
     pub fn open_database(&self) -> Result<MessageStore, Error> {
         let path = Path::new(&self.storage_path);
         let schemas = vec![
@@ -79,8 +85,8 @@ impl AppConfig {
     }
 }
 
-/// This node identity information
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+/// This node identity information
 pub struct Identity {
     pub peer_id: String,
     pub public_key: String,

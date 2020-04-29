@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+/// UNUSED
 use crypto::crypto_box::{PrecomputedKey, encrypt};
 use crypto::nonce::Nonce;
 use failure::Error;

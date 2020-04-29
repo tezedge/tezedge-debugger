@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 pub mod packet_orchestrator;
 pub mod rpc_processor;
 pub mod peer_processor;

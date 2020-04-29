@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use tezos_encoding::binary_reader::BinaryReaderError;
 use tezos_messages::p2p::{
     encoding::version::Version,
@@ -14,6 +17,7 @@ use serde::{Serialize, Deserialize};
 use tezos_encoding::encoding::{Field, HasEncoding, Encoding};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+/// Mapped connection message as defined in tezos protocol
 pub struct ConnectionMessage {
     pub port: u16,
     pub versions: Vec<Version>,
@@ -26,6 +30,7 @@ pub struct ConnectionMessage {
 }
 
 impl ConnectionMessage {
+    /// Create new connection message from its parts
     pub fn new(port: u16, public_key: &str, proof_of_work_stamp: &str, message_nonce: &[u8], versions: Vec<Version>) -> Self {
         ConnectionMessage {
             port,

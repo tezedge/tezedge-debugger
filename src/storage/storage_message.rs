@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::net::SocketAddr;
 use tezos_messages::p2p::encoding::peer::{PeerMessage, PeerMessageResponse};
 use crate::{
@@ -20,6 +23,7 @@ pub enum StoreMessage {
         remote_addr: SocketAddr,
         packet: Vec<u8>,
     },
+    /// Metadata message, (first encrypted message received/sent between peers)
     Metadata {
         timestamp: u128,
         incoming: bool,
@@ -50,10 +54,12 @@ pub enum StoreMessage {
 }
 
 impl StoreMessage {
+    /// Create new nano-second timestamp
     fn make_ts() -> u128 {
         SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
     }
 
+    /// Create storage message for raw TCP packet
     pub fn new_tcp(msg: &RawPacketMessage) -> Self {
         StoreMessage::TcpMessage {
             remote_addr: msg.remote_addr(),
@@ -63,6 +69,7 @@ impl StoreMessage {
         }
     }
 
+    /// Create new storage message for parsed Metadata
     pub fn new_metadata(remote_addr: SocketAddr, incoming: bool, message: MetadataMessage) -> Self {
         StoreMessage::Metadata {
             incoming,
@@ -72,6 +79,7 @@ impl StoreMessage {
         }
     }
 
+    /// Create new storage message for parsed Connection message
     pub fn new_connection(remote_addr: SocketAddr, incoming: bool, msg: &ConnectionMessage) -> Self {
         StoreMessage::ConnectionMessage {
             incoming,
@@ -81,6 +89,7 @@ impl StoreMessage {
         }
     }
 
+    /// Create new storeage message for parse P2P message
     pub fn new_p2p(remote_addr: SocketAddr, incoming: bool, msg: &PeerMessageResponse) -> Self {
         let c = bincode::serialize(msg.messages()).unwrap();
         let payload = bincode::deserialize(&c).unwrap();
@@ -92,6 +101,7 @@ impl StoreMessage {
         }
     }
 
+    /// Create new storeage message for parse RPC message
     pub fn new_rest(remote_addr: SocketAddr, incoming: bool, payload: RESTMessage) -> Self {
         StoreMessage::RestMessage {
             remote_addr,
@@ -101,6 +111,7 @@ impl StoreMessage {
         }
     }
 
+    /// Get remote address of this storage message
     pub fn remote_addr(&self) -> SocketAddr {
         match self {
             StoreMessage::RestMessage { remote_addr, .. } | StoreMessage::ConnectionMessage { remote_addr, .. } |
@@ -113,6 +124,7 @@ impl StoreMessage {
 impl BincodeEncoded for StoreMessage {}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// Represents REST Response or Request made to the local node
 pub enum RESTMessage {
     Request {
         method: String,

@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use failure::Error;
 use riker::actors::*;
 use std::{
@@ -25,14 +28,14 @@ use crate::{
 };
 
 #[derive(Clone)]
-/// Argument structure to create new peer
+/// Argument structure to create new P2P message processor
 pub struct PeerArgs {
     pub addr: SocketAddr,
     pub local_identity: Identity,
     pub db: MessageStore,
 }
 
-/// Actor representing communication over specific port, before proper communication is established.
+/// Actor representing/processing communication with specific remote node identified by Socket Address.
 pub struct PeerProcessor {
     db: MessageStore,
     addr: SocketAddr,
@@ -50,6 +53,7 @@ pub struct PeerProcessor {
 }
 
 impl PeerProcessor {
+    /// Create new Processor from given args
     pub fn new(args: PeerArgs) -> Self {
         Self {
             db: args.db,
@@ -68,6 +72,7 @@ impl PeerProcessor {
         }
     }
 
+    /// Process given message (check its content, and if needed decypher/deserialize/store it)
     fn process_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
         if self.handshake == 3 {
             if self.initialized {
@@ -80,6 +85,8 @@ impl PeerProcessor {
         }
     }
 
+
+    /// Process TCP handshake message
     fn process_handshake_message(&mut self, _msg: &mut RawPacketMessage) -> Result<(), Error> {
         self.handshake += 1;
         // Disable Raw TCP packet storing for now
@@ -87,6 +94,7 @@ impl PeerProcessor {
         Ok(())
     }
 
+    /// Process non-TCP handshake message included in tezos bootstrap (handshake) process
     fn process_unencrypted_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
         // -> This *MUST* be one of connection messages exchanged between both nodes
         assert!(!self.initialized, "Connection trying to process encrypted messages as unencrypted");
@@ -113,6 +121,7 @@ impl PeerProcessor {
         Ok(())
     }
 
+    /// Process encrypted messages, after securing connection between nodes.
     fn process_encrypted_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
         let decrypter = if msg.is_incoming() {
             &mut self.incoming_decrypter
@@ -125,6 +134,7 @@ impl PeerProcessor {
         Ok(())
     }
 
+    /// Upgrade processor to encrypted state
     fn upgrade(&mut self) -> Result<(), Error> {
         assert_eq!(self.conn_msgs.len(), 2, "trying to upgrade before all connection messages received");
         let ((first, _), (second, _)) = (&self.conn_msgs[0], &self.conn_msgs[1]);
