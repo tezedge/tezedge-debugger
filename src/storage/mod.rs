@@ -106,7 +106,6 @@ impl P2PMessageStorage {
     pub fn store_message(&mut self, msg: &StoreMessage) -> Result<(), StorageError> {
         let index = Self::index_next();
         let remote_addr = msg.remote_addr();
-        let msg = RpcMessage::from_store(msg, index);
 
         self.host_index.put(remote_addr, index)?;
         self.kv.put(&index, &msg)?;
@@ -114,23 +113,20 @@ impl P2PMessageStorage {
     }
 
     pub fn get_range(&self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, StorageError> {
-        let count = std::cmp::max(count, 100);
+        let count = std::cmp::min(count, 100);
         let mut ret = Vec::with_capacity(count as usize);
         let end: u64 = Self::index();
         let start = end.saturating_add(offset.saturating_add(1));
         let end = start.saturating_add(count);
         for index in start..=end {
             match self.kv.get(&index) {
-                Ok(Some(mut value)) => {
-                    value.fix_id();
-                    ret.push(value)
-                }
+                Ok(Some(value)) => ret.push(RpcMessage::from_store(&value, index.clone())),
                 Ok(None) => {
                     log::info!("No value at index: {}", index);
                     continue;
                 }
                 Err(err) => {
-                    log::info!("Failed to load value at index {}: {}",index, err)
+                    log::warn!("Failed to load value at index {}: {}",index, err)
                 }
             }
         }
@@ -138,20 +134,18 @@ impl P2PMessageStorage {
     }
 
     pub fn get_host_range(&self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, StorageError> {
+        let count = std::cmp::min(count, 100);
         let idx = self.host_index.get_for_host(host, offset, count)?;
         let mut ret = Vec::with_capacity(idx.len());
         for index in idx.iter() {
             match self.kv.get(index) {
-                Ok(Some(mut value)) => {
-                    value.fix_id();
-                    ret.push(value.into())
-                }
+                Ok(Some(value)) => ret.push(RpcMessage::from_store(&value, index.clone())),
                 Ok(None) => {
                     log::info!("No value at index: {}", index);
                     continue;
                 }
                 Err(err) => {
-                    log::info!("Failed to load value at index {}: {}",index, err)
+                    log::warn!("Failed to load value at index {}: {}",index, err)
                 }
             }
         }
@@ -161,7 +155,7 @@ impl P2PMessageStorage {
 
 impl KeyValueSchema for P2PMessageStorage {
     type Key = u64;
-    type Value = RpcMessage;
+    type Value = StoreMessage;
 
     fn name() -> &'static str { "p2p_message_storage" }
 }
@@ -354,32 +348,27 @@ impl RpcMessageStorage {
     pub fn store_message(&mut self, msg: &StoreMessage) -> Result<(), StorageError> {
         let index = Self::index_next();
         let remote_addr = msg.remote_addr();
-        let rpc_msg = RpcMessage::from_store(msg, index);
-
 
         self.host_index.put(remote_addr, index)?;
-        self.kv.put(&index, &rpc_msg)?;
+        self.kv.put(&index, msg)?;
         Ok(self.inc_count())
     }
 
     pub fn get_range(&self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, StorageError> {
-        let count = std::cmp::max(count, 100);
+        let count = std::cmp::min(count, 100);
         let mut ret = Vec::with_capacity(count as usize);
         let end: u64 = Self::index();
         let start = end.saturating_add(offset.saturating_add(1));
         let end = start.saturating_add(count);
         for index in start..=end {
             match self.kv.get(&index) {
-                Ok(Some(mut value)) => {
-                    value.fix_id();
-                    ret.push(value.into())
-                }
+                Ok(Some(value)) => ret.push(RpcMessage::from_store(&value, index.clone())),
                 Ok(None) => {
                     log::info!("No value at index: {}", index);
                     continue;
                 }
                 Err(err) => {
-                    log::info!("Failed to load value at index {}: {}",index, err)
+                    log::warn!("Failed to load value at index {}: {}", index, err);
                 }
             }
         }
@@ -387,20 +376,18 @@ impl RpcMessageStorage {
     }
 
     pub fn get_host_range(&self, offset: u64, count: u64, host: IpAddr) -> Result<Vec<RpcMessage>, StorageError> {
+        let count = std::cmp::min(count, 100);
         let idx = self.host_index.get_for_host(host, offset, count)?;
         let mut ret = Vec::with_capacity(idx.len());
         for index in idx.iter() {
             match self.kv.get(index) {
-                Ok(Some(mut value)) => {
-                    value.fix_id();
-                    ret.push(value.into())
-                }
+                Ok(Some(value)) => ret.push(RpcMessage::from_store(&value, index.clone())),
                 Ok(None) => {
                     log::info!("No value at index: {}", index);
                     continue;
                 }
                 Err(err) => {
-                    log::info!("Failed to load value at index {}: {}",index, err)
+                    log::warn!("Failed to load value at index {}: {}", index, err)
                 }
             }
         }
@@ -410,7 +397,7 @@ impl RpcMessageStorage {
 
 impl KeyValueSchema for RpcMessageStorage {
     type Key = u64;
-    type Value = RpcMessage;
+    type Value = StoreMessage;
 
     fn name() -> &'static str { "rpc_message_storage" }
 }
@@ -540,8 +527,9 @@ pub mod tests {
     use super::*;
     use std::path::Path;
     use std::sync::Arc;
-    use crate::storage::rpc_message::RESTMessage;
+    use crate::storage::storage_message::RESTMessage;
     use storage::persistent::open_kv;
+    use crate::storage::rpc_message::MappedRESTMessage;
 
     macro_rules! function {
     () => {{
@@ -591,14 +579,11 @@ pub mod tests {
         let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
         for x in 0usize..10 {
             let ret = db.0.store_rpc_message(
-                &StoreMessage::RestMessage {
-                    incoming: true,
-                    remote_addr: sock,
-                    payload: RESTMessage::Response {
-                        status: "200".to_string(),
-                        payload: format!("{}", x),
-                    },
-                });
+                &StoreMessage::new_rest(sock, true, RESTMessage::Response {
+                    status: "200".to_string(),
+                    payload: format!("{}", x),
+                })
+            );
             if ret.is_err() {
                 assert!(false, "failed to store message: {}", ret.unwrap_err())
             }
@@ -609,7 +594,7 @@ pub mod tests {
             match msg {
                 RpcMessage::RestMessage { message, .. } => {
                     match message {
-                        RESTMessage::Response { payload, .. } => {
+                        MappedRESTMessage::Response { payload, .. } => {
                             assert_eq!(payload, &format!("{}", idx));
                         }
                         _ => assert!(false, "Expected response message")
@@ -626,14 +611,10 @@ pub mod tests {
         let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
         for x in 0usize..10 {
             let ret = db.0.store_rpc_message(
-                &StoreMessage::RestMessage {
-                    incoming: true,
-                    remote_addr: sock,
-                    payload: RESTMessage::Response {
-                        status: "200".to_string(),
-                        payload: format!("{}", x),
-                    },
-                });
+                &StoreMessage::new_rest(sock, true, RESTMessage::Response {
+                    status: "200".to_string(),
+                    payload: format!("{}", x),
+                }));
             if ret.is_err() {
                 assert!(false, "failed to store message: {}", ret.unwrap_err())
             }
@@ -644,7 +625,7 @@ pub mod tests {
             match msg {
                 RpcMessage::RestMessage { message, .. } => {
                     match message {
-                        RESTMessage::Response { payload, .. } => {
+                        MappedRESTMessage::Response { payload, .. } => {
                             assert_eq!(payload, &format!("{}", idx));
                         }
                         _ => assert!(false, "Expected response message")
