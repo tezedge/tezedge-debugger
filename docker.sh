@@ -47,7 +47,7 @@ if [ ! -d "/var/run/netns" ]; then
 fi
 
 docker pull simplestakingcom/tezedge-tezos:latest
-docker pull simplestakingcom/tezedge-debuger:latest
+#docker pull simplestakingcom/tezedge-debuger:latest
 docker pull simplestakingcom/tezedge-explorer-ocaml
 
 # Check identity

@@ -52,14 +52,15 @@ impl RpcProcessor {
         if msg.is_incoming() {
             let parser = self.get_request_parser(msg.remote_addr());
             if let Some(payload) = parser.process_message(msg.payload()) {
+                log::info!("Finished parsing RPC message: {:?}", payload);
                 let _ = self.db.store_rpc_message(&StoreMessage::new_rest(msg.remote_addr(), msg.is_incoming(), payload));
                 self.requests.remove(&msg.remote_addr());
             }
         } else {
             let parser = self.get_response_parser(msg.remote_addr());
             if let Some(payload) = parser.process_message(msg.payload()) {
+                log::info!("Finished parsing RPC message: {:?}", payload);
                 let _ = self.db.store_rpc_message(&StoreMessage::new_rest(msg.remote_addr(), msg.is_incoming(), payload));
-                self.responses.remove(&msg.remote_addr());
             }
         }
         Ok(())
@@ -105,6 +106,7 @@ impl RequestParser {
 
     /// Process packet which is part of this request, if it was last, return parsed Request
     pub fn process_message(&mut self, data: &[u8]) -> Option<RESTMessage> {
+        let data = std::str::from_utf8(data).ok()?;
         if self.header.is_some() {
             self.continue_processing(data)
         } else {
@@ -113,62 +115,53 @@ impl RequestParser {
     }
 
     /// If Request was fragmented, continue processing until last packet is received
-    fn continue_processing(&mut self, data: &[u8]) -> Option<RESTMessage> {
-        if let Ok(str) = std::str::from_utf8(data) {
-            self.buffer.push_str(str);
-            self.missing = self.missing.saturating_sub(str.len());
-            if self.missing == 0 {
-                self.flush_buffer()
-            } else {
-                None
-            }
+    fn continue_processing(&mut self, data: &str) -> Option<RESTMessage> {
+        self.buffer.push_str(data);
+        self.missing = self.missing.saturating_sub(data.len());
+        if self.missing == 0 {
+            self.flush_buffer()
         } else {
             None
         }
     }
 
     /// If this is a new request process it as if it was segmented
-    fn start_processing(&mut self, data: &[u8]) -> Option<RESTMessage> {
-        if data.len() == 0 {
-            None
+    fn start_processing(&mut self, string: &str) -> Option<RESTMessage> {
+        let data_iter: Vec<&str> = string.splitn(2, "\r\n\r\n").collect();
+        if data_iter.len() < 2 {
+            // Not valid HTTP header (should be <METADATA+HEADERS>\r\n\r\n<PAYLOAD>)
+            // Not valid HTTP request
+            return None;
         } else {
-            let string = std::str::from_utf8(data).ok()?;
-            let data_iter: Vec<&str> = string.splitn(2, "\r\n\r\n").collect();
-            if data_iter.len() < 2 {
-                // Not valid HTTP header (should be <METADATA+HEADERS>\r\n\r\n<PAYLOAD>)
-                // Not valid HTTP request
+            // Process metadata + header
+            let meta = data_iter[0];
+            let meta_iter: Vec<&str> = meta.splitn(2, "\r\n").collect();
+            if meta_iter.len() < 2 {
+                // Not valid HTTP header (should be <METADATA>\r\n<HEADERS>)
                 return None;
             } else {
-                // Process metadata + header
-                let meta = data_iter[0];
-                let meta_iter: Vec<&str> = meta.splitn(2, "\r\n").collect();
-                if meta_iter.len() < 2 {
-                    // Not valid HTTP header (should be <METADATA>\r\n<HEADERS>)
+                let info = meta_iter[0];
+                let metadata: Vec<&str> = info.splitn(3, ' ').collect();
+                if metadata.len() < 3 {
+                    // Not valid HTTP metadata (should be <METHOD> <URI> HTTP<VERSION>)
                     return None;
                 } else {
-                    let info = meta_iter[0];
-                    let metadata: Vec<&str> = info.splitn(3, ' ').collect();
-                    if metadata.len() < 3 {
-                        // Not valid HTTP metadata (should be <METHOD> <URI> HTTP<VERSION>)
-                        return None;
-                    } else {
-                        let method = metadata[0].to_string();
-                        let path = metadata[1].to_string();
-                        let headers: HashMap<String, &str> = meta_iter[1]
-                            .split("\r\n")
-                            .filter(|x| x.contains(":"))
-                            .map(|x| {
-                                let vals: Vec<&str> = x.splitn(2, ":").collect();
-                                (vals[0].trim().to_lowercase(), vals[1].trim())
-                            })
-                            .collect();
-                        self.missing = headers.get("content-length").unwrap_or(&"0").parse().ok()?;
-                        self.header = Some(RequestHeader {
-                            method,
-                            path,
-                        });
-                        self.continue_processing(data_iter[1].as_bytes())
-                    }
+                    let method = metadata[0].to_string();
+                    let path = metadata[1].to_string();
+                    let headers: HashMap<String, &str> = meta_iter[1]
+                        .split("\r\n")
+                        .filter(|x| x.contains(":"))
+                        .map(|x| {
+                            let vals: Vec<&str> = x.splitn(2, ":").collect();
+                            (vals[0].trim().to_lowercase(), vals[1].trim())
+                        })
+                        .collect();
+                    self.missing = headers.get("content-length").unwrap_or(&"0").parse().ok()?;
+                    self.header = Some(RequestHeader {
+                        method,
+                        path,
+                    });
+                    self.continue_processing(data_iter[1])
                 }
             }
         }
@@ -204,6 +197,7 @@ pub struct ResponseParser {
     header: Option<ResponseHeader>,
     buffer: String,
     missing: usize,
+    chunked: bool,
 }
 
 impl ResponseParser {
@@ -213,73 +207,96 @@ impl ResponseParser {
             header: None,
             buffer: Default::default(),
             missing: 0,
+            chunked: false,
         }
     }
 
     /// Process packet which is part of this response, if it was last, return parsed Request
     pub fn process_message(&mut self, data: &[u8]) -> Option<RESTMessage> {
+        let data = std::str::from_utf8(data).ok()?;
         if self.header.is_some() {
-            self.continue_processing(data)
+            self.continue_processing(data, true)
         } else {
             self.start_processing(data)
         }
     }
 
+    /// If this is a new response process it as if it was segmented
+    fn start_processing(&mut self, packet: &str) -> Option<RESTMessage> {
+        if Self::has_http_headers(&packet) {
+            let headers = Self::http_headers_unchecked(&packet);
+            let (_ver, status, _desc) = Self::http_headings_unchecked(&packet);
+            let transfer_encoding = headers.get("transfer-encoding");
+            let content_length = headers.get("content-length");
+            if content_length.is_some() {
+                let payload = Self::http_payload_unchecked(&packet, true);
+                self.missing = content_length.unwrap().parse().ok()?;
+                self.header = Some(ResponseHeader { status: status.to_string() });
+                self.chunked = false;
+                self.continue_processing(payload, false)
+            } else if transfer_encoding.unwrap_or(&"") == &"chunked" {
+                let payload = Self::http_payload_unchecked(&packet, true);
+                self.missing = 0;
+                self.header = Some(ResponseHeader { status: status.to_string() });
+                self.chunked = true;
+                self.continue_processing(payload, false)
+            } else {
+                self.missing = 0;
+                self.header = Some(ResponseHeader { status: status.to_string() });
+                self.chunked = false;
+                self.continue_processing("", false)
+            }
+        } else {
+            // Is nonsense, ignore
+            None
+        }
+    }
+
     /// If response was fragmented, continue processing until last packet is received
-    fn continue_processing(&mut self, data: &[u8]) -> Option<RESTMessage> {
-        if let Ok(str) = std::str::from_utf8(data) {
-            self.buffer.push_str(str);
-            self.missing = self.missing.saturating_sub(str.len());
+    fn continue_processing(&mut self, payload: &str, check: bool) -> Option<RESTMessage> {
+        if self.chunked {
+            if check && Self::has_http_headers(&payload) {
+                // Is a new response start again
+                self.start_processing(payload)
+            } else {
+                // Remove Chunk size
+                let payload = if self.missing == 0 {
+                    let (chunk_size, payload) = Self::split_chunk(&payload);
+                    self.missing = chunk_size.parse().ok()?;
+                    payload
+                } else {
+                    payload
+                };
+                self.buffer.push_str(payload);
+                self.missing = self.missing.saturating_sub(payload.len());
+
+                if self.missing == 0 {
+                    self.flush_chunked_buffer()
+                } else {
+                    None
+                }
+            }
+        } else {
+            // Might be segmented response
+            self.buffer.push_str(&payload);
+            self.missing = self.missing.saturating_sub(payload.len());
             if self.missing == 0 {
                 self.flush_buffer()
             } else {
                 None
             }
-        } else {
-            None
         }
     }
 
-    /// If this is a new response process it as if it was segmented
-    fn start_processing(&mut self, data: &[u8]) -> Option<RESTMessage> {
-        if data.len() == 0 {
-            None
+    fn flush_chunked_buffer(&mut self) -> Option<RESTMessage> {
+        if let Some(ref header) = self.header {
+            Some(RESTMessage::Response {
+                status: header.status.clone(),
+                payload: std::mem::replace(&mut self.buffer, Default::default()),
+            })
         } else {
-            let string = std::str::from_utf8(data).ok()?;
-            let data_iter: Vec<&str> = string.splitn(2, "\r\n\r\n").collect();
-            if data_iter.len() < 2 {
-                // Not valid HTTP header (should be <METADATA+HEADERS>\r\n\r\n<PAYLOAD>)
-                // Not valid HTTP request
-                return None;
-            } else {
-                // Process metadata + header
-                let meta = data_iter[0];
-                let meta_iter: Vec<&str> = meta.splitn(2, "\r\n").collect();
-                if meta_iter.len() < 2 {
-                    // Not valid HTTP header (should be <METADATA>\r\n<HEADERS>)
-                    return None;
-                } else {
-                    let info = meta_iter[0];
-                    let metadata: Vec<&str> = info.splitn(3, ' ').collect();
-                    if metadata.len() < 3 {
-                        // Not valid HTTP metadata (should be HTTP/<VERSION> <STATUS_NUMBER> <STATUS_DESCRIPTION>)
-                        return None;
-                    } else {
-                        let status = metadata[1].trim();
-                        let headers: HashMap<String, &str> = meta_iter[1]
-                            .split("\r\n")
-                            .filter(|x| x.contains(":"))
-                            .map(|x| {
-                                let vals: Vec<&str> = x.splitn(2, ":").collect();
-                                (vals[0].trim().to_lowercase(), vals[1].trim())
-                            })
-                            .collect();
-                        self.missing = headers.get("content-length").unwrap_or(&"0").parse().ok()?;
-                        self.header = Some(ResponseHeader { status: status.to_string() });
-                        self.continue_processing(data_iter[1].as_bytes())
-                    }
-                }
-            }
+            self.clean_buffer();
+            None
         }
     }
 
@@ -300,6 +317,108 @@ impl ResponseParser {
     fn clean_buffer(&mut self) {
         self.buffer.clear()
     }
+
+    /// Check if received packet contains HTTP headers (even if no real headers provided)
+    fn has_http_headers(packet: &str) -> bool {
+        if packet.len() > 0 {
+            let first_line = packet.lines().next();
+            if let Some(first_line) = first_line {
+                first_line.contains("HTTP/") || first_line.contains("http/")
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Extract HTTP headers from packet, Header Key is always in lowercase.
+    /// This can return empty headers even if heading is present.
+    fn http_headers(packet: &str) -> HashMap<String, &str> {
+        if Self::has_http_headers(&packet) {
+            Self::http_headers_unchecked(packet)
+        } else {
+            Default::default()
+        }
+    }
+
+    /// Extract HTTP headers, without checking if they are actually present.
+    /// If called on packet without HTTP heading, this might return garbage
+    fn http_headers_unchecked(packet: &str) -> HashMap<String, &str> {
+        let heading: &str = packet.splitn(2, "\r\n\r\n").next().unwrap();
+        heading.lines().skip(1).filter_map(|x| {
+            let mut parts = x.splitn(2, ":");
+            let key = parts.next();
+            let value = parts.next();
+            if key.is_none() || value.is_none() {
+                None
+            } else {
+                Some((key.unwrap().trim().to_lowercase(), value.unwrap().trim()))
+            }
+        }).collect()
+    }
+    fn http_headings(packet: &str) -> (&str, &str, &str) {
+        if Self::has_http_headers(&packet) {
+            Self::http_headings_unchecked(packet)
+        } else {
+            ("", "", "")
+        }
+    }
+
+    fn http_headings_unchecked(packet: &str) -> (&str, &str, &str) {
+        let first_line = packet.lines().next();
+        if let Some(first_line) = first_line {
+            let mut parts = first_line.trim().splitn(3, " ");
+            (parts.next().unwrap_or(""), parts.next().unwrap_or(""), parts.next().unwrap_or(""))
+        } else {
+            ("", "", "")
+        }
+    }
+
+
+    /// Remove meta information from packet, Headers if present are considered as meta
+    /// and so are Chunk sizes. If both are present, it is needed to call this method twice.
+    fn remove_meta(chunk: &str) -> &str {
+        let mut value = chunk.splitn(2, "\r\n\r\n");
+        let first = value.next();
+        let second = value.next();
+        if first.is_none() || second.is_none() {
+            return "";
+        } else {
+            second.unwrap().trim()
+        }
+    }
+
+    fn split_chunk(chunk: &str) -> (&str, &str) {
+        let mut value = chunk.splitn(2, "\r\n");
+        let chunk_size = value.next();
+        let payload = value.next();
+        if chunk_size.is_none() || payload.is_none() {
+            ("0", "")
+        } else {
+            (chunk_size.unwrap().trim(), payload.unwrap().trim())
+        }
+    }
+
+    fn http_chunk_size_unchecked(packet: &str, has_headers: bool) -> &str {
+        if has_headers {
+            Self::remove_meta(packet)
+        } else {
+            packet
+        }
+    }
+
+    /// Get http payload, without checking if settings are actually correct, might return garbage.
+    fn http_payload_unchecked(packet: &str, has_headers: bool) -> &str {
+        // Remove headings
+        let packet = if has_headers {
+            Self::remove_meta(packet)
+        } else {
+            packet
+        };
+
+        packet
+    }
 }
 
 
@@ -308,11 +427,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_request() {
-        let http = "474554202f636861696e732f6d61696e2f626c6f636b732f6865616420485454502f312e310d0a486f73743a2070726f642e74657a656467652e636f6d3a31383733320d0a557365722d4167656e743a206375726c2f372e36352e330d0a4163636570743a202a2f2a0d0a0d0a".to_string();
-        let bytes = hex::decode(&http).unwrap();
+    fn parse_empty_request() {
+        let bytes: &[u8] = b"GET /chains/main/blocks/head HTTP/1.1\r\nHost: localhost:18732\r\nUser-Agent: curl/7.65.3\r\nAccept: */*\r\n\r\n";
         let mut parser = RequestParser::new();
-        let msg = parser.process_message(&bytes);
+        let msg = parser.process_message(bytes);
         assert!(msg.is_some());
         let msg = msg.unwrap();
         match msg {
@@ -326,17 +444,124 @@ mod tests {
     }
 
     #[test]
-    fn parse_response() {
-        let http = "485454502f312e3120323030204f4b0d0a636f6e74656e742d747970653a206170706c69636174696f6e2f6a736f6e0d0a6163636573732d636f6e74726f6c2d616c6c6f772d6f726967696e3a202a0d0a636f6e74656e742d6c656e6774683a2034320d0a646174653a205475652c2032382041707220323032302030383a32353a353120474d540d0a0d0a223266396632646565343736313333396234366666396634313335616231356136383332636335316522".to_string();
-        let bytes = hex::decode(&http).unwrap();
+    fn parse_non_empty_request() {
+        let bytes: &[u8] = b"GET /chains/main/blocks/head HTTP/1.1\r\nHost: localhost:18732\r\ncontent-length: 13\r\nUser-Agent: curl/7.65.3\r\nAccept: */*\r\n\r\n\"Hello World\"";
+        let mut parser = RequestParser::new();
+        let msg = parser.process_message(bytes);
+        assert!(msg.is_some());
+        let msg = msg.unwrap();
+        match msg {
+            RESTMessage::Request { method, path, payload } => {
+                assert_eq!(method, "GET");
+                assert_eq!(path, "/chains/main/blocks/head");
+                assert_eq!(payload, "\"Hello World\"");
+            }
+            RESTMessage::Response { .. } => assert!(false, "Expected Request message, got response.")
+        }
+    }
+
+    #[test]
+    fn parse_empty_response() {
+        let bytes: &[u8] = b"HTTP/1.1 404 Not Found\r\n\r\n\r\n";
         let mut parser = ResponseParser::new();
-        let msg = parser.process_message(&bytes);
+        let msg = parser.process_message(bytes);
+        assert!(msg.is_some());
+        let msg = msg.unwrap();
+        match msg {
+            RESTMessage::Response { status, payload } => {
+                assert_eq!(status, "404");
+                assert_eq!(payload, "");
+            }
+            RESTMessage::Request { .. } => assert!(false, "Expected Response message, got Request.")
+        }
+    }
+
+    #[test]
+    fn parse_non_empty_response() {
+        let bytes: &[u8] = b"HTTP/1.1 404 Not Found\r\ncontent-length: 9\r\n\r\n\"not found\"";
+        let mut parser = ResponseParser::new();
+        let msg = parser.process_message(bytes);
+        assert!(msg.is_some());
+        let msg = msg.unwrap();
+        match msg {
+            RESTMessage::Response { status, payload } => {
+                assert_eq!(status, "404");
+                assert_eq!(payload, "\"not found\"");
+            }
+            RESTMessage::Request { .. } => assert!(false, "Expected Response message, got Request.")
+        }
+    }
+
+    #[test]
+    fn parse_single_chunked_response() {
+        let bytes: &[u8] = b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ntransfer-encoding: chunked\r\n\r\n63\r\n{\"block\":\"BLockGenesisGenesisGenesisGenesisGenesisf79b5d1CoW2\",\"timestamp\":\"2018-06-30T16:07:32Z\"}\n\r\n";
+        let mut parser = ResponseParser::new();
+        let msg = parser.process_message(bytes);
         assert!(msg.is_some());
         let msg = msg.unwrap();
         match msg {
             RESTMessage::Response { status, payload } => {
                 assert_eq!(status, "200");
-                assert_eq!(payload, "\"2f9f2dee4761339b46ff9f4135ab15a6832cc51e\"");
+                assert_eq!(payload, "{\"block\":\"BLockGenesisGenesisGenesisGenesisGenesisf79b5d1CoW2\",\"timestamp\":\"2018-06-30T16:07:32Z\"}");
+            }
+            RESTMessage::Request { .. } => assert!(false, "Expected Response message, got Request.")
+        }
+    }
+
+    #[test]
+    fn parse_chunked_response() {
+        let bytes: &[u8] = b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n13\r\n\"Hello World\"";
+        let mut parser = ResponseParser::new();
+        let msg = parser.process_message(bytes);
+        assert!(msg.is_some());
+        let msg = msg.unwrap();
+        match msg {
+            RESTMessage::Response { status, payload } => {
+                assert_eq!(status, "200");
+                assert_eq!(payload, "\"Hello World\"");
+            }
+            RESTMessage::Request { .. } => assert!(false, "Expected Response message, got Request.")
+        }
+        let bytes: &[u8] = b"20\r\n\r\n\"Hello World, Again!\"";
+        let msg = parser.process_message(bytes);
+        assert!(msg.is_some());
+        let msg = msg.unwrap();
+        match msg {
+            RESTMessage::Response { status, payload } => {
+                assert_eq!(status, "200");
+                assert_eq!(payload, "\"Hello World, Again!\"");
+            }
+            RESTMessage::Request { .. } => assert!(false, "Expected Response message, got Request.")
+        }
+    }
+
+    #[test]
+    fn parse_chunked_segmented_response() {
+        let bytes: &[u8] = b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n13\r\n\"Hello World\"";
+        let mut parser = ResponseParser::new();
+        let msg = parser.process_message(bytes);
+        assert!(msg.is_some());
+        let msg = msg.unwrap();
+        match msg {
+            RESTMessage::Response { status, payload } => {
+                assert_eq!(status, "200");
+                assert_eq!(payload, "\"Hello World\"");
+            }
+            RESTMessage::Request { .. } => assert!(false, "Expected Response message, got Request.")
+        }
+        // "Hello World, Again!"
+        let bytes: &[u8] = b"21\r\n\r\n\"Hello World";
+        let msg = parser.process_message(bytes);
+        assert!(msg.is_none());
+
+        let bytes: &[u8] = b", Again!\"";
+        let msg = parser.process_message(bytes);
+        assert!(msg.is_some());
+        let msg = msg.unwrap();
+        match msg {
+            RESTMessage::Response { status, payload } => {
+                assert_eq!(status, "200");
+                assert_eq!(payload, "\"Hello World, Again!\"");
             }
             RESTMessage::Request { .. } => assert!(false, "Expected Response message, got Request.")
         }
