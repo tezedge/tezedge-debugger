@@ -48,7 +48,7 @@ fi
 
 docker pull simplestakingcom/tezedge-tezos:latest
 docker pull simplestakingcom/tezedge-debuger:latest
-docker pull simplestakingcom/tezedge-node-explorer
+docker pull simplestakingcom/tezedge-explorer-ocaml
 
 # Check identity
 if [ ! -f "$IDENTITY_FILE" ]; then
@@ -87,6 +87,6 @@ unmount_ns "$NODE_ID"
 unmount_ns "$PROXY_ID"
 # 4. start node in existing container
 #docker exec -it "$NODE_ID" /bin/bash
-EXPLORER_ID=$(docker run -d -p "8080:8080" simplestakingcom/tezedge-node-explorer:latest)
+EXPLORER_ID=$(docker run -d -p "8080:8080" simplestakingcom/tezedge-explorer-ocaml:latest)
 echo "Running explorer on port 8080 in container $EXPLORER_ID"
 docker exec "$NODE_ID" ./tezos-node run --rpc-addr 0.0.0.0:8732
