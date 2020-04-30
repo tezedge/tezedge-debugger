@@ -1,5 +1,5 @@
 [package]
-name = "tezedge_proxy"
+name = "tezedge_debugger"
 version = "0.1.0"
 authors = ["Martin Lacko <martin.lacko@simplestaking.com>"]
 edition = "2018"

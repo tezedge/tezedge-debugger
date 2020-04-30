@@ -131,7 +131,7 @@ impl From<RESTMessage> for MappedRESTMessage {
     fn from(value: RESTMessage) -> Self {
         match value {
             RESTMessage::Response { status, payload } => Self::Response { status, payload },
-            RESTMessage::Request { method, path, payload } => Self::Request { method, path, payload }
+            RESTMessage::Request { method, path, payload } => Self::Request { method, path, payload },
         }
     }
 }
