@@ -126,44 +126,24 @@ impl RequestParser {
     }
 
     /// If this is a new request process it as if it was segmented
-    fn start_processing(&mut self, string: &str) -> Option<RESTMessage> {
-        let data_iter: Vec<&str> = string.splitn(2, "\r\n\r\n").collect();
-        if data_iter.len() < 2 {
-            // Not valid HTTP header (should be <METADATA+HEADERS>\r\n\r\n<PAYLOAD>)
-            // Not valid HTTP request
-            return None;
-        } else {
-            // Process metadata + header
-            let meta = data_iter[0];
-            let meta_iter: Vec<&str> = meta.splitn(2, "\r\n").collect();
-            if meta_iter.len() < 2 {
-                // Not valid HTTP header (should be <METADATA>\r\n<HEADERS>)
-                return None;
+    fn start_processing(&mut self, packet: &str) -> Option<RESTMessage> {
+        if http::has_http_headers(&packet) {
+            let headers = http::http_headers_unchecked(&packet);
+            let (method, path, _ver) = http::http_headings_unchecked(&packet);
+            let content_length = headers.get("content-length");
+            self.missing = if let Some(data) = content_length {
+                data.parse().ok()?
             } else {
-                let info = meta_iter[0];
-                let metadata: Vec<&str> = info.splitn(3, ' ').collect();
-                if metadata.len() < 3 {
-                    // Not valid HTTP metadata (should be <METHOD> <URI> HTTP<VERSION>)
-                    return None;
-                } else {
-                    let method = metadata[0].to_string();
-                    let path = metadata[1].to_string();
-                    let headers: HashMap<String, &str> = meta_iter[1]
-                        .split("\r\n")
-                        .filter(|x| x.contains(":"))
-                        .map(|x| {
-                            let vals: Vec<&str> = x.splitn(2, ":").collect();
-                            (vals[0].trim().to_lowercase(), vals[1].trim())
-                        })
-                        .collect();
-                    self.missing = headers.get("content-length").unwrap_or(&"0").parse().ok()?;
-                    self.header = Some(RequestHeader {
-                        method,
-                        path,
-                    });
-                    self.continue_processing(data_iter[1])
-                }
-            }
+                0
+            };
+            self.header = Some(RequestHeader {
+                method: method.to_string(),
+                path: path.to_string(),
+            });
+            self.continue_processing(http::http_payload_unchecked(&packet, true))
+        } else {
+            // Is nonsense, ignore
+            None
         }
     }
 
@@ -223,19 +203,19 @@ impl ResponseParser {
 
     /// If this is a new response process it as if it was segmented
     fn start_processing(&mut self, packet: &str) -> Option<RESTMessage> {
-        if Self::has_http_headers(&packet) {
-            let headers = Self::http_headers_unchecked(&packet);
-            let (_ver, status, _desc) = Self::http_headings_unchecked(&packet);
+        if http::has_http_headers(&packet) {
+            let headers = http::http_headers_unchecked(&packet);
+            let (_ver, status, _desc) = http::http_headings_unchecked(&packet);
             let transfer_encoding = headers.get("transfer-encoding");
             let content_length = headers.get("content-length");
             if content_length.is_some() {
-                let payload = Self::http_payload_unchecked(&packet, true);
+                let payload = http::http_payload_unchecked(&packet, true);
                 self.missing = content_length.unwrap().parse().ok()?;
                 self.header = Some(ResponseHeader { status: status.to_string() });
                 self.chunked = false;
                 self.continue_processing(payload, false)
             } else if transfer_encoding.unwrap_or(&"") == &"chunked" {
-                let payload = Self::http_payload_unchecked(&packet, true);
+                let payload = http::http_payload_unchecked(&packet, true);
                 self.missing = 0;
                 self.header = Some(ResponseHeader { status: status.to_string() });
                 self.chunked = true;
@@ -255,13 +235,13 @@ impl ResponseParser {
     /// If response was fragmented, continue processing until last packet is received
     fn continue_processing(&mut self, payload: &str, check: bool) -> Option<RESTMessage> {
         if self.chunked {
-            if check && Self::has_http_headers(&payload) {
+            if check && http::has_http_headers(&payload) {
                 // Is a new response start again
                 self.start_processing(payload)
             } else {
                 // Remove Chunk size
                 let payload = if self.missing == 0 {
-                    let (chunk_size, payload) = Self::split_chunk(&payload);
+                    let (chunk_size, payload) = http::split_chunk(&payload);
                     self.missing = chunk_size.parse().ok()?;
                     payload
                 } else {
@@ -317,9 +297,13 @@ impl ResponseParser {
     fn clean_buffer(&mut self) {
         self.buffer.clear()
     }
+}
+
+mod http {
+    use std::collections::HashMap;
 
     /// Check if received packet contains HTTP headers (even if no real headers provided)
-    fn has_http_headers(packet: &str) -> bool {
+    pub fn has_http_headers(packet: &str) -> bool {
         if packet.len() > 0 {
             let first_line = packet.lines().next();
             if let Some(first_line) = first_line {
@@ -334,9 +318,9 @@ impl ResponseParser {
 
     /// Extract HTTP headers from packet, Header Key is always in lowercase.
     /// This can return empty headers even if heading is present.
-    fn http_headers(packet: &str) -> HashMap<String, &str> {
-        if Self::has_http_headers(&packet) {
-            Self::http_headers_unchecked(packet)
+    pub fn http_headers(packet: &str) -> HashMap<String, &str> {
+        if has_http_headers(&packet) {
+            http_headers_unchecked(packet)
         } else {
             Default::default()
         }
@@ -344,7 +328,7 @@ impl ResponseParser {
 
     /// Extract HTTP headers, without checking if they are actually present.
     /// If called on packet without HTTP heading, this might return garbage
-    fn http_headers_unchecked(packet: &str) -> HashMap<String, &str> {
+    pub fn http_headers_unchecked(packet: &str) -> HashMap<String, &str> {
         let heading: &str = packet.splitn(2, "\r\n\r\n").next().unwrap();
         heading.lines().skip(1).filter_map(|x| {
             let mut parts = x.splitn(2, ":");
@@ -357,15 +341,16 @@ impl ResponseParser {
             }
         }).collect()
     }
-    fn http_headings(packet: &str) -> (&str, &str, &str) {
-        if Self::has_http_headers(&packet) {
-            Self::http_headings_unchecked(packet)
+
+    pub fn http_headings(packet: &str) -> (&str, &str, &str) {
+        if has_http_headers(&packet) {
+            http_headings_unchecked(packet)
         } else {
             ("", "", "")
         }
     }
 
-    fn http_headings_unchecked(packet: &str) -> (&str, &str, &str) {
+    pub fn http_headings_unchecked(packet: &str) -> (&str, &str, &str) {
         let first_line = packet.lines().next();
         if let Some(first_line) = first_line {
             let mut parts = first_line.trim().splitn(3, " ");
@@ -378,7 +363,7 @@ impl ResponseParser {
 
     /// Remove meta information from packet, Headers if present are considered as meta
     /// and so are Chunk sizes. If both are present, it is needed to call this method twice.
-    fn remove_meta(chunk: &str) -> &str {
+    pub fn remove_meta(chunk: &str) -> &str {
         let mut value = chunk.splitn(2, "\r\n\r\n");
         let first = value.next();
         let second = value.next();
@@ -389,7 +374,7 @@ impl ResponseParser {
         }
     }
 
-    fn split_chunk(chunk: &str) -> (&str, &str) {
+    pub fn split_chunk(chunk: &str) -> (&str, &str) {
         let mut value = chunk.splitn(2, "\r\n");
         let chunk_size = value.next();
         let payload = value.next();
@@ -400,19 +385,19 @@ impl ResponseParser {
         }
     }
 
-    fn http_chunk_size_unchecked(packet: &str, has_headers: bool) -> &str {
+    pub fn http_chunk_size_unchecked(packet: &str, has_headers: bool) -> &str {
         if has_headers {
-            Self::remove_meta(packet)
+            remove_meta(packet)
         } else {
             packet
         }
     }
 
     /// Get http payload, without checking if settings are actually correct, might return garbage.
-    fn http_payload_unchecked(packet: &str, has_headers: bool) -> &str {
+    pub fn http_payload_unchecked(packet: &str, has_headers: bool) -> &str {
         // Remove headings
         let packet = if has_headers {
-            Self::remove_meta(packet)
+            remove_meta(packet)
         } else {
             packet
         };
