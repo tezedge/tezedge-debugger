@@ -141,8 +141,6 @@ impl RpcMessageSecondaryIndex {
             ret.push(index?)
         }
 
-        println!("idxs: {:?}", key);
-
         Ok(ret)
     }
 }

@@ -8,13 +8,16 @@ use std::{
         atomic::{Ordering, AtomicU64}, Arc,
     }, net::SocketAddr,
 };
-use crate::storage::{rpc_message::RpcMessage, StoreMessage, encode_address};
+use crate::storage::{rpc_message::RpcMessage, StoreMessage, encode_address, default_write_options};
+use storage::persistent::DBError;
 
 
 pub type P2PMessageStorageKV = dyn KeyValueStoreWithSchema<P2PMessageStorage> + Sync + Send;
 
 #[derive(Clone)]
 pub struct P2PMessageStorage {
+    base_index: Arc<AtomicU64>,
+    raw: Arc<DB>,
     kv: Arc<P2PMessageStorageKV>,
     host_index: P2PMessageSecondaryIndex,
     count: Arc<AtomicU64>,
@@ -24,7 +27,9 @@ pub struct P2PMessageStorage {
 impl P2PMessageStorage {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
+            base_index: Arc::new(AtomicU64::new(std::u64::MAX)),
             kv: kv.clone(),
+            raw: kv.clone(),
             host_index: P2PMessageSecondaryIndex::new(kv),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(std::u64::MAX)),
@@ -51,6 +56,10 @@ impl P2PMessageStorage {
         self.seq.load(Ordering::SeqCst)
     }
 
+    fn base_index(&self) -> u64 {
+        self.base_index.load(Ordering::SeqCst)
+    }
+
     pub fn store_message(&mut self, msg: &StoreMessage) -> Result<(), StorageError> {
         let index = self.index_next();
         let remote_addr = msg.remote_addr();
@@ -58,6 +67,21 @@ impl P2PMessageStorage {
         self.host_index.put(remote_addr, index)?;
         self.kv.put(&index, &msg)?;
         Ok(self.inc_count())
+    }
+
+    pub fn delete_message(&mut self, index: u64) -> Result<(), StorageError> {
+        Ok(self.delete_primary(index)?)
+    }
+
+    pub fn reduce_db(&mut self) -> Result<(), StorageError> {
+        let base = self.base_index();
+        let index = self.index();
+        let count = (base - index) / 2;
+        let start = base - count;
+        for index in start..=base {
+            self.delete_primary(index);
+        }
+        Ok(())
     }
 
     pub fn get_range(&self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, StorageError> {
@@ -96,6 +120,15 @@ impl P2PMessageStorage {
             }
         }
         Ok(ret)
+    }
+
+    fn delete_primary(&mut self, index: u64) -> Result<(), DBError> {
+        let key = index.encode()?;
+        let cf = self.raw.cf_handle(Self::name())
+            .ok_or(DBError::MissingColumnFamily { name: Self::name() })?;
+
+        self.raw.delete_cf_opt(cf, &key, &default_write_options())
+            .map_err(DBError::from)
     }
 }
 

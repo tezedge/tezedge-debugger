@@ -10,10 +10,11 @@ pub use storage_message::*;
 pub use p2p_storage::*;
 pub use rpc_storage::*;
 
-use rocksdb::DB;
+use rocksdb::{DB, WriteOptions};
 use failure::Error;
 use lazy_static::lazy_static;
 use std::{
+    path::Path,
     sync::{Arc, atomic::AtomicU64},
     time::{SystemTime, UNIX_EPOCH},
     net::{SocketAddr, IpAddr},
@@ -25,6 +26,7 @@ pub struct MessageStore {
     p2p_db: P2PMessageStorage,
     rpc_db: RpcMessageStorage,
     raw_db: Arc<DB>,
+    max_db_size: Option<u64>,
 }
 
 impl MessageStore {
@@ -33,12 +35,14 @@ impl MessageStore {
             p2p_db: P2PMessageStorage::new(db.clone()),
             rpc_db: RpcMessageStorage::new(db.clone()),
             raw_db: db,
+            max_db_size: None,
         }
     }
 
     pub fn store_p2p_message(&mut self, data: &StoreMessage) -> Result<(), Error> {
-        self.p2p_db.store_message(&data)
-            .map_err(|e| e.into())
+        let ret = self.p2p_db.store_message(&data)
+            .map_err(|e| e.into());
+        ret
     }
 
     pub fn store_rpc_message(&mut self, data: &StoreMessage) -> Result<(), Error> {
@@ -61,6 +65,41 @@ impl MessageStore {
     pub fn get_rpc_host_range(&mut self, offset: u64, count: u64, host: IpAddr) -> Result<Vec<RpcMessage>, Error> {
         Ok(self.rpc_db.get_host_range(offset, count, host)?)
     }
+
+    pub(crate) fn database_path(&self) -> &Path {
+        self.raw_db.path()
+    }
+
+    pub(crate) fn database_size(&self) -> std::io::Result<u64> {
+        dir_size(self.database_path())
+    }
+
+    pub(crate) fn reduce_db(&mut self) -> Result<(), Error> {
+        // 1. Purge P2P storage
+        self.p2p_db.reduce_db()?;
+        Ok(())
+    }
+}
+
+pub(crate) fn default_write_options() -> WriteOptions {
+    let mut opts = WriteOptions::default();
+    opts.set_sync(false);
+    opts
+}
+
+pub(crate) fn dir_size<P: AsRef<Path>>(path: P) -> std::io::Result<u64> {
+    fn dir_size(mut dir: std::fs::ReadDir) -> std::io::Result<u64> {
+        dir.try_fold(0, |acc, file| {
+            let file = file?;
+            let size = match file.metadata()? {
+                data if data.is_dir() => dir_size(std::fs::read_dir(file.path())?)?,
+                data => data.len(),
+            };
+            Ok(acc + size)
+        })
+    }
+
+    dir_size(std::fs::read_dir(path)?)
 }
 
 pub fn get_ts() -> u128 {
@@ -94,8 +133,10 @@ pub mod tests {
     use super::*;
     use std::path::Path;
     use std::sync::Arc;
-    use crate::storage::storage_message::RESTMessage;
+    use std::ops::Deref;
+    use std::ops::DerefMut;
     use storage::persistent::{open_kv, KeyValueSchema};
+    use crate::storage::storage_message::RESTMessage;
     use crate::storage::rpc_message::MappedRESTMessage;
 
     macro_rules! function {
@@ -119,6 +160,20 @@ pub mod tests {
         }
     }
 
+    impl Deref for Store {
+        type Target = MessageStore;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl DerefMut for Store {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+
     fn create_test_db<P: AsRef<Path>>(path: P) -> Store {
         let schemas = vec![
             crate::storage::RpcMessageStorage::descriptor(),
@@ -126,18 +181,19 @@ pub mod tests {
             crate::storage::RpcMessageSecondaryIndex::descriptor(),
             crate::storage::P2PMessageSecondaryIndex::descriptor(),
         ];
-        let rocksdb = Arc::new(open_kv(path, schemas).expect("failed to open database"));
-        Store(MessageStore::new(rocksdb))
+        Store(MessageStore::new(Arc::new(
+            open_kv(path, schemas)
+                .expect("failed to open database")
+        )))
     }
 
     #[test]
-    fn test_create_db() {
-        use std::path::Path;
+    fn clean_test_db() {
         let path = function!();
-        {
-            let _ = create_test_db(path);
-        }
-        assert!(!Path::new(path).exists())
+        let db = create_test_db(path);
+        assert!(Path::new(path).exists());
+        drop(db);
+        assert!(!Path::new(path).exists());
     }
 
     #[test]
@@ -145,7 +201,7 @@ pub mod tests {
         let mut db = create_test_db(function!());
         let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
         for x in 0usize..10 {
-            let ret = db.0.store_rpc_message(
+            let ret = db.store_rpc_message(
                 &StoreMessage::new_rest(sock, true, RESTMessage::Response {
                     status: "200".to_string(),
                     payload: format!("{}", x),
@@ -155,7 +211,7 @@ pub mod tests {
                 assert!(false, "failed to store message: {}", ret.unwrap_err())
             }
         }
-        let msgs = db.0.get_rpc_range(0, 10).unwrap();
+        let msgs = db.get_rpc_range(0, 10).unwrap();
         assert_eq!(msgs.len(), 10);
         for (msg, idx) in msgs.iter().zip(9..=0) {
             match msg {
@@ -177,7 +233,7 @@ pub mod tests {
         let mut db = create_test_db(function!());
         let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
         for x in 0usize..10 {
-            let ret = db.0.store_rpc_message(
+            let ret = db.store_rpc_message(
                 &StoreMessage::new_rest(sock, true, RESTMessage::Response {
                     status: "200".to_string(),
                     payload: format!("{}", x),
@@ -186,7 +242,7 @@ pub mod tests {
                 assert!(false, "failed to store message: {}", ret.unwrap_err())
             }
         }
-        let msgs = db.0.get_rpc_host_range(5, 10, "0.0.0.0".parse().unwrap()).unwrap();
+        let msgs = db.get_rpc_host_range(5, 10, "0.0.0.0".parse().unwrap()).unwrap();
         assert_eq!(msgs.len(), 5);
         for (msg, idx) in msgs.iter().zip(9..=5) {
             match msg {
