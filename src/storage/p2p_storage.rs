@@ -8,8 +8,7 @@ use std::{
         atomic::{Ordering, AtomicU64}, Arc,
     }, net::SocketAddr,
 };
-use crate::storage::{rpc_message::RpcMessage, StoreMessage, encode_address, default_write_options};
-use storage::persistent::DBError;
+use crate::storage::{rpc_message::RpcMessage, StoreMessage, encode_address};
 
 
 pub type P2PMessageStorageKV = dyn KeyValueStoreWithSchema<P2PMessageStorage> + Sync + Send;
@@ -70,7 +69,11 @@ impl P2PMessageStorage {
     }
 
     pub fn delete_message(&mut self, index: u64) -> Result<(), StorageError> {
-        Ok(self.delete_primary(index)?)
+        if let Ok(Some(msg)) = self.kv.get(&index) {
+            let _ = self.kv.delete(&index);
+            let _ = self.host_index.delete(msg.remote_addr(), index);
+        }
+        Ok(())
     }
 
     pub fn reduce_db(&mut self) -> Result<(), StorageError> {
@@ -79,7 +82,7 @@ impl P2PMessageStorage {
         let count = (base - index) / 2;
         let start = base - count;
         for index in start..=base {
-            self.delete_primary(index);
+            let _ = self.delete_message(index);
         }
         Ok(())
     }
@@ -121,15 +124,6 @@ impl P2PMessageStorage {
         }
         Ok(ret)
     }
-
-    fn delete_primary(&mut self, index: u64) -> Result<(), DBError> {
-        let key = index.encode()?;
-        let cf = self.raw.cf_handle(Self::name())
-            .ok_or(DBError::MissingColumnFamily { name: Self::name() })?;
-
-        self.raw.delete_cf_opt(cf, &key, &default_write_options())
-            .map_err(DBError::from)
-    }
 }
 
 impl KeyValueSchema for P2PMessageStorage {
@@ -155,6 +149,11 @@ impl P2PMessageSecondaryIndex {
     pub fn put(&mut self, sock_addr: SocketAddr, index: u64) -> Result<(), StorageError> {
         let key = P2PMessageSecondaryKey::new(sock_addr, index);
         Ok(self.kv.put(&key, &index)?)
+    }
+
+    pub fn delete(&mut self, sock_addr: SocketAddr, index: u64) -> Result<(), StorageError> {
+        let key = P2PMessageSecondaryKey::new(sock_addr, index);
+        Ok(self.kv.delete(&key)?)
     }
 
     pub fn get(&self, sock_addr: SocketAddr, index: u64) -> Result<Option<u64>, StorageError> {

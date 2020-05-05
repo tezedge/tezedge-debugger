@@ -75,7 +75,6 @@ impl MessageStore {
     }
 
     pub(crate) fn reduce_db(&mut self) -> Result<(), Error> {
-        // 1. Purge P2P storage
         self.p2p_db.reduce_db()?;
         Ok(())
     }
