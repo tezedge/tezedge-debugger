@@ -58,7 +58,6 @@ impl BincodeEncoded for RpcMessage {}
 
 impl RpcMessage {
     pub fn from_store(msg: &StoreMessage, id: u64) -> Self {
-        let id = Self::fix_id(id);
         match msg {
             StoreMessage::TcpMessage { remote_addr, incoming, packet, timestamp } => {
                 RpcMessage::Packet {
@@ -110,6 +109,16 @@ impl RpcMessage {
 
     fn fix_id(id: u64) -> u64 {
         std::u64::MAX.saturating_sub(id)
+    }
+
+    pub fn id(&self) -> u64 {
+        match self {
+            Self::Packet { id, .. } => id.clone(),
+            Self::Metadata { id, .. } => id.clone(),
+            Self::ConnectionMessage { id, .. } => id.clone(),
+            Self::P2pMessage { id, .. } => id.clone(),
+            Self::RestMessage { id, .. } => id.clone(),
+        }
     }
 }
 
