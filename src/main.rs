@@ -6,9 +6,11 @@ mod network;
 mod storage;
 
 use std::{
+    net::SocketAddr,
     sync::{Mutex, Arc},
 };
 
+use serde::{Serialize, Deserialize};
 use failure::Fail;
 use main_error::MainError;
 use riker::actors::*;
@@ -22,6 +24,8 @@ use crate::{
     network::prelude::*,
     configuration::AppConfig,
 };
+use crate::storage::secondary_indexes::Type;
+use std::net::IpAddr;
 
 #[derive(Debug, Fail)]
 enum AppError {
@@ -33,6 +37,19 @@ enum AppError {
     IOError(std::io::Error),
     #[fail(display = "received invalid packet")]
     InvalidPacket,
+}
+
+#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct SizeQuery {
+    offset_id: Option<u64>,
+    count: Option<usize>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct TagsQuery {
+    tags: String,
+    offset_id: Option<u64>,
+    count: Option<usize>,
 }
 
 #[tokio::main]
@@ -94,15 +111,12 @@ async fn main() -> Result<(), MainError> {
 
     // -- Initialize server
     let p2p_raw = warp::path!("p2p" / u64 / u64)
-        .map(move |offset, count| {
-            match cloner().get_p2p_range(offset, count) {
-                Ok(value) => {
-                    serde_json::to_string(&value)
-                        .expect("failed to serialize the array")
-                }
-                Err(e) => serde_json::to_string(
-                    &format!("Failed to read database: {}", e)
-                ).unwrap(),
+        .map(move |offset: u64, count: u64| {
+            match cloner().get_p2p_reverse_range(Some(offset), count as usize) {
+                Ok(value) => serde_json::to_string(&value)
+                    .expect("failed to serialize response"),
+                Err(e) => serde_json::to_string(&format!("Database error: {}", e))
+                    .expect("failed to serialize response")
             }
         }).map(|value| {
         Response::builder()
@@ -116,28 +130,25 @@ async fn main() -> Result<(), MainError> {
         tmp.clone()
     };
 
-    let p2p_host = warp::path!("p2p" / u64 / u64 / String)
-        .map(move |offset, count, host: String| {
-            match host.parse() {
-                Ok(addr) => match cloner().get_p2p_host_range(offset, count, addr) {
-                    Ok(value) => {
-                        serde_json::to_string(&value)
-                            .expect("failed to serialize the array")
-                    }
-                    Err(e) => serde_json::to_string(
-                        &format!("Failed to read database: {}", e),
-                    ).unwrap()
-                },
+    let p2p_host = warp::path!("p2p" / u64 / u64 / SocketAddr)
+        .map(move |offset: u64, count: u64, addr: SocketAddr| {
+            match cloner().get_p2p_host_range(offset, count, addr) {
+                Ok(value) => {
+                    serde_json::to_string(&value)
+                        .expect("failed to serialize the array")
+                }
                 Err(e) => serde_json::to_string(
-                    &format!("Invalid socket address: {}", e),
-                ).unwrap(),
+                    &format!("Failed to read database: {}", e),
+                ).unwrap()
+                ,
             }
-        }).map(|value| {
-        Response::builder()
-            .header("Content-Type", "application/json")
-            .header("Access-Control-Allow-Origin", "*")
-            .body(value)
-    });
+        })
+        .map(|value| {
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(value)
+        });
 
     let tmp = db.clone();
     let cloner = move || {
@@ -145,7 +156,7 @@ async fn main() -> Result<(), MainError> {
     };
 
     let rpc_raw = warp::path!("rpc" / u64 / u64)
-        .map(move |offset, count| {
+        .map(move |offset: u64, count: u64| {
             match cloner().get_rpc_range(offset, count) {
                 Ok(value) => {
                     serde_json::to_string(&value)
@@ -167,30 +178,110 @@ async fn main() -> Result<(), MainError> {
         tmp.clone()
     };
 
-    let rpc_host = warp::path!("rpc" / u64 / u64 / String)
-        .map(move |offset, count, host: String| {
-            match host.parse() {
-                Ok(addr) => match cloner().get_rpc_host_range(offset, count, addr) {
-                    Ok(value) => {
-                        serde_json::to_string(&value)
-                            .expect("failed to serialize the array")
-                    }
-                    Err(e) => serde_json::to_string(
-                        &format!("Failed to read database: {}", e),
-                    ).unwrap()
-                },
+    let rpc_host = warp::path!("rpc" / u64 / u64 / IpAddr)
+        .map(move |offset: u64, count: u64, addr: IpAddr| {
+            match cloner().get_rpc_host_range(offset, count, addr) {
+                Ok(value) => {
+                    serde_json::to_string(&value)
+                        .expect("failed to serialize the array")
+                }
                 Err(e) => serde_json::to_string(
-                    &format!("Invalid socket address: {}", e),
-                ).unwrap(),
+                    &format!("Failed to read database: {}", e),
+                ).unwrap()
             }
-        }).map(|value| {
-        Response::builder()
-            .header("Content-Type", "application/json")
-            .header("Access-Control-Allow-Origin", "*")
-            .body(value)
-    });
+        })
+        .map(|value| {
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(value)
+        });
 
-    let router = warp::get().and(p2p_raw.or(p2p_host).or(rpc_raw).or(rpc_host));
+    let tmp = db.clone();
+    let cloner = move || {
+        tmp.clone()
+    };
+
+    // If no query is provided, return last 100 p2p messages
+    let v2_p2p = warp::path!("v2" / "p2p")
+        .and(warp::query::query())
+        .map(move |query: SizeQuery| {
+            let count = query.count.unwrap_or(100);
+            match cloner().get_p2p_reverse_range(query.offset_id, count) {
+                Ok(value) => serde_json::to_string(&value)
+                    .expect("failed to serialize response"),
+                Err(e) => serde_json::to_string(&format!("Database error: {}", e))
+                    .expect("failed to serialize response")
+            }
+        })
+        .map(|value| {
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(value)
+        });
+
+    let tmp = db.clone();
+    let cloner = move || {
+        tmp.clone()
+    };
+
+    // If no query is provided, return last 100 p2p messages
+    let v2_p2p_host = warp::path!("v2" / "p2p" / "host" / SocketAddr)
+        .and(warp::query::query())
+        .map(move |host, query: SizeQuery| {
+            let count = query.count.unwrap_or(100);
+            match cloner().get_p2p_host_range(query.offset_id.unwrap_or(0), count as u64, host) {
+                Ok(value) => serde_json::to_string(&value)
+                    .expect("failed to serialize response"),
+                Err(e) => serde_json::to_string(&format!("Database error: {}", e))
+                    .expect("failed to serialize response")
+            }
+        })
+        .map(|value| {
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(value)
+        });
+
+    let tmp = db.clone();
+    let cloner = move || {
+        tmp.clone()
+    };
+    let v2_p2p_tags = warp::path!("v2"/ "p2p" / "types")
+        .and(warp::query::query())
+        .map(move |query: TagsQuery| {
+            let tags = Type::parse_tags(&query.tags);
+            let tags = match tags {
+                Ok(tags) => tags,
+                Err(err) => {
+                    return serde_json::to_string(&format!("Database error: {}", err))
+                        .expect("faield to serialize response");
+                }
+            };
+            let count = query.count.unwrap_or(100);
+            let offset = query.offset_id.unwrap_or(0) as usize;
+            match cloner().get_p2p_types_range(offset, count, tags) {
+                Ok(value) => serde_json::to_string(&value)
+                    .expect("failed to serialize response"),
+                Err(e) => serde_json::to_string(&format!("Database error: {}", e))
+                    .expect("failed to serialize response")
+            }
+        })
+        .map(|value| {
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(value)
+        });
+
+    // let router = warp::get().and(p2p_raw.or(p2p_host).or(rpc_raw).or(rpc_host).or(v2_p2p));
+    let router = warp::get().and(
+        v2_p2p.or(v2_p2p_host).or(v2_p2p_tags)
+            .or(rpc_raw).or(rpc_host)
+            .or(p2p_raw).or(p2p_host)
+    );
 
     warp::serve(router)
         // TODO: Add as config settings

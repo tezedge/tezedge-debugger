@@ -57,3 +57,69 @@ Messages are always sorted from newest to oldest.
 * `/rpc/0/1` - Show last RPC message.
 * `/rpc/50/50` - Show last fifty RPC messages, skipping the first 50.
 * `/rpc/0/1/172.16.0.1` - Show RPC message sent between node and remote running on `172.16.0.1`
+
+## V2 API
+### P2P
+#### `/v2/p2p[?offset={offset}&count={count}]`
+##### Description
+Replacement for `/p2p/{offset}/{count}` endpoint, but parameters are passed as optional query arguments.
+##### Query Arguments
+* (__optional__) `offset` - Id of element, from which to start. (Default value is last message recorded)
+* (__optional__) `count` - Number of elements. (Default 100)
+
+#### Examples
+* `/v2/p2p` - get last 100 recorded p2p messages.
+* `/v2/p2p?offset=10000` - get 100 p2p messages ending with message id `10000` (and going backwards).
+* `/v2/p2p?count=10` - get last 10 recorded p2p messages.
+* `/v2/p2p?offset=100&count=10` - get p2p message with id `100` to `91` (if exists).
+
+#### `/v2/p2p/host/{host_socket_address}[?offset={offset}&count={count}]`
+##### Description
+Replacement for `/p2p/{host}/{offset}/{count}` endpoint, but parameters are passed as optional query arguments.
+##### Query Arguments
+* (__required__) `host_socket_address` - Valid socket address (`{IP}:{PORT}`).
+* (__optional__) `offset` - Id of element, from which to start. (Default value is last message recorded)
+* (__optional__) `count` - Number of elements. (Default 100)
+#### Examples
+* `/v2/p2p/10.0.0.0:10000` - Get last hundred messages exchanged with node on address `10.0.0.0:10000`.
+* `/v2/p2p/10.0.0.0:10000?offset=10000` - get 100 p2p messages starting index `10000` exhanged with peer `10.0.0.0:10000` (and going backwards).
+* `/v2/p2p/10.0.0.0:10000?count=10` - get last 10 recorded p2p messages exhanged with peer `10.0.0.0:10000`.
+* `/v2/p2p/10.0.0.0:10000?offset=100&count=10` - get p2p message with id `100` to `91` exchanged with peer `10.0.0.0:10000` (if exists).
+
+#### `/v2/p2p/types[?offset={offset}&count={count}&tags={tag_list}]`
+##### Description
+Replacement for `/p2p/{host}/{offset}/{count}` endpoint, but parameters are passed as optional query arguments.
+##### Query Arguments
+* (__optional__) `tag_list` - Comma separated values specifying types desired types.
+* (__optional__) `offset` - Id of element, from which to start. (Default value is last message recorded)
+* (__optional__) `count` - Number of elements. (Default 100)
+##### Valid tags
+* __tcp__
+* __metadata__
+* __connection_message__
+* __rest_message__
+* __p2p_message__
+* __disconnect__
+* __advertise__
+* __swap_request__
+* __swap_ack__
+* __bootstrap__
+* __get_current_branch__
+* __current_branch__
+* __deactivate__
+* __get_current_head__
+* __current_head__
+* __get_block_header__
+* __block_header__
+* __get_operations__
+* __operation__
+* __get_protocols__
+* __protocol__
+* __get_operation_hashes_for_blocks__
+* __operation_hashes_for_block__
+* __get_operations_for_blocks__
+* __operations_for_blocks__
+
+# Example
+* `/v2/p2p/types?tags=connection_message` - get last 100 received connection messages.
+* `/v2/p2p/types?tags=connection_message,metadata&count=10` - get last 10 messages that are either connection messages or metadata messages.

@@ -59,12 +59,17 @@ impl MessageStore {
             .map_err(|e| e.into())
     }
 
-    pub fn get_p2p_range(&mut self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, Error> {
+    pub fn get_p2p_range(&mut self, offset: Option<u64>, count: usize) -> Result<Vec<RpcMessage>, Error> {
         Ok(self.p2p_db.get_range(offset, count)?)
     }
 
-    pub fn get_p2p_reverse_range(&mut self, offset: Option<u64>, count: u64) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_reverse_range(offset, count as usize)?)
+    pub fn get_p2p_reverse_range(&mut self, offset: Option<u64>, count: usize) -> Result<Vec<RpcMessage>, Error> {
+        Ok(self.p2p_db.get_reverse_range(offset, count)?)
+    }
+
+
+    pub fn get_p2p_types_range(&mut self, offset: usize, count: usize, tags: u32) -> Result<Vec<RpcMessage>, Error> {
+        Ok(self.p2p_db.get_types_range(tags, offset, count)?)
     }
 
     pub fn get_p2p_host_range(&mut self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, Error> {
@@ -230,7 +235,7 @@ pub mod tests {
             );
             assert!(res.is_ok(), "failed to store message: {:?}", res);
         }
-        let msgs = db.get_p2p_range(0, 10).unwrap();
+        let msgs = db.get_p2p_range(Some(0), 10).unwrap();
         assert_eq!(msgs.len(), 10);
         for (id, msg) in msgs.iter().enumerate() {
             match msg {
@@ -297,7 +302,7 @@ pub mod tests {
         assert!(res.is_ok(), "Failed to store message: {:?}", res);
 
         // Load simple data
-        let msgs = db.p2p_db.get_last_types_range(Type::ConnectionMessage as u32, 0, 10).unwrap();
+        let msgs = db.p2p_db.get_types_range(Type::ConnectionMessage as u32, 0, 10).unwrap();
         assert_eq!(msgs.len(), 2);
         let msg = &msgs[0];
         assert_eq!(msg.id(), 1);
@@ -305,7 +310,7 @@ pub mod tests {
         assert_eq!(msg.id(), 0);
         // Load multiple data
         let types = Type::ConnectionMessage as u32 | Type::Metadata as u32;
-        let msgs = db.p2p_db.get_last_types_range(types, 0, 10).unwrap();
+        let msgs = db.p2p_db.get_types_range(types, 0, 10).unwrap();
         assert_eq!(msgs.len(), 3);
         let msg = &msgs[0];
         assert_eq!(msg.id(), 2, "Expected index 2");

@@ -93,29 +93,20 @@ impl P2PMessageStorage {
         Ok(())
     }
 
-    pub fn get_range(&self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, StorageError> {
-        let mut ret = Vec::with_capacity(count as usize);
-        let iter = self.kv
-            .iterator(IteratorMode::From(&offset, Direction::Forward))?
-            .take(count as usize);
-        for (key, value) in iter {
-            let value = key.and_then(|id| value.map(|value| (id, value)));
-            match value {
-                Ok((id, value)) => {
-                    ret.push(RpcMessage::from_store(&value, id));
-                }
-                Err(err) => {
-                    log::warn!("Failed to load value from iterator: {}", err);
-                }
-            }
-        }
-        Ok(ret)
+    pub fn get_range(&self, offset_id: Option<u64>, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
+        self._get_range(offset_id, count, false)
     }
 
     pub fn get_reverse_range(&self, offset_id: Option<u64>, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
-        let offset = offset_id.unwrap_or(std::u64::MAX);
+        self._get_range(offset_id, count, true)
+    }
+
+    fn _get_range(&self, offset_id: Option<u64>, count: usize, backwards: bool) -> Result<Vec<RpcMessage>, StorageError> {
+        let offset = offset_id.unwrap_or(0);
+        let offset = std::u64::MAX.saturating_sub(offset);
         let mut ret = Vec::with_capacity(count);
-        let iter = self.kv.iterator(IteratorMode::From(&offset, Direction::Reverse))?.take(count);
+        let mode = IteratorMode::From(&offset, if backwards { Direction::Reverse } else { Direction::Forward });
+        let iter = self.kv.iterator(mode)?.take(count);
         for (key, value) in iter {
             let value = key.and_then(|id| value.map(|value| (id, value)));
             match value {
@@ -133,9 +124,8 @@ impl P2PMessageStorage {
     pub fn get_host_range(&self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, StorageError> {
         let idx = self.remote_index.get_raw_prefix_iterator(host)?
             .filter_map(|(_, val)| val.ok())
-            .skip(offset as usize)
-            .take(count as usize);
-        let ret = self.load_indexes(Box::new(idx))
+            .skip(offset as usize);
+        let ret = self.load_indexes(Box::new(idx), count as usize)
             .fold(Vec::with_capacity(count as usize), |mut acc, value| {
                 acc.push(value);
                 acc
@@ -143,7 +133,7 @@ impl P2PMessageStorage {
         Ok(ret)
     }
 
-    pub fn get_last_types_range(&self, msg_types: u32, offset: usize, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
+    pub fn get_types_range(&self, msg_types: u32, offset: usize, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
         if msg_types == 0 {
             Ok(Default::default())
         } else {
@@ -161,9 +151,8 @@ impl P2PMessageStorage {
             }
             let idx = idxs.into_iter()
                 .kmerge_by(cmp)
-                .skip(offset)
-                .take(count);
-            Ok(self.load_indexes(Box::new(idx))
+                .skip(offset);
+            Ok(self.load_indexes(Box::new(idx), count)
                 .fold(Vec::with_capacity(count as usize), |mut acc, value| {
                     acc.push(value);
                     acc
@@ -171,11 +160,15 @@ impl P2PMessageStorage {
         }
     }
 
-    fn load_indexes<'a>(&self, indexes: Box<dyn Iterator<Item=u64> + 'a>) -> impl Iterator<Item=RpcMessage> + 'a {
+    fn load_indexes<'a>(&self, indexes: Box<dyn Iterator<Item=u64> + 'a>, limit: usize) -> impl Iterator<Item=RpcMessage> + 'a {
         let kv = self.kv.clone();
+        let mut count = 0;
         indexes.filter_map(move |index| {
             match kv.get(&index) {
-                Ok(Some(value)) => Some(RpcMessage::from_store(&value, index.clone())),
+                Ok(Some(value)) => {
+                    count += 1;
+                    Some(RpcMessage::from_store(&value, index.clone()))
+                }
                 Ok(None) => {
                     log::info!("No value at index: {}", index);
                     None
@@ -186,6 +179,7 @@ impl P2PMessageStorage {
                 }
             }
         })
+            .take(limit)
     }
 }
 
@@ -204,6 +198,8 @@ pub(crate) mod secondary_indexes {
     use crate::storage::{encode_address, P2PMessageStorage, StoreMessage};
     use crate::storage::secondary_index::SecondaryIndex;
     use serde::{Serialize, Deserialize};
+    use std::str::FromStr;
+    use failure::{Fail, Error};
 
     pub type RemoteReverseIndexKV = dyn KeyValueStoreWithSchema<RemoteReverseIndex> + Sync + Send;
 
@@ -445,6 +441,16 @@ pub(crate) mod secondary_indexes {
     }
 
     impl Type {
+        pub fn parse_tags(tags: &str) -> Result<u32, Error> {
+            let tags = tags.split(',');
+            let mut ret = 0x0;
+            for tag in tags {
+                let type_tag: Type = tag.parse()?;
+                ret |= type_tag as u32;
+            }
+            Ok(ret)
+        }
+
         pub fn extract(value: &StoreMessage) -> u32 {
             use tezos_messages::p2p::encoding::peer::PeerMessage::*;
             match value {
@@ -480,6 +486,51 @@ pub(crate) mod secondary_indexes {
                         Self::P2PMessage as u32
                     }
                 }
+            }
+        }
+    }
+
+    #[derive(Debug, Fail)]
+    #[fail(display = "Invalid message type {}", _0)]
+    pub struct ParseTypeError(String);
+
+    impl<T: AsRef<str>> From<T> for ParseTypeError {
+        fn from(value: T) -> Self {
+            Self(value.as_ref().to_string())
+        }
+    }
+
+    impl FromStr for Type {
+        type Err = ParseTypeError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            match s {
+                "tcp" => Ok(Self::Tcp),
+                "metadata" => Ok(Self::Metadata),
+                "connection_message" => Ok(Self::ConnectionMessage),
+                "rest_message" => Ok(Self::RestMessage),
+                "p2p_message" => Ok(Self::P2PMessage),
+                "disconnect" => Ok(Self::Disconnect),
+                "advertise" => Ok(Self::Advertise),
+                "swap_request" => Ok(Self::SwapRequest),
+                "swap_ack" => Ok(Self::SwapAck),
+                "bootstrap" => Ok(Self::Bootstrap),
+                "get_current_branch" => Ok(Self::GetCurrentBranch),
+                "current_branch" => Ok(Self::CurrentBranch),
+                "deactivate" => Ok(Self::Deactivate),
+                "get_current_head" => Ok(Self::GetCurrentHead),
+                "current_head" => Ok(Self::CurrentHead),
+                "get_block_header" => Ok(Self::GetBlockHeaders),
+                "block_header" => Ok(Self::BlockHeader),
+                "get_operations" => Ok(Self::GetOperations),
+                "operation" => Ok(Self::Operation),
+                "get_protocols" => Ok(Self::GetProtocols),
+                "protocol" => Ok(Self::Protocol),
+                "get_operation_hashes_for_blocks" => Ok(Self::GetOperationHashesForBlocks),
+                "operation_hashes_for_block" => Ok(Self::OperationHashesForBlock),
+                "get_operations_for_blocks" => Ok(Self::GetOperationsForBlocks),
+                "operations_for_blocks" => Ok(Self::OperationsForBlocks),
+                s => Err(s.into())
             }
         }
     }
