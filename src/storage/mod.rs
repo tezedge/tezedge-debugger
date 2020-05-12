@@ -21,6 +21,7 @@ use std::{
 };
 use crate::storage::rpc_message::RpcMessage;
 use storage::persistent::KeyValueSchema;
+// use std::fs::remove_dir_all;
 
 #[derive(Clone)]
 pub struct MessageStore {
@@ -48,7 +49,15 @@ impl MessageStore {
         &mut self.p2p_db
     }
 
-    pub fn store_p2p_message(&mut self, data: &StoreMessage) -> Result<(), Error> {
+    pub fn reserve_p2p_index(&mut self) -> u64 {
+        self.p2p_db.reserve_index()
+    }
+
+    pub fn put_p2p_message(&mut self, index: u64, msg: &StoreMessage) -> Result<(), Error> {
+        Ok(self.p2p_db.put_message(index, msg)?)
+    }
+
+    pub fn store_p2p_message(&mut self, data: &StoreMessage) -> Result<u64, Error> {
         let ret = self.p2p_db.store_message(&data)
             .map_err(|e| e.into());
         ret
@@ -73,7 +82,15 @@ impl MessageStore {
     }
 
     pub fn get_p2p_host_range(&mut self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_host_range(offset, count, host)?)
+        Ok(self.p2p_db.get_remote_range(offset, count, host)?)
+    }
+
+    pub fn get_p2p_host_type_range(&mut self, offset: usize, count: usize, remote_addr: SocketAddr, types: u32) -> Result<Vec<RpcMessage>, Error> {
+        Ok(self.p2p_db.get_remote_type_range(offset, count, remote_addr, types)?)
+    }
+
+    pub fn get_p2p_request_range(&mut self, offset: usize, count: usize, request_id: u64) -> Result<Vec<RpcMessage>, Error> {
+        Ok(self.p2p_db.get_request_range(request_id, offset, count)?)
     }
 
     pub fn get_rpc_range(&mut self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, Error> {
@@ -105,6 +122,8 @@ pub(crate) fn cfs() -> Vec<ColumnFamilyDescriptor> {
         P2PMessageStorage::descriptor(),
         p2p_indexes::RemoteReverseIndex::descriptor(),
         p2p_indexes::TypeIndex::descriptor(),
+        p2p_indexes::RemoteTypeIndex::descriptor(),
+        p2p_indexes::RequestTrackingIndex::descriptor(),
         crate::storage::RpcMessageSecondaryIndex::descriptor(),
     ]
 }
@@ -169,6 +188,8 @@ pub mod tests {
     use crate::storage::rpc_message::MappedRESTMessage;
     use crate::network::connection_message::ConnectionMessage;
     use tezos_messages::p2p::encoding::metadata::MetadataMessage;
+    use tezos_messages::p2p::encoding::peer::{PeerMessageResponse, PeerMessage};
+    use tezos_messages::p2p::encoding::block_header::{GetBlockHeadersMessage, BlockHeaderMessage};
 
     macro_rules! function {
     () => {{

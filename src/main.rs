@@ -52,6 +52,15 @@ pub struct TagsQuery {
     count: Option<usize>,
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct UrlQuery {
+    offset: Option<u64>,
+    count: Option<usize>,
+    types: Option<String>,
+    remote_host: Option<SocketAddr>,
+    request_id: Option<u64>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), MainError> {
     // -- Initialize logger
@@ -205,13 +214,57 @@ async fn main() -> Result<(), MainError> {
     // If no query is provided, return last 100 p2p messages
     let v2_p2p = warp::path!("v2" / "p2p")
         .and(warp::query::query())
-        .map(move |query: SizeQuery| {
+        .map(move |query: UrlQuery| -> String {
+            let offset = query.offset.unwrap_or(0);
             let count = query.count.unwrap_or(100);
-            match cloner().get_p2p_reverse_range(query.offset_id, count) {
-                Ok(value) => serde_json::to_string(&value)
-                    .expect("failed to serialize response"),
-                Err(e) => serde_json::to_string(&format!("Database error: {}", e))
-                    .expect("failed to serialize response")
+            let types = query.types.as_ref().map(|types|
+                Type::parse_tags(&types)
+            );
+
+            // if query.remote_host.is_some() && query.request_id.is_some() {
+            //     // TODO: Handle this properly, it does not make sense to provide both
+            // }
+
+            if let Some(remote_host) = query.remote_host {
+                // Host + types
+                if let Some(types) = types {
+                    // Match
+                    let types = match types {
+                        Ok(types) => types,
+                        Err(_) => return serde_json::to_string(&format!("Invalid types: {}", query.types.unwrap()))
+                            .expect("failed to serialize response"),
+                    };
+                    match cloner().get_p2p_host_type_range(offset as usize, count, remote_host, types) {
+                        Ok(value) => serde_json::to_string(&value)
+                            .expect("failed to serialize response"),
+                        Err(e) => serde_json::to_string(&format!("Database error: {}", e))
+                            .expect("failed to serialize response")
+                    }
+                } else {
+                    // Host only
+                    match cloner().get_p2p_host_range(offset, count as u64, remote_host) {
+                        Ok(value) => serde_json::to_string(&value)
+                            .expect("failed to serialize response"),
+                        Err(e) => serde_json::to_string(&format!("Database error: {}", e))
+                            .expect("failed to serialize response")
+                    }
+                }
+            } else if let Some(request_id) = query.request_id {
+                // Ignore types for now, as it does not truly make sense to filter specific request by types
+                match cloner().get_p2p_request_range(offset as usize, count, request_id) {
+                    Ok(value) => serde_json::to_string(&value)
+                        .expect("failed to serialize response"),
+                    Err(e) => serde_json::to_string(&format!("Database error: {}", e))
+                        .expect("failed to serialize response")
+                }
+            } else {
+                // Just get last X messages
+                match cloner().get_p2p_reverse_range(query.offset, count) {
+                    Ok(value) => serde_json::to_string(&value)
+                        .expect("failed to serialize response"),
+                    Err(e) => serde_json::to_string(&format!("Database error: {}", e))
+                        .expect("failed to serialize response")
+                }
             }
         })
         .map(|value| {
@@ -249,6 +302,7 @@ async fn main() -> Result<(), MainError> {
     let cloner = move || {
         tmp.clone()
     };
+
     let v2_p2p_tags = warp::path!("v2"/ "p2p" / "types")
         .and(warp::query::query())
         .map(move |query: TagsQuery| {
@@ -276,9 +330,32 @@ async fn main() -> Result<(), MainError> {
                 .body(value)
         });
 
+    let tmp = db.clone();
+    let cloner = move || {
+        tmp.clone()
+    };
+
+    let v2_p2p_requests = warp::path!("v2" / "p2p" / "request" / u64)
+        .and(warp::query::query())
+        .map(move |request_id: u64, query: SizeQuery| {
+            let count = query.count.unwrap_or(0) as usize;
+            let offset = query.offset_id.unwrap_or(0) as usize;
+            match cloner().get_p2p_request_range(offset, count, request_id) {
+                Ok(value) => serde_json::to_string(&value)
+                    .expect("failed to serialize response"),
+                Err(err) => serde_json::to_string(&format!("Database error: {}", err))
+                    .expect("failed to serialize response")
+            }
+        })
+        .map(|value| Response::builder()
+            .header("Content-Type", "application/json")
+            .header("Access-Control-Allow-Origin", "*")
+            .body(value)
+        );
+
     // let router = warp::get().and(p2p_raw.or(p2p_host).or(rpc_raw).or(rpc_host).or(v2_p2p));
     let router = warp::get().and(
-        v2_p2p.or(v2_p2p_host).or(v2_p2p_tags)
+        v2_p2p.or(v2_p2p_host).or(v2_p2p_tags).or(v2_p2p_requests)
             .or(rpc_raw).or(rpc_host)
             .or(p2p_raw).or(p2p_host)
     );

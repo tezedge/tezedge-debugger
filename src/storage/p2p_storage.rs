@@ -7,7 +7,7 @@ use std::{
 };
 use crate::storage::{rpc_message::RpcMessage, secondary_index::SecondaryIndex, StoreMessage, dissect};
 use secondary_indexes::*;
-use itertools::Itertools;
+use itertools::{Itertools};
 
 pub type P2PMessageStorageKV = dyn KeyValueStoreWithSchema<P2PMessageStorage> + Sync + Send;
 
@@ -17,6 +17,8 @@ pub struct P2PMessageStorage {
     kv: Arc<P2PMessageStorageKV>,
     remote_index: RemoteReverseIndex,
     type_index: TypeIndex,
+    request_index: RequestTrackingIndex,
+    remote_type_index: RemoteTypeIndex,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
 }
@@ -27,7 +29,9 @@ impl P2PMessageStorage {
             base_index: Arc::new(AtomicU64::new(std::u64::MAX)),
             kv: kv.clone(),
             remote_index: RemoteReverseIndex::new(kv.clone()),
-            type_index: TypeIndex::new(kv),
+            type_index: TypeIndex::new(kv.clone()),
+            request_index: RequestTrackingIndex::new(kv.clone()),
+            remote_type_index: RemoteTypeIndex::new(kv.clone()),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(0)),
         }
@@ -59,19 +63,40 @@ impl P2PMessageStorage {
 
     fn make_indexes(&mut self, primary_index: &u64, value: &StoreMessage) -> Result<(), StorageError> {
         self.remote_index.store_index(primary_index, value)?;
-        self.type_index.store_index(primary_index, value)
+        self.type_index.store_index(primary_index, value)?;
+        self.remote_index.store_index(primary_index, value)?;
+        self.remote_type_index.store_index(primary_index, value)
     }
 
     fn delete_indexes(&mut self, primary_index: &u64, value: &StoreMessage) -> Result<(), StorageError> {
         self.remote_index.delete_index(primary_index, value)?;
-        self.type_index.delete_index(primary_index, value)
+        self.type_index.delete_index(primary_index, value)?;
+        self.remote_index.delete_index(primary_index, value)?;
+        self.remote_type_index.delete_index(primary_index, value)
     }
 
-    pub fn store_message(&mut self, msg: &StoreMessage) -> Result<(), StorageError> {
+    pub fn reserve_index(&mut self) -> u64 {
+        self.index_next()
+    }
+
+    pub fn put_message(&mut self, index: u64, msg: &StoreMessage) -> Result<(), StorageError> {
+        log::info!("Putting message on index: {}", index);
+        self.make_indexes(&index, &msg)?;
+        let exists = self.kv.contains(&index)?;
+        self.kv.put(&index, &msg)?;
+        if !exists {
+            self.inc_count();
+        }
+        Ok(())
+    }
+
+    pub fn store_message(&mut self, msg: &StoreMessage) -> Result<u64, StorageError> {
+        log::info!("Storing new message");
         let index = self.index_next();
         self.make_indexes(&index, &msg)?;
         self.kv.put(&index, &msg)?;
-        Ok(self.inc_count())
+        self.inc_count();
+        Ok(index)
     }
 
     pub fn delete_message(&mut self, index: u64) -> Result<(), StorageError> {
@@ -103,7 +128,7 @@ impl P2PMessageStorage {
 
     fn _get_range(&self, offset_id: Option<u64>, count: usize, backwards: bool) -> Result<Vec<RpcMessage>, StorageError> {
         let offset = offset_id.unwrap_or(0);
-        let offset = std::u64::MAX.saturating_sub(offset);
+        let offset = if backwards { std::u64::MAX.saturating_sub(offset) } else { offset };
         let mut ret = Vec::with_capacity(count);
         let mode = IteratorMode::From(&offset, if backwards { Direction::Reverse } else { Direction::Forward });
         let iter = self.kv.iterator(mode)?.take(count);
@@ -121,7 +146,7 @@ impl P2PMessageStorage {
         Ok(ret)
     }
 
-    pub fn get_host_range(&self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, StorageError> {
+    pub fn get_remote_range(&self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, StorageError> {
         let idx = self.remote_index.get_raw_prefix_iterator(host)?
             .filter_map(|(_, val)| val.ok())
             .skip(offset as usize);
@@ -158,6 +183,45 @@ impl P2PMessageStorage {
                     acc
                 }))
         }
+    }
+
+    pub fn get_remote_type_range(&self, offset: usize, count: usize, remote_host: SocketAddr, types: u32) -> Result<Vec<RpcMessage>, StorageError> {
+        if types == 0 {
+            Ok(Default::default())
+        } else {
+            let (part, mut rest) = dissect(types);
+            let mut idxs = Vec::new();
+            let filter = |(_, val): (_, Result<u64, _>)| val.ok();
+            let cmp: for<'r, 's> fn(&'r u64, &'s u64) -> bool = |x, y| x > y;
+            idxs.push(self.remote_type_index.get_raw_prefix_iterator((remote_host, part))?
+                .filter_map(filter));
+            while rest != 0 {
+                let (part, step) = dissect(rest);
+                rest = step;
+                idxs.push(self.remote_type_index.get_raw_prefix_iterator((remote_host, part))?
+                    .filter_map(filter));
+            }
+            let idx = idxs.into_iter()
+                .kmerge_by(cmp)
+                .skip(offset);
+            Ok(self.load_indexes(Box::new(idx), count)
+                .fold(Vec::with_capacity(count), |mut acc, value| {
+                    acc.push(value);
+                    acc
+                }))
+        }
+    }
+
+    pub fn get_request_range(&self, request_id: u64, offset: usize, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
+        let idx = self.request_index.get_raw_prefix_iterator(request_id)?
+            .filter_map(|(_, val)| val.ok())
+            .skip(offset as usize);
+        let ret = self.load_indexes(Box::new(idx), count as usize)
+            .fold(Vec::with_capacity(count as usize), |mut acc, value| {
+                acc.push(value);
+                acc
+            });
+        Ok(ret)
     }
 
     fn load_indexes<'a>(&self, indexes: Box<dyn Iterator<Item=u64> + 'a>, limit: usize) -> impl Iterator<Item=RpcMessage> + 'a {
@@ -241,8 +305,8 @@ pub(crate) mod secondary_indexes {
     impl SecondaryIndex<P2PMessageStorage> for RemoteReverseIndex {
         type FieldType = SocketAddr;
 
-        fn accessor(value: &<P2PMessageStorage as KeyValueSchema>::Value) -> Self::FieldType {
-            value.remote_addr()
+        fn accessor(value: &<P2PMessageStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+            Some(value.remote_addr())
         }
 
         fn make_index(key: &<P2PMessageStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
@@ -372,8 +436,8 @@ pub(crate) mod secondary_indexes {
     impl SecondaryIndex<P2PMessageStorage> for TypeIndex {
         type FieldType = u32;
 
-        fn accessor(value: &<P2PMessageStorage as KeyValueSchema>::Value) -> Self::FieldType {
-            Type::extract(value)
+        fn accessor(value: &<P2PMessageStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+            Some(Type::extract(value))
         }
 
         fn make_index(key: &<P2PMessageStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
@@ -531,6 +595,219 @@ pub(crate) mod secondary_indexes {
                 "get_operations_for_blocks" => Ok(Self::GetOperationsForBlocks),
                 "operations_for_blocks" => Ok(Self::OperationsForBlocks),
                 s => Err(s.into())
+            }
+        }
+    }
+
+    // 3. Request Stream Index
+    pub type RequestTrackingIndexKV = dyn KeyValueStoreWithSchema<RequestTrackingIndex> + Sync + Send;
+
+    #[derive(Clone)]
+    pub struct RequestTrackingIndex {
+        kv: Arc<RequestTrackingIndexKV>,
+    }
+
+    impl RequestTrackingIndex {
+        pub fn new(kv: Arc<DB>) -> Self {
+            Self { kv }
+        }
+    }
+
+    impl AsRef<(dyn KeyValueStoreWithSchema<RequestTrackingIndex> + 'static)> for RequestTrackingIndex {
+        fn as_ref(&self) -> &(dyn KeyValueStoreWithSchema<RequestTrackingIndex> + 'static) {
+            self.kv.as_ref()
+        }
+    }
+
+    impl KeyValueSchema for RequestTrackingIndex {
+        type Key = RequestIndex;
+        type Value = <P2PMessageStorage as KeyValueSchema>::Key;
+
+        fn descriptor() -> ColumnFamilyDescriptor {
+            let mut cf_opts = Options::default();
+            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(8));
+            cf_opts.set_memtable_prefix_bloom_ratio(0.2);
+            ColumnFamilyDescriptor::new(Self::name(), cf_opts)
+        }
+
+        fn name() -> &'static str {
+            "p2p_request_index"
+        }
+    }
+
+    impl SecondaryIndex<P2PMessageStorage> for RequestTrackingIndex {
+        type FieldType = u64;
+
+        fn accessor(value: &<P2PMessageStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+            match value {
+                StoreMessage::P2PMessage { request_id, .. } => request_id.clone(),
+                _ => None
+            }
+        }
+
+        fn make_index(key: &<P2PMessageStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
+            RequestIndex::new(key.clone(), value)
+        }
+
+        fn make_prefix_index(value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
+            RequestIndex::prefix(value)
+        }
+    }
+
+    #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+    pub struct RequestIndex {
+        pub request_index: u64,
+        pub index: u64,
+    }
+
+    impl RequestIndex {
+        pub fn new(request_index: u64, index: u64) -> Self {
+            Self { request_index, index: std::u64::MAX - index }
+        }
+
+        pub fn prefix(request_index: u64) -> Self {
+            Self { request_index, index: 0 }
+        }
+    }
+
+    impl BincodeEncoded for RequestIndex {}
+
+    // 4. Remote (host) + Type index
+    pub type RemoteTypeIndexKV = dyn KeyValueStoreWithSchema<RemoteTypeIndex> + Sync + Send;
+
+    #[derive(Clone)]
+    pub struct RemoteTypeIndex {
+        kv: Arc<RemoteTypeIndexKV>
+    }
+
+    impl RemoteTypeIndex {
+        pub fn new(kv: Arc<DB>) -> Self {
+            Self { kv }
+        }
+    }
+
+    impl AsRef<(dyn KeyValueStoreWithSchema<RemoteTypeIndex> + 'static)> for RemoteTypeIndex {
+        fn as_ref(&self) -> &(dyn KeyValueStoreWithSchema<RemoteTypeIndex> + 'static) {
+            self.kv.as_ref()
+        }
+    }
+
+    impl KeyValueSchema for RemoteTypeIndex {
+        type Key = RemoteTypeKey;
+        type Value = <P2PMessageStorage as KeyValueSchema>::Key;
+
+        fn descriptor() -> ColumnFamilyDescriptor {
+            let mut cf_opts = Options::default();
+            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(16 + 2 + 4));
+            cf_opts.set_memtable_prefix_bloom_ratio(0.2);
+            ColumnFamilyDescriptor::new(Self::name(), cf_opts)
+        }
+
+        fn name() -> &'static str {
+            "p2p_remote_type_index"
+        }
+    }
+
+    impl SecondaryIndex<P2PMessageStorage> for RemoteTypeIndex {
+        type FieldType = (SocketAddr, u32);
+
+        fn accessor(value: &<P2PMessageStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+            Some((value.remote_addr(), Type::extract(value)))
+        }
+
+        fn make_index(key: &<P2PMessageStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
+            let (addr, typ) = value;
+            RemoteTypeKey::new(addr, typ, key.clone())
+        }
+
+        fn make_prefix_index(value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
+            let (addr, typ) = value;
+            RemoteTypeKey::prefix(addr, typ)
+        }
+    }
+
+    #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+    pub struct RemoteTypeKey {
+        pub remote_addr: u128,
+        pub port: u16,
+        pub r#type: u32,
+        pub index: u64,
+    }
+
+    impl RemoteTypeKey {
+        pub fn new(sock_addr: SocketAddr, r#type: u32, index: u64) -> Self {
+            Self {
+                remote_addr: encode_address(&sock_addr.ip()),
+                port: sock_addr.port(),
+                r#type,
+                index: std::u64::MAX - index,
+            }
+        }
+
+        pub fn prefix(sock_addr: SocketAddr, r#type: u32) -> Self {
+            Self::new(sock_addr, r#type, 0)
+        }
+    }
+
+    impl Decoder for RemoteTypeKey {
+        #[inline]
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 30 {
+                Err(SchemaError::DecodeError)
+            } else {
+                let addr_value = &bytes[0..16];
+                let port_value = &bytes[16..16 + 2];
+                let type_value = &bytes[16 + 2..16 + 2 + 4];
+                let index_value = &bytes[16 + 2 + 4..];
+                // index
+                let mut index = [0u8; 8];
+                for (x, y) in index.iter_mut().zip(index_value) {
+                    *x = *y;
+                }
+                let index = u64::from_be_bytes(index);
+                // port
+                let mut port = [0u8; 2];
+                for (x, y) in port.iter_mut().zip(port_value) {
+                    *x = *y;
+                }
+                let port = u16::from_be_bytes(port);
+                // addr
+                let mut addr = [0u8; 16];
+                for (x, y) in addr.iter_mut().zip(addr_value) {
+                    *x = *y;
+                }
+                let remote_addr = u128::from_be_bytes(addr);
+                // type
+                let mut typ = [0u8; 4];
+                for (x, y) in typ.iter_mut().zip(type_value) {
+                    *x = *y;
+                }
+                let r#type = u32::from_be_bytes(typ);
+
+                Ok(Self {
+                    remote_addr,
+                    r#type,
+                    port,
+                    index,
+                })
+            }
+        }
+    }
+
+    impl Encoder for RemoteTypeKey {
+        #[inline]
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf = Vec::with_capacity(30);
+            buf.extend_from_slice(&self.remote_addr.to_be_bytes());
+            buf.extend_from_slice(&self.port.to_be_bytes());
+            buf.extend_from_slice(&self.r#type.to_be_bytes());
+            buf.extend_from_slice(&self.index.to_be_bytes());
+
+            if buf.len() != 30 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
             }
         }
     }

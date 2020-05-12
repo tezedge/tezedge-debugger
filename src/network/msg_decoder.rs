@@ -14,6 +14,7 @@ use bytes::Buf;
 use crate::actors::peer_message::*;
 use crate::storage::{MessageStore, StoreMessage};
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
+use crate::network::request_tracker::RequestTracker;
 
 /// P2P Message decrypter from captured connection messages
 pub struct EncryptedMessageDecoder {
@@ -26,6 +27,7 @@ pub struct EncryptedMessageDecoder {
     inc_buf: Vec<u8>,
     out_buf: Vec<u8>,
     dec_buf: Vec<u8>,
+    request_tracker: RequestTracker,
     input_remaining: usize,
 }
 
@@ -50,11 +52,12 @@ impl EncryptedMessageDecoder {
             inc_buf: Default::default(),
             out_buf: Default::default(),
             dec_buf: Default::default(),
+            request_tracker: Default::default(),
             input_remaining: 0,
         }
     }
 
-    /// Process received message, if complete message is received, decypher, deserialize and store it.
+    /// Process received message, if complete message is received, decipher, deserialize and store it.
     pub fn recv_msg(&mut self, enc: &RawPacketMessage) {
         if enc.has_payload() {
             self.inc_buf.extend_from_slice(&enc.payload());
@@ -63,12 +66,24 @@ impl EncryptedMessageDecoder {
                 if let Some(msg) = self.try_decrypt() {
                     match msg {
                         EncryptedMessage::PeerResponse(msg) => {
-                            let _ = self.db.store_p2p_message(&StoreMessage::new_p2p(enc.remote_addr(), enc.is_incoming(), &msg));
+                            let index = self.db.reserve_p2p_index();
+                            let mut store_msg = StoreMessage::new_p2p(enc.remote_addr(), enc.is_incoming(), &msg);
+                            self.request_tracker.track_request(&mut store_msg, index);
+                            let _ = self.db.store_p2p_message(&store_msg);
                         }
                         EncryptedMessage::Metadata(msg) => {
                             let _ = self.db.store_p2p_message(&StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg));
                         }
                     }
+                    // match self.db.store_p2p_message(match msg {
+                    //     EncryptedMessage::PeerResponse(msg) => &StoreMessage::new_p2p(enc.remote_addr(), enc.is_incoming(), &msg),
+                    //     EncryptedMessage::Metadata(msg) => &StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg),
+                    // }) {
+                    //     Ok(index) => {
+                    //         // TODO: Add request tracking
+                    //     }
+                    //     Err(err) => log::error!("Failed to store decrypted message: {}", err),
+                    // }
                 }
             }
         }

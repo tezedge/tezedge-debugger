@@ -42,6 +42,7 @@ pub enum StoreMessage {
         timestamp: u128,
         incoming: bool,
         remote_addr: SocketAddr,
+        request_id: Option<u64>,
         payload: Vec<PeerMessage>,
     },
     /// RPC Request/Response
@@ -97,6 +98,7 @@ impl StoreMessage {
             remote_addr,
             incoming,
             payload,
+            request_id: None,
             timestamp: Self::make_ts(),
         }
     }
