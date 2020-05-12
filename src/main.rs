@@ -26,6 +26,7 @@ use crate::{
 };
 use crate::storage::secondary_indexes::Type;
 use std::net::IpAddr;
+use crate::actors::logs_orchestrator::make_logs_reader;
 
 #[derive(Debug, Fail)]
 enum AppError {
@@ -75,6 +76,12 @@ async fn main() -> Result<(), MainError> {
     // -- Initialize RocksDB
     let db = app_config.open_database()?;
     log::info!("Created RocksDB storage in: {}", app_config.storage_path);
+
+    // -- Create logs reader
+    make_logs_reader(&app_config.logs_path, db.clone())?;
+    log::info!("Reading logs from: {}", app_config.logs_path);
+
+    // loop {}
 
     // -- Create TUN devices
     let ((_, receiver), writer) = make_bridge(
@@ -338,9 +345,32 @@ async fn main() -> Result<(), MainError> {
     let v2_p2p_requests = warp::path!("v2" / "p2p" / "request" / u64)
         .and(warp::query::query())
         .map(move |request_id: u64, query: SizeQuery| {
-            let count = query.count.unwrap_or(0) as usize;
+            let count = query.count.unwrap_or(100) as usize;
             let offset = query.offset_id.unwrap_or(0) as usize;
             match cloner().get_p2p_request_range(offset, count, request_id) {
+                Ok(value) => serde_json::to_string(&value)
+                    .expect("failed to serialize response"),
+                Err(err) => serde_json::to_string(&format!("Database error: {}", err))
+                    .expect("failed to serialize response")
+            }
+        })
+        .map(|value| Response::builder()
+            .header("Content-Type", "application/json")
+            .header("Access-Control-Allow-Origin", "*")
+            .body(value)
+        );
+
+    let tmp = db.clone();
+    let cloner = move || {
+        tmp.clone()
+    };
+
+    let v2_log = warp::path!("v2" / "log")
+        .and(warp::query::query())
+        .map(move |query: SizeQuery| {
+            let count = query.count.unwrap_or(100) as usize;
+            let offset = query.offset_id.unwrap_or(0);
+            match cloner().log_db().get_reverse_range(offset, count) {
                 Ok(value) => serde_json::to_string(&value)
                     .expect("failed to serialize response"),
                 Err(err) => serde_json::to_string(&format!("Database error: {}", err))
@@ -356,6 +386,7 @@ async fn main() -> Result<(), MainError> {
     // let router = warp::get().and(p2p_raw.or(p2p_host).or(rpc_raw).or(rpc_host).or(v2_p2p));
     let router = warp::get().and(
         v2_p2p.or(v2_p2p_host).or(v2_p2p_tags).or(v2_p2p_requests)
+            .or(v2_log)
             .or(rpc_raw).or(rpc_host)
             .or(p2p_raw).or(p2p_host)
     );

@@ -48,7 +48,7 @@ if [ ! -d "/var/run/netns" ]; then
   sudo ip netns del make_ns
 fi
 
-docker pull simplestakingcom/tezedge-tezos:latest &>/dev/null
+#docker pull simplestakingcom/tezedge-tezos:latest &>/dev/null
 #docker pull "DEBUGGER_IMAGE"
 docker pull simplestakingcom/tezedge-explorer-ocaml &>/dev/null
 
@@ -65,9 +65,9 @@ sleep 1
 
 # == START NODE IN DETACHED MODE ==
 # 1. make inactive container
-NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/tezedge-tezos:latest sleep inf)
-docker exec "$NODE_ID" mkdir /root/.tezos-node
+NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/tezedge-tezos:dev sleep inf)
 docker exec "$NODE_ID" cp /root/identity/identity.json /root/.tezos-node/
+docker exec "$NODE_ID" mkfifo /root/identity/tezos.log
 echo "Spawned tezedge container $NODE_ID"
 mount_ns "$NODE_ID"
 mount_ns "$PROXY_ID"
@@ -91,4 +91,4 @@ unmount_ns "$PROXY_ID"
 #docker exec -it "$NODE_ID" /bin/bash
 EXPLORER_ID=$(docker run -d -p "8080:8080" simplestakingcom/tezedge-explorer-ocaml:latest)
 echo "Running explorer on port 8080 in container $EXPLORER_ID"
-docker exec "$NODE_ID" ./tezos-node run --rpc-addr 0.0.0.0:8732
+docker exec "$NODE_ID" sh -c "./tezos-node run --rpc-addr 0.0.0.0:8732 --config-file \"/root/config.json\" > /root/identity/tezos.log"

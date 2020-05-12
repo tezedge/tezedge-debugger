@@ -1,0 +1,8 @@
+{
+  "p2p": {
+    "listen-addr": "[::]:9732"
+  },
+  "log": {
+    "template": "{\"date\": \"$(date)\",\"section\":\"$(section)\",\"level\":\"$(level)\",\"message\":\"$(message)\"}"
+  }
+}
