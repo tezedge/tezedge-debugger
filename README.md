@@ -138,3 +138,19 @@ Replacement for `/p2p/{host}/{offset}/{count}` endpoint, but parameters are pass
 # Example
 * `/v2/p2p/types?tags=connection_message` - get last 100 received connection messages.
 * `/v2/p2p/types?tags=connection_message,metadata&count=10` - get last 10 messages that are either connection messages or metadata messages.
+
+#### `/v2/log[?offset={offset}&count={count}]`
+#### Description
+Basic endpoint for providing running node logs in order they were written.
+#### Query Arguments
+* (__optional__) `offset` - Number: Skip last `N` logs
+* (__optional__) `count` - Number of logs to retrieve
+#### Response properties JSON
+* `level`: `string` Representing severity of logged message (one of: \[`trace`, `debug`, `log`, `info`, `notice`, `warn`, `error`, `fatal`\]).
+* `date`: `string` Date representing moment, this log was created
+* `section`: `string` Name of module, which created this log
+* `id`: `integral` Numeral (sequence) number uniquely identifying this log (and its order)
+* (__optional__) `file`: `string` Name of file, which created this log
+* (__optional__) `line`: `string` Line number on which was creation of this log called, in specified file.
+* (__optional__) `column`: `string` Column number on which was creation of this log called, in specified file.
+* (__OCaml__) `message`: `string` Whole content of the message
