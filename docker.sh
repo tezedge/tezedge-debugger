@@ -3,8 +3,7 @@ VOLUME="$PWD/identity"
 IDENTITY_FILE="$VOLUME/identity.json"
 PROXY_RPC_PORT=17732
 NODE_RPC_PORT=18732
-DEBUGGER_TAG=dev
-DEBUGGER_IMAGE="simplestakingcom/tezedge-debuger:$DEBUGGER_TAG"
+TAG=dev
 
 trap clean EXIT
 
@@ -48,24 +47,24 @@ if [ ! -d "/var/run/netns" ]; then
   sudo ip netns del make_ns
 fi
 
-#docker pull simplestakingcom/tezedge-tezos:latest &>/dev/null
-#docker pull "DEBUGGER_IMAGE"
+docker pull simplestakingcom/tezedge-tezos:"$TAG" &>/dev/null
+docker pull simplestakingcom/tezedge-debuger:"$TAG" &>/dev/null
 docker pull simplestakingcom/tezedge-explorer-ocaml &>/dev/null
 
 # Check identity
 if [ ! -f "$IDENTITY_FILE" ]; then
-  docker run --volume "$VOLUME:/root/identity" -it simplestakingcom/tezedge-tezos:latest /bin/bash -c "./tezos-node identity generate && cp /root/.tezos-node/identity.json /root/identity"
+  docker run --volume "$VOLUME:/root/identity" -it simplestakingcom/tezedge-tezos:"$TAG" /bin/bash -c "./tezos-node identity generate && cp /root/.tezos-node/identity.json /root/identity"
 fi
 
 # == START PROXY IN DETACHED MODE ==
-PROXY_ID=$(docker run -d --cap-add=NET_ADMIN -p "$PROXY_RPC_PORT:10000" -p "$NODE_RPC_PORT:8732" -p "19732:9732" -p "4927:4927" --volume "$VOLUME:/home/appuser/proxy/identity" --device /dev/net/tun:/dev/net/tun -it "$DEBUGGER_IMAGE")
+PROXY_ID=$(docker run -d --cap-add=NET_ADMIN -p "$PROXY_RPC_PORT:10000" -p "$NODE_RPC_PORT:8732" -p "19732:9732" -p "4927:4927" --volume "$VOLUME:/home/appuser/proxy/identity" --device /dev/net/tun:/dev/net/tun -it simplestakingcom/tezedge-debuger:"$TAG")
 docker exec "$PROXY_ID" iptables -t nat -A PREROUTING -p tcp --dport 8732 -j DNAT --to-destination 10.0.1.1
 echo "Spawned proxy in container $PROXY_ID"
 sleep 1
 
 # == START NODE IN DETACHED MODE ==
 # 1. make inactive container
-NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/tezedge-tezos:dev sleep inf)
+NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/tezedge-tezos:"$TAG" sleep inf)
 docker exec "$NODE_ID" cp /root/identity/identity.json /root/.tezos-node/
 docker exec "$NODE_ID" mkfifo /root/identity/tezos.log
 echo "Spawned tezedge container $NODE_ID"
