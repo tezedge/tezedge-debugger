@@ -36,6 +36,9 @@ pub struct AppConfig {
     #[argh(option, default = "\"./storage\".to_string()")]
     /// path to initialize storage
     pub storage_path: String,
+    #[argh(option, default = "\"./identity/tezos.log\".to_string()")]
+    /// path to initialize storage
+    pub logs_path: String,
     #[argh(option, default = "true")]
     /// clean storage when starting the tool
     pub clean_storage: bool,

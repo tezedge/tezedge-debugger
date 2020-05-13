@@ -91,7 +91,6 @@ impl P2PMessageStorage {
     }
 
     pub fn store_message(&mut self, msg: &StoreMessage) -> Result<u64, StorageError> {
-        log::info!("Storing new message");
         let index = self.index_next();
         self.make_indexes(&index, &msg)?;
         self.kv.put(&index, &msg)?;

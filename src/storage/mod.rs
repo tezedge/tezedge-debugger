@@ -5,11 +5,13 @@ pub mod storage_message;
 pub mod rpc_message;
 mod p2p_storage;
 mod rpc_storage;
+mod log_storage;
 mod secondary_index;
 
 pub use storage_message::*;
 pub use p2p_storage::*;
 pub use rpc_storage::*;
+pub use log_storage::*;
 
 use rocksdb::{DB, WriteOptions, ColumnFamilyDescriptor};
 use failure::Error;
@@ -27,6 +29,7 @@ use storage::persistent::KeyValueSchema;
 pub struct MessageStore {
     p2p_db: P2PMessageStorage,
     rpc_db: RpcMessageStorage,
+    log_db: LogStorage,
     raw_db: Arc<DB>,
     max_db_size: Option<u64>,
 }
@@ -36,6 +39,7 @@ impl MessageStore {
         Self {
             p2p_db: P2PMessageStorage::new(db.clone()),
             rpc_db: RpcMessageStorage::new(db.clone()),
+            log_db: LogStorage::new(db.clone()),
             raw_db: db,
             max_db_size: None,
         }
@@ -47,6 +51,10 @@ impl MessageStore {
 
     pub fn p2p_db(&mut self) -> &mut P2PMessageStorage {
         &mut self.p2p_db
+    }
+
+    pub fn log_db(&mut self) -> &mut LogStorage {
+        &mut self.log_db
     }
 
     pub fn reserve_p2p_index(&mut self) -> u64 {
@@ -120,6 +128,7 @@ pub(crate) fn cfs() -> Vec<ColumnFamilyDescriptor> {
     vec![
         RpcMessageStorage::descriptor(),
         P2PMessageStorage::descriptor(),
+        LogStorage::descriptor(),
         p2p_indexes::RemoteReverseIndex::descriptor(),
         p2p_indexes::TypeIndex::descriptor(),
         p2p_indexes::RemoteTypeIndex::descriptor(),
@@ -190,6 +199,8 @@ pub mod tests {
     use tezos_messages::p2p::encoding::metadata::MetadataMessage;
     use tezos_messages::p2p::encoding::peer::{PeerMessageResponse, PeerMessage};
     use tezos_messages::p2p::encoding::block_header::{GetBlockHeadersMessage, BlockHeaderMessage};
+    use crate::actors::logs_message::LogMessage;
+    use std::collections::HashMap;
 
     macro_rules! function {
     () => {{
@@ -339,6 +350,34 @@ pub mod tests {
         assert_eq!(msg.id(), 1, "Expected index 1");
         let msg = &msgs[2];
         assert_eq!(msg.id(), 0, "Expected index 0");
+    }
+
+    #[test]
+    fn log_read_range() {
+        let mut db = create_test_db(function!());
+        let mut msg = LogMessage {
+            level: "notice".to_string(),
+            date: "May 12 15:33:20".to_string(),
+            section: "node.validator.bootstrap_pipeline".to_string(),
+            id: None,
+            file: None,
+            line: None,
+            column: None,
+            extra: Default::default(),
+        };
+
+        for x in 0usize..10 {
+            msg.extra.insert("message".to_string(), format!("{}", x));
+            let res = db.log_db().store_message(&mut msg);
+            assert!(res.is_ok());
+        }
+
+        let msgs = db.log_db().get_reverse_range(0, 10).unwrap();
+        assert_eq!(msgs.len(), 10);
+        for (msg, id) in msgs.into_iter().zip((0..10).rev()) {
+            let val = msg.extra.get("message").unwrap();
+            assert_eq!(val, &format!("{}", id));
+        }
     }
 
     #[test]

@@ -13,5 +13,7 @@ WORKDIR /home/appuser/tezos
 RUN git checkout mainnet
 RUN opam init --bare --disable-sandbox && make build-deps && eval $(opam config env) && make
 USER root
+RUN mkdir "/root/.tezos-node"
+COPY config.json "/root/"
 ENV PATH="/home/appuser/tezos:$PATH"
 ENV TEZOS_CLIENT_UNSAFE_DISABLE_DISCLAIMER=Y
