@@ -57,3 +57,84 @@ Messages are always sorted from newest to oldest.
 * `/rpc/0/1` - Show last RPC message.
 * `/rpc/50/50` - Show last fifty RPC messages, skipping the first 50.
 * `/rpc/0/1/172.16.0.1` - Show RPC message sent between node and remote running on `172.16.0.1`
+
+## V2 API
+### P2P
+#### `/v2/p2p[?offset={offset}&count={count}&types={types}&remote_host={remote_host}&request_id={request_id}]`
+##### Description
+Primary query endpoint for fine-grained searches
+##### Primary Arguments
+Every message has exactly one remote host specified, and single request stream belongs ti single remote host.
+Because of that, `request_id` is superset of `remote_host` and it does not make sense to provide both in single query.
+__`remote_host` is ignored, if `request_id` is provided.__
+
+* `remote_host` - Filtering messages by socket (ip + port) address of remote host.
+* `request_id` - Filtering by messages belonging to single request, all messages belonging to such stream, are identified 
+by id of the request (all messages have the same `request_id`).
+
+#### Secondary Filtering Arguments
+* `types` - Further filter results, to only contain messages of specified types. Types are comma-separated strings. If no types are provided, no filtering
+is done. All valid types are listed in [valid types](#valid-types) section
+
+#### Other arguments
+* `offset` - Number representing how many message should be skipped (0 if no `offset` is provided).
+* `count` - Limit the number of results to up to specified numbers (100 if no `count` is provided).
+
+##### Valid types
+* __tcp__
+* __metadata__
+* __connection_message__
+* __rest_message__
+* __p2p_message__
+* __disconnect__
+* __advertise__
+* __swap_request__
+* __swap_ack__
+* __bootstrap__
+* __get_current_branch__
+* __current_branch__
+* __deactivate__
+* __get_current_head__
+* __current_head__
+* __get_block_header__
+* __block_header__
+* __get_operations__
+* __operation__
+* __get_protocols__
+* __protocol__
+* __get_operation_hashes_for_blocks__
+* __operation_hashes_for_block__
+* __get_operations_for_blocks__
+* __operations_for_blocks__
+
+
+#### Examples
+* `/v2/p2p` - get last 100 recorded p2p messages.
+* `/v2/p2p?offset=10000` - get 100 p2p messages ending with message id `10000` (and going backwards).
+* `/v2/p2p?count=10` - get last 10 recorded p2p messages.
+* `/v2/p2p?offset=100&count=10` - get p2p message with id `100` to `91` (if exists).
+
+#### `/v2/p2p/host/{host_socket_address}[?offset={offset}&count={count}]`
+##### Description
+Replacement for `/p2p/{host}/{offset}/{count}` endpoint, but parameters are passed as optional query arguments.
+##### Query Arguments
+* (__required__) `host_socket_address` - Valid socket address (`{IP}:{PORT}`).
+* (__optional__) `offset` - Id of element, from which to start. (Default value is last message recorded)
+* (__optional__) `count` - Number of elements. (Default 100)
+#### Examples
+* `/v2/p2p/10.0.0.0:10000` - Get last hundred messages exchanged with node on address `10.0.0.0:10000`.
+* `/v2/p2p/10.0.0.0:10000?offset=10000` - get 100 p2p messages starting index `10000` exhanged with peer `10.0.0.0:10000` (and going backwards).
+* `/v2/p2p/10.0.0.0:10000?count=10` - get last 10 recorded p2p messages exhanged with peer `10.0.0.0:10000`.
+* `/v2/p2p/10.0.0.0:10000?offset=100&count=10` - get p2p message with id `100` to `91` exchanged with peer `10.0.0.0:10000` (if exists).
+
+#### `/v2/p2p/types[?offset={offset}&count={count}&tags={tag_list}]`
+##### Description
+Replacement for `/p2p/{host}/{offset}/{count}` endpoint, but parameters are passed as optional query arguments.
+##### Query Arguments
+* (__optional__) `tag_list` - Comma separated values specifying types desired types.
+* (__optional__) `offset` - Id of element, from which to start. (Default value is last message recorded)
+* (__optional__) `count` - Number of elements. (Default 100)
+
+# Example
+* `/v2/p2p/types?tags=connection_message` - get last 100 received connection messages.
+* `/v2/p2p/types?tags=connection_message,metadata&count=10` - get last 10 messages that are either connection messages or metadata messages.

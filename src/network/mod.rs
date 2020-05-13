@@ -5,6 +5,7 @@ pub mod msg_decoder;
 // pub mod msg_encoder;
 pub mod tun_bridge;
 pub mod connection_message;
+pub mod request_tracker;
 mod health_checks;
 
 pub mod prelude {
