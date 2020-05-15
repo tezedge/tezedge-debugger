@@ -90,4 +90,4 @@ unmount_ns "$PROXY_ID"
 #docker exec -it "$NODE_ID" /bin/bash
 EXPLORER_ID=$(docker run -d -p "8080:8080" simplestakingcom/tezedge-explorer-ocaml:latest)
 echo "Running explorer on port 8080 in container $EXPLORER_ID"
-docker exec "$NODE_ID" sh -c "./tezos-node run --rpc-addr 0.0.0.0:8732 --config-file \"/root/config.json\" > /root/identity/tezos.log"
+docker exec "$NODE_ID" sh -c "./tezos-node run --cors-header='content-type' --cors-origin='*' --rpc-addr 0.0.0.0:8732 --config-file \"/root/config.json\" > /root/identity/tezos.log"
