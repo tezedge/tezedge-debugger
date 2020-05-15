@@ -32,18 +32,18 @@ pub trait SecondaryIndex<PrimaryStoreSchema>
         }
     }
 
-    fn get_index(&self, key: &PrimaryStoreSchema::Key, value: &PrimaryStoreSchema::Value) -> Result<Option<PrimaryStoreSchema::Key>, StorageError> {
+    fn get_index(&self, key: &PrimaryStoreSchema::Key, field: Self::FieldType) -> Result<Option<PrimaryStoreSchema::Key>, StorageError> {
         let db = self.as_ref();
-        if let Some(field) = Self::accessor(value) {
-            let index = Self::make_index(key, field);
-            Ok(db.get(&index)?)
-        } else {
-            Ok(None)
-        }
+        let index = Self::make_index(key, field);
+        Ok(db.get(&index)?)
     }
 
     fn get_raw_prefix_iterator(&self, field: Self::FieldType) -> Result<IteratorWithSchema<Self>, StorageError> {
         let prefix = Self::make_prefix_index(field);
         Ok(self.as_ref().prefix_iterator(&prefix)?)
+    }
+
+    fn kv(&self) -> &(dyn KeyValueStoreWithSchema<Self>) {
+        self.as_ref()
     }
 }

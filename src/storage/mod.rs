@@ -12,6 +12,7 @@ pub use storage_message::*;
 pub use p2p_storage::*;
 pub use rpc_storage::*;
 pub use log_storage::*;
+pub use p2p_storage::secondary_indexes as p2p_secondary_indexes;
 
 use rocksdb::{DB, WriteOptions, ColumnFamilyDescriptor};
 use failure::Error;
@@ -125,6 +126,7 @@ impl MessageStore {
 
 pub(crate) fn cfs() -> Vec<ColumnFamilyDescriptor> {
     use crate::storage::p2p_storage::secondary_indexes as p2p_indexes;
+    use crate::storage::log_storage::secondary_indexes as log_indexes;
     vec![
         RpcMessageStorage::descriptor(),
         P2PMessageStorage::descriptor(),
@@ -133,6 +135,9 @@ pub(crate) fn cfs() -> Vec<ColumnFamilyDescriptor> {
         p2p_indexes::TypeIndex::descriptor(),
         p2p_indexes::RemoteTypeIndex::descriptor(),
         p2p_indexes::RequestTrackingIndex::descriptor(),
+        log_indexes::LevelIndex::descriptor(),
+        log_indexes::TimeStampIndex::descriptor(),
+        log_indexes::TimeStampLevelIndex::descriptor(),
         crate::storage::RpcMessageSecondaryIndex::descriptor(),
     ]
 }
@@ -197,10 +202,9 @@ pub mod tests {
     use crate::storage::rpc_message::MappedRESTMessage;
     use crate::network::connection_message::ConnectionMessage;
     use tezos_messages::p2p::encoding::metadata::MetadataMessage;
-    use tezos_messages::p2p::encoding::peer::{PeerMessageResponse, PeerMessage};
-    use tezos_messages::p2p::encoding::block_header::{GetBlockHeadersMessage, BlockHeaderMessage};
     use crate::actors::logs_message::LogMessage;
-    use std::collections::HashMap;
+    use crate::storage::secondary_index::SecondaryIndex;
+    use crate::storage::log_storage::secondary_indexes::LogLevel;
 
     macro_rules! function {
     () => {{
@@ -357,7 +361,7 @@ pub mod tests {
         let mut db = create_test_db(function!());
         let mut msg = LogMessage {
             level: "notice".to_string(),
-            date: "May 12 15:33:20".to_string(),
+            date: 0,
             section: "node.validator.bootstrap_pipeline".to_string(),
             id: None,
             file: None,
@@ -369,7 +373,9 @@ pub mod tests {
         for x in 0usize..10 {
             msg.extra.insert("message".to_string(), format!("{}", x));
             let res = db.log_db().store_message(&mut msg);
-            assert!(res.is_ok());
+            if res.is_err() {
+                assert!(false, "failed to store message: {}", res.unwrap_err())
+            }
         }
 
         let msgs = db.log_db().get_reverse_range(0, 10).unwrap();
@@ -377,6 +383,73 @@ pub mod tests {
         for (msg, id) in msgs.into_iter().zip((0..10).rev()) {
             let val = msg.extra.get("message").unwrap();
             assert_eq!(val, &format!("{}", id));
+        }
+    }
+
+    #[test]
+    fn log_read_ts() {
+        let mut db = create_test_db(function!());
+        let mut msg = LogMessage {
+            level: "notice".to_string(),
+            date: 0,
+            section: "node.validator.bootstrap_pipeline".to_string(),
+            id: None,
+            file: None,
+            line: None,
+            column: None,
+            extra: Default::default(),
+        };
+
+        for x in 0usize..10 {
+            msg.extra.insert("message".to_string(), format!("{}", x));
+            msg.date = x as u128;
+            db.log_db().store_message(&mut msg).unwrap();
+        }
+
+
+        let msgs = db.log_db().get_timestamp_range(4, 10).unwrap();
+        println!("{:?}", msgs);
+        assert_eq!(msgs.len(), 5);
+        for (msg, id) in msgs.into_iter().zip((0u128..5).rev()) {
+            let val = msg.date;
+            assert_eq!(val, id)
+        }
+    }
+
+    fn log_read_ts_level() {
+        let mut db = create_test_db(function!());
+        let mut msg = LogMessage {
+            level: "notice".to_string(),
+            date: 0,
+            section: "node.validator.bootstrap_pipeline".to_string(),
+            id: None,
+            file: None,
+            line: None,
+            column: None,
+            extra: Default::default(),
+        };
+
+        for i in 0u128..5 {
+            msg.date = i;
+            db.log_db().store_message(&mut msg).unwrap();
+        }
+
+        msg.level = "warn".to_string();
+        for i in 0u128..5 {
+            msg.date = i;
+            db.log_db().store_message(&mut msg).unwrap();
+        }
+
+        let msgs = db.log_db().get_timestamp_level_range("notice", 0, 10).unwrap();
+        assert_eq!(msgs.len(), 5);
+        for (msg, index) in msgs.into_iter().zip((0u128..5).rev()) {
+            assert_eq!(msg.date, index)
+        }
+
+        let msgs = db.log_db().get_timestamp_level_range("warning", 0, 10).unwrap();
+        assert_eq!(msgs.len(), 5);
+        for (msg, index) in msgs.into_iter().zip((0u128..5).rev()) {
+            assert_eq!(msg.date, index)
         }
     }
 
