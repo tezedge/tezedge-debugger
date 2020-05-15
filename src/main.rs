@@ -24,7 +24,7 @@ use crate::{
     network::prelude::*,
     configuration::AppConfig,
 };
-use crate::storage::secondary_indexes::Type;
+use crate::storage::p2p_secondary_indexes::Type;
 use std::net::IpAddr;
 use crate::actors::logs_orchestrator::make_logs_reader;
 
@@ -60,6 +60,13 @@ pub struct UrlQuery {
     types: Option<String>,
     remote_host: Option<SocketAddr>,
     request_id: Option<u64>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct TsQuery {
+    starts_from: Option<u128>,
+    level: Option<String>,
+    count: Option<usize>,
 }
 
 #[tokio::main]
@@ -367,14 +374,24 @@ async fn main() -> Result<(), MainError> {
 
     let v2_log = warp::path!("v2" / "log")
         .and(warp::query::query())
-        .map(move |query: SizeQuery| {
-            let count = query.count.unwrap_or(100) as usize;
-            let offset = query.offset_id.unwrap_or(0);
-            match cloner().log_db().get_reverse_range(offset, count) {
-                Ok(value) => serde_json::to_string(&value)
-                    .expect("failed to serialize response"),
-                Err(err) => serde_json::to_string(&format!("Database error: {}", err))
-                    .expect("failed to serialize response")
+        .map(move |query: TsQuery| {
+            let ts = query.starts_from.unwrap_or(0);
+            let count = query.count.unwrap_or(100);
+
+            if let Some(ref level) = query.level {
+                match cloner().log_db().get_timestamp_level_range(level, ts, count) {
+                    Ok(value) => serde_json::to_string(&value)
+                        .expect("failed to serialize response"),
+                    Err(err) => serde_json::to_string(&format!("Database error: {}", err))
+                        .expect("failed to serialize response")
+                }
+            } else {
+                match cloner().log_db().get_timestamp_range(ts, count) {
+                    Ok(value) => serde_json::to_string(&value)
+                        .expect("failed to serialize response"),
+                    Err(err) => serde_json::to_string(&format!("Database error: {}", err))
+                        .expect("failed to serialize response")
+                }
             }
         })
         .map(|value| Response::builder()

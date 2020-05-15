@@ -253,7 +253,7 @@ impl KeyValueSchema for P2PMessageStorage {
     fn name() -> &'static str { "p2p_message_storage" }
 }
 
-pub(crate) mod secondary_indexes {
+pub mod secondary_indexes {
     use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, Decoder, SchemaError, Encoder, BincodeEncoded};
     use std::sync::Arc;
     use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
@@ -336,7 +336,13 @@ pub(crate) mod secondary_indexes {
         }
 
         pub fn prefix(sock_addr: SocketAddr) -> Self {
-            Self::new(sock_addr, 0)
+            let addr = sock_addr.ip();
+            let port = sock_addr.port();
+            Self {
+                addr: encode_address(&addr),
+                port,
+                index: 0,
+            }
         }
     }
 
@@ -458,7 +464,7 @@ pub(crate) mod secondary_indexes {
         pub fn new(r#type: u32, index: u64) -> Self {
             Self {
                 r#type,
-                index: std::u64::MAX - index,
+                index: std::u64::MAX.saturating_sub(index),
             }
         }
 
@@ -661,7 +667,7 @@ pub(crate) mod secondary_indexes {
 
     impl RequestIndex {
         pub fn new(request_index: u64, index: u64) -> Self {
-            Self { request_index, index: std::u64::MAX - index }
+            Self { request_index, index: std::u64::MAX.saturating_sub(index) }
         }
 
         pub fn prefix(request_index: u64) -> Self {
@@ -739,12 +745,17 @@ pub(crate) mod secondary_indexes {
                 remote_addr: encode_address(&sock_addr.ip()),
                 port: sock_addr.port(),
                 r#type,
-                index: std::u64::MAX - index,
+                index: std::u64::MAX.saturating_sub(index),
             }
         }
 
         pub fn prefix(sock_addr: SocketAddr, r#type: u32) -> Self {
-            Self::new(sock_addr, r#type, 0)
+            Self {
+                remote_addr: encode_address(&sock_addr.ip()),
+                port: sock_addr.port(),
+                r#type,
+                index: 0,
+            }
         }
     }
 
