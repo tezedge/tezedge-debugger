@@ -77,11 +77,7 @@ impl MessageStore {
             .map_err(|e| e.into())
     }
 
-    pub fn get_p2p_range(&mut self, offset: Option<u64>, count: usize) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_range(offset, count)?)
-    }
-
-    pub fn get_p2p_reverse_range(&mut self, offset: Option<u64>, count: usize) -> Result<Vec<RpcMessage>, Error> {
+    pub fn get_p2p_reverse_range(&mut self, offset: u64, count: usize) -> Result<Vec<RpcMessage>, Error> {
         Ok(self.p2p_db.get_reverse_range(offset, count)?)
     }
 
@@ -259,36 +255,6 @@ pub mod tests {
     }
 
     #[test]
-    fn p2p_read_range() {
-        let mut db = create_test_db(function!());
-        let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
-        for x in 0usize..10 {
-            let res = db.store_p2p_message(
-                &StoreMessage::new_rest(sock, true, RESTMessage::Response {
-                    status: "200".to_string(),
-                    payload: format!("{}", x),
-                })
-            );
-            assert!(res.is_ok(), "failed to store message: {:?}", res);
-        }
-        let msgs = db.get_p2p_range(Some(0), 10).unwrap();
-        assert_eq!(msgs.len(), 10);
-        for (id, msg) in msgs.iter().enumerate() {
-            match msg {
-                RpcMessage::RestMessage { message, .. } => {
-                    match message {
-                        MappedRESTMessage::Response { payload, .. } => {
-                            assert_eq!(payload, &format!("{}", id));
-                        }
-                        msg => panic!("Expected response got {:?}", msg)
-                    }
-                }
-                msg => panic!("Expected rest message got: {:?}", msg),
-            }
-        }
-    }
-
-    #[test]
     fn p2p_read_reverse_range() {
         let mut db = create_test_db(function!());
         let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
@@ -302,7 +268,8 @@ pub mod tests {
             assert!(res.is_ok());
         }
 
-        let msgs = db.get_p2p_reverse_range(None, 10).unwrap();
+        let msgs = db.get_p2p_reverse_range(0, 10).unwrap();
+        println!("{:?}", msgs);
 
         assert_eq!(msgs.len(), 10);
         for (id, msg) in msgs.iter().enumerate() {

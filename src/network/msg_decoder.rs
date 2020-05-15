@@ -69,21 +69,12 @@ impl EncryptedMessageDecoder {
                             let index = self.db.reserve_p2p_index();
                             let mut store_msg = StoreMessage::new_p2p(enc.remote_addr(), enc.is_incoming(), &msg);
                             self.request_tracker.track_request(&mut store_msg, index);
-                            let _ = self.db.store_p2p_message(&store_msg);
+                            let _ = self.db.put_p2p_message(index, &store_msg);
                         }
                         EncryptedMessage::Metadata(msg) => {
                             let _ = self.db.store_p2p_message(&StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg));
                         }
                     }
-                    // match self.db.store_p2p_message(match msg {
-                    //     EncryptedMessage::PeerResponse(msg) => &StoreMessage::new_p2p(enc.remote_addr(), enc.is_incoming(), &msg),
-                    //     EncryptedMessage::Metadata(msg) => &StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg),
-                    // }) {
-                    //     Ok(index) => {
-                    //         // TODO: Add request tracking
-                    //     }
-                    //     Err(err) => log::error!("Failed to store decrypted message: {}", err),
-                    // }
                 }
             }
         }

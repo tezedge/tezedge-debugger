@@ -47,9 +47,9 @@ if [ ! -d "/var/run/netns" ]; then
   sudo ip netns del make_ns
 fi
 
-docker pull simplestakingcom/tezedge-tezos:"$TAG" &>/dev/null
-docker pull simplestakingcom/tezedge-debuger:"$TAG" &>/dev/null
-docker pull simplestakingcom/tezedge-explorer-ocaml &>/dev/null
+#docker pull simplestakingcom/tezedge-tezos:"$TAG" &>/dev/null
+#docker pull simplestakingcom/tezedge-debuger:"$TAG" &>/dev/null
+#docker pull simplestakingcom/tezedge-explorer-ocaml &>/dev/null
 
 # Check identity
 if [ ! -f "$IDENTITY_FILE" ]; then
@@ -91,3 +91,4 @@ unmount_ns "$PROXY_ID"
 EXPLORER_ID=$(docker run -d -p "8080:8080" simplestakingcom/tezedge-explorer-ocaml:latest)
 echo "Running explorer on port 8080 in container $EXPLORER_ID"
 docker exec "$NODE_ID" sh -c "./tezos-node run --rpc-addr 0.0.0.0:8732 --config-file \"/root/config.json\" > /root/identity/tezos.log"
+sleep inf

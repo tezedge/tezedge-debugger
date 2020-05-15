@@ -135,7 +135,7 @@ async fn main() -> Result<(), MainError> {
     // -- Initialize server
     let p2p_raw = warp::path!("p2p" / u64 / u64)
         .map(move |offset: u64, count: u64| {
-            match cloner().get_p2p_reverse_range(Some(offset), count as usize) {
+            match cloner().get_p2p_reverse_range(offset, count as usize) {
                 Ok(value) => serde_json::to_string(&value)
                     .expect("failed to serialize response"),
                 Err(e) => serde_json::to_string(&format!("Database error: {}", e))
@@ -235,10 +235,6 @@ async fn main() -> Result<(), MainError> {
                 Type::parse_tags(&types)
             );
 
-            // if query.remote_host.is_some() && query.request_id.is_some() {
-            //     // TODO: Handle this properly, it does not make sense to provide both
-            // }
-
             if let Some(remote_host) = query.remote_host {
                 // Host + types
                 if let Some(types) = types {
@@ -273,7 +269,7 @@ async fn main() -> Result<(), MainError> {
                 }
             } else {
                 // Just get last X messages
-                match cloner().get_p2p_reverse_range(query.offset, count) {
+                match cloner().get_p2p_reverse_range(offset, count) {
                     Ok(value) => serde_json::to_string(&value)
                         .expect("failed to serialize response"),
                     Err(e) => serde_json::to_string(&format!("Database error: {}", e))

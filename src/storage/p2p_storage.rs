@@ -80,12 +80,12 @@ impl P2PMessageStorage {
     }
 
     pub fn put_message(&mut self, index: u64, msg: &StoreMessage) -> Result<(), StorageError> {
-        log::info!("Putting message on index: {}", index);
         self.make_indexes(&index, &msg)?;
-        let exists = self.kv.contains(&index)?;
-        self.kv.put(&index, &msg)?;
-        if !exists {
-            self.inc_count();
+        if self.kv.contains(&index)? {
+            self.kv.merge(&index, &msg)?;
+        } else {
+            self.kv.put(&index, &msg)?;
+            self.inc_count()
         }
         Ok(())
     }
@@ -117,19 +117,13 @@ impl P2PMessageStorage {
         Ok(())
     }
 
-    pub fn get_range(&self, offset_id: Option<u64>, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
-        self._get_range(offset_id, count, false)
+    pub fn get_reverse_range(&self, offset_id: u64, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
+        self._get_range(if offset_id == 0 { std::u64::MAX } else { 0 } , count, true)
     }
 
-    pub fn get_reverse_range(&self, offset_id: Option<u64>, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
-        self._get_range(offset_id, count, true)
-    }
-
-    fn _get_range(&self, offset_id: Option<u64>, count: usize, backwards: bool) -> Result<Vec<RpcMessage>, StorageError> {
-        let offset = offset_id.unwrap_or(0);
-        let offset = if backwards { std::u64::MAX.saturating_sub(offset) } else { offset };
+    fn _get_range(&self, offset_id: u64, count: usize, backwards: bool) -> Result<Vec<RpcMessage>, StorageError> {
         let mut ret = Vec::with_capacity(count);
-        let mode = IteratorMode::From(&offset, if backwards { Direction::Reverse } else { Direction::Forward });
+        let mode = IteratorMode::From(&offset_id, if backwards { Direction::Reverse } else { Direction::Forward });
         let iter = self.kv.iterator(mode)?.take(count);
         for (key, value) in iter {
             let value = key.and_then(|id| value.map(|value| (id, value)));
