@@ -44,6 +44,7 @@ pub enum RpcMessage {
         id: u64,
         remote_addr: SocketAddr,
         request_id: Option<u64>,
+        remote_requested: Option<bool>,
         message: Vec<MappedPeerMessage>,
     },
     RestMessage {
@@ -78,10 +79,11 @@ impl RpcMessage {
                     message: payload.clone().into(),
                 }
             }
-            StoreMessage::P2PMessage { remote_addr, incoming, payload, request_id, timestamp } => {
+            StoreMessage::P2PMessage { remote_addr, incoming, payload, request_id, remote_requested, timestamp } => {
                 RpcMessage::P2pMessage {
                     id,
                     request_id: request_id.clone(),
+                    remote_requested: remote_requested.clone(),
                     timestamp: timestamp.clone(),
                     remote_addr: remote_addr.clone(),
                     incoming: incoming.clone(),

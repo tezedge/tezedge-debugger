@@ -2,16 +2,28 @@ use crate::storage::StoreMessage;
 use tezos_messages::p2p::encoding::peer::PeerMessage;
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+pub struct RequestTrack {
+    pub request_id: u64,
+    pub incoming: bool,
+}
+
+impl RequestTrack {
+    pub fn new(request_id: u64, incoming: bool) -> Self {
+        Self { request_id, incoming }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 /// Track requests for last given
 pub struct RequestTracker {
-    swap_request: Option<u64>,
-    current_branch_request: Option<u64>,
-    current_head: Option<u64>,
-    block_header_request: Option<u64>,
-    operations_request: Option<u64>,
-    protocols_request: Option<u64>,
-    operation_hashes_for_blocks: Option<u64>,
-    operations_for_blocks: Option<u64>,
+    swap_request: Option<RequestTrack>,
+    current_branch_request: Option<RequestTrack>,
+    current_head: Option<RequestTrack>,
+    block_header_request: Option<RequestTrack>,
+    operations_request: Option<RequestTrack>,
+    protocols_request: Option<RequestTrack>,
+    operation_hashes_for_blocks: Option<RequestTrack>,
+    operations_for_blocks: Option<RequestTrack>,
 }
 
 impl RequestTracker {
@@ -21,66 +33,98 @@ impl RequestTracker {
 
     pub fn track_request(&mut self, msg: &mut StoreMessage, msg_id: u64) {
         match msg {
-            StoreMessage::P2PMessage { request_id, payload, .. } => {
+            StoreMessage::P2PMessage { incoming, request_id, remote_requested, payload, .. } => {
                 let msg = payload.first();
-                let id = Some(msg_id);
+                let id = Some(RequestTrack::new(msg_id, *incoming));
                 if let Some(msg) = msg {
                     match msg {
                         PeerMessage::SwapRequest(_) => {
                             self.swap_request = id;
-                            *request_id = id;
+                            *request_id = Some(msg_id);
+                            *remote_requested = Some(*incoming)
                         }
                         PeerMessage::SwapAck(_) => {
-                            *request_id = self.swap_request;
+                            if let Some(rt) = self.swap_request {
+                                *request_id = Some(rt.request_id);
+                                *remote_requested = Some(rt.incoming);
+                            }
                         }
                         PeerMessage::GetCurrentBranch(_) => {
                             self.current_branch_request = id;
-                            *request_id = id;
+                            *request_id = Some(msg_id);
+                            *remote_requested = Some(*incoming)
                         }
                         PeerMessage::CurrentBranch(_) => {
-                            *request_id = self.current_branch_request;
+                            if let Some(rt) = self.current_branch_request {
+                                *request_id = Some(rt.request_id);
+                                *remote_requested = Some(rt.incoming);
+                            }
                         }
                         PeerMessage::GetCurrentHead(_) => {
                             self.current_head = id;
-                            *request_id = id;
+                            *request_id = Some(msg_id);
+                            *remote_requested = Some(*incoming)
                         }
                         PeerMessage::CurrentHead(_) => {
-                            *request_id = self.current_head;
+                            if let Some(rt) = self.current_head {
+                                *request_id = Some(rt.request_id);
+                                *remote_requested = Some(rt.incoming);
+                            }
                         }
                         PeerMessage::GetBlockHeaders(_) => {
                             self.block_header_request = id;
-                            *request_id = id;
+                            *request_id = Some(msg_id);
+                            *remote_requested = Some(*incoming)
                         }
                         PeerMessage::BlockHeader(_) => {
-                            *request_id = self.block_header_request;
+                            if let Some(rt) = self.block_header_request {
+                                *request_id = Some(rt.request_id);
+                                *remote_requested = Some(rt.incoming);
+                            }
                         }
                         PeerMessage::GetOperations(_) => {
                             self.operations_request = id;
-                            *request_id = id;
+                            *request_id = Some(msg_id);
+                            *remote_requested = Some(*incoming)
                         }
                         PeerMessage::Operation(_) => {
-                            *request_id = self.operations_request;
+                            if let Some(rt) = self.operations_request {
+                                *request_id = Some(rt.request_id);
+                                *remote_requested = Some(rt.incoming);
+                            }
                         }
                         PeerMessage::GetProtocols(_) => {
                             self.protocols_request = id;
-                            *request_id = id;
+                            *request_id = Some(msg_id);
+                            *remote_requested = Some(*incoming)
                         }
                         PeerMessage::Protocol(_) => {
-                            *request_id = self.protocols_request;
+                            if let Some(rt) = self.protocols_request {
+                                *request_id = Some(rt.request_id);
+                                *remote_requested = Some(rt.incoming);
+                            }
                         }
                         PeerMessage::GetOperationHashesForBlocks(_) => {
                             self.operation_hashes_for_blocks = id;
-                            *request_id = id;
+                            *request_id = Some(msg_id);
+                            *remote_requested = Some(*incoming)
                         }
                         PeerMessage::OperationHashesForBlock(_) => {
-                            *request_id = self.operation_hashes_for_blocks;
+                            if let Some(rt) = self.operation_hashes_for_blocks {
+                                *request_id = Some(rt.request_id);
+                                *remote_requested = Some(rt.incoming);
+                            }
                         }
                         PeerMessage::GetOperationsForBlocks(_) => {
                             self.operations_for_blocks = id;
-                            *request_id = id;
+                            *request_id = Some(msg_id);
+                            *remote_requested = Some(*incoming)
                         }
                         PeerMessage::OperationsForBlocks(_) => {
-                            *request_id = self.operations_for_blocks;
+                            if let Some(rt) = self.operations_for_blocks {
+                                *request_id = Some(rt.request_id);
+                                *remote_requested = Some(rt.incoming);
+                            }
                         }
                         _ => return,
                     }
