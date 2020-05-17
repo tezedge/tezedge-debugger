@@ -4,6 +4,7 @@ use storage::persistent::{Encoder, SchemaError, Decoder};
 use lazy_static::lazy_static;
 use regex::Captures;
 use chrono::{Utc, TimeZone, Datelike};
+use crate::storage::get_ts;
 
 fn parse_month(month: &str) -> Option<u32> {
     match month {
@@ -68,6 +69,23 @@ pub struct LogMessage {
 
     #[serde(flatten)]
     pub extra: HashMap<String, String>,
+}
+
+impl LogMessage {
+    pub fn raw(line: String) -> Self {
+        let mut extra = HashMap::with_capacity(1);
+        extra.insert("message".to_string(), line);
+        Self {
+            level: "fatal".to_string(),
+            date: get_ts(),
+            section: "".to_string(),
+            id: None,
+            file: None,
+            line: None,
+            column: None,
+            extra,
+        }
+    }
 }
 
 impl Encoder for LogMessage {

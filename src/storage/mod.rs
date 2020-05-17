@@ -199,8 +199,6 @@ pub mod tests {
     use crate::network::connection_message::ConnectionMessage;
     use tezos_messages::p2p::encoding::metadata::MetadataMessage;
     use crate::actors::logs_message::LogMessage;
-    use crate::storage::secondary_index::SecondaryIndex;
-    use crate::storage::log_storage::secondary_indexes::LogLevel;
 
     macro_rules! function {
     () => {{
