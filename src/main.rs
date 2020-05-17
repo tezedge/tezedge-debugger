@@ -60,6 +60,7 @@ pub struct UrlQuery {
     types: Option<String>,
     remote_host: Option<SocketAddr>,
     request_id: Option<u64>,
+    remote_requested: Option<bool>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -155,15 +156,14 @@ async fn main() -> Result<(), MainError> {
 
     let p2p_host = warp::path!("p2p" / u64 / u64 / SocketAddr)
         .map(move |offset: u64, count: u64, addr: SocketAddr| {
-            match cloner().get_p2p_host_range(offset, count, addr) {
+            match cloner().get_p2p_host_range(offset, count, addr, None) {
                 Ok(value) => {
                     serde_json::to_string(&value)
                         .expect("failed to serialize the array")
                 }
                 Err(e) => serde_json::to_string(
                     &format!("Failed to read database: {}", e),
-                ).unwrap()
-                ,
+                ).unwrap(),
             }
         })
         .map(|value| {
@@ -244,7 +244,7 @@ async fn main() -> Result<(), MainError> {
                         Err(_) => return serde_json::to_string(&format!("Invalid types: {}", query.types.unwrap()))
                             .expect("failed to serialize response"),
                     };
-                    match cloner().get_p2p_host_type_range(offset as usize, count, remote_host, types) {
+                    match cloner().get_p2p_host_type_range(offset as usize, count, remote_host, types, query.remote_requested) {
                         Ok(value) => serde_json::to_string(&value)
                             .expect("failed to serialize response"),
                         Err(e) => serde_json::to_string(&format!("Database error: {}", e))
@@ -252,7 +252,7 @@ async fn main() -> Result<(), MainError> {
                     }
                 } else {
                     // Host only
-                    match cloner().get_p2p_host_range(offset, count as u64, remote_host) {
+                    match cloner().get_p2p_host_range(offset, count as u64, remote_host, query.remote_requested) {
                         Ok(value) => serde_json::to_string(&value)
                             .expect("failed to serialize response"),
                         Err(e) => serde_json::to_string(&format!("Database error: {}", e))
@@ -261,7 +261,7 @@ async fn main() -> Result<(), MainError> {
                 }
             } else if let Some(request_id) = query.request_id {
                 // Ignore types for now, as it does not truly make sense to filter specific request by types
-                match cloner().get_p2p_request_range(offset as usize, count, request_id) {
+                match cloner().get_p2p_request_range(offset as usize, count, request_id, query.remote_requested) {
                     Ok(value) => serde_json::to_string(&value)
                         .expect("failed to serialize response"),
                     Err(e) => serde_json::to_string(&format!("Database error: {}", e))
@@ -294,7 +294,7 @@ async fn main() -> Result<(), MainError> {
         .and(warp::query::query())
         .map(move |host, query: SizeQuery| {
             let count = query.count.unwrap_or(100);
-            match cloner().get_p2p_host_range(query.offset_id.unwrap_or(0), count as u64, host) {
+            match cloner().get_p2p_host_range(query.offset_id.unwrap_or(0), count as u64, host, None) {
                 Ok(value) => serde_json::to_string(&value)
                     .expect("failed to serialize response"),
                 Err(e) => serde_json::to_string(&format!("Database error: {}", e))
@@ -350,7 +350,7 @@ async fn main() -> Result<(), MainError> {
         .map(move |request_id: u64, query: SizeQuery| {
             let count = query.count.unwrap_or(100) as usize;
             let offset = query.offset_id.unwrap_or(0) as usize;
-            match cloner().get_p2p_request_range(offset, count, request_id) {
+            match cloner().get_p2p_request_range(offset, count, request_id, None) {
                 Ok(value) => serde_json::to_string(&value)
                     .expect("failed to serialize response"),
                 Err(err) => serde_json::to_string(&format!("Database error: {}", err))

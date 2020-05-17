@@ -118,7 +118,7 @@ impl P2PMessageStorage {
     }
 
     pub fn get_reverse_range(&self, offset_id: u64, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
-        self._get_range(if offset_id == 0 { std::u64::MAX } else { 0 } , count, true)
+        self._get_range(if offset_id == 0 { std::u64::MAX } else { 0 }, count, true)
     }
 
     fn _get_range(&self, offset_id: u64, count: usize, backwards: bool) -> Result<Vec<RpcMessage>, StorageError> {
@@ -139,16 +139,31 @@ impl P2PMessageStorage {
         Ok(ret)
     }
 
-    pub fn get_remote_range(&self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, StorageError> {
+    pub fn get_remote_range(&self, offset: u64, count: usize, host: SocketAddr, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
         let idx = self.remote_index.get_raw_prefix_iterator(host)?
             .filter_map(|(_, val)| val.ok())
             .skip(offset as usize);
-        let ret = self.load_indexes(Box::new(idx), count as usize)
-            .fold(Vec::with_capacity(count as usize), |mut acc, value| {
+        let iter = self.load_indexes(Box::new(idx))
+            .take(count);
+        Ok(if let Some(rq) = remote_requested {
+            iter.filter_map(|msg| if let RpcMessage::P2pMessage { remote_requested, .. } = msg {
+                if remote_requested == Some(rq) {
+                    Some(msg)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }).fold(Vec::with_capacity(count), |mut acc, value| {
                 acc.push(value);
                 acc
-            });
-        Ok(ret)
+            })
+        } else {
+            iter.fold(Vec::with_capacity(count), |mut acc, value| {
+                acc.push(value);
+                acc
+            })
+        })
     }
 
     pub fn get_types_range(&self, msg_types: u32, offset: usize, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
@@ -170,7 +185,8 @@ impl P2PMessageStorage {
             let idx = idxs.into_iter()
                 .kmerge_by(cmp)
                 .skip(offset);
-            Ok(self.load_indexes(Box::new(idx), count)
+            Ok(self.load_indexes(Box::new(idx))
+                .take(count)
                 .fold(Vec::with_capacity(count as usize), |mut acc, value| {
                     acc.push(value);
                     acc
@@ -178,7 +194,7 @@ impl P2PMessageStorage {
         }
     }
 
-    pub fn get_remote_type_range(&self, offset: usize, count: usize, remote_host: SocketAddr, types: u32) -> Result<Vec<RpcMessage>, StorageError> {
+    pub fn get_remote_type_range(&self, offset: usize, count: usize, remote_host: SocketAddr, types: u32, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
         if types == 0 {
             Ok(Default::default())
         } else {
@@ -197,27 +213,57 @@ impl P2PMessageStorage {
             let idx = idxs.into_iter()
                 .kmerge_by(cmp)
                 .skip(offset);
-            Ok(self.load_indexes(Box::new(idx), count)
-                .fold(Vec::with_capacity(count), |mut acc, value| {
+            let iter = self.load_indexes(Box::new(idx)).take(count);
+            Ok(if let Some(rq) = remote_requested {
+                iter.filter_map(|msg| if let RpcMessage::P2pMessage { remote_requested, .. } = msg {
+                    if remote_requested == Some(rq) {
+                        Some(msg)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }).fold(Vec::with_capacity(count), |mut acc, value| {
                     acc.push(value);
                     acc
-                }))
+                })
+            } else {
+                iter.fold(Vec::with_capacity(count), |mut acc, value| {
+                    acc.push(value);
+                    acc
+                })
+            })
         }
     }
 
-    pub fn get_request_range(&self, request_id: u64, offset: usize, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
+    pub fn get_request_range(&self, request_id: u64, offset: usize, count: usize, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
         let idx = self.request_index.get_raw_prefix_iterator(request_id)?
             .filter_map(|(_, val)| val.ok())
             .skip(offset as usize);
-        let ret = self.load_indexes(Box::new(idx), count as usize)
-            .fold(Vec::with_capacity(count as usize), |mut acc, value| {
+        let iter = self.load_indexes(Box::new(idx))
+            .take(count);
+        Ok(if let Some(rq) = remote_requested {
+            iter.filter_map(|msg| if let RpcMessage::P2pMessage { remote_requested, .. } = msg {
+                if remote_requested == Some(rq) {
+                    Some(msg)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }).fold(Vec::with_capacity(count), |mut acc, value| {
                 acc.push(value);
                 acc
-            });
-        Ok(ret)
+            })
+        } else {
+            iter.fold(Vec::with_capacity(count), |mut acc, value| {
+                acc.push(value);
+                acc
+            })
+        })
     }
 
-    fn load_indexes<'a>(&self, indexes: Box<dyn Iterator<Item=u64> + 'a>, limit: usize) -> impl Iterator<Item=RpcMessage> + 'a {
+    fn load_indexes<'a>(&self, indexes: Box<dyn Iterator<Item=u64> + 'a>) -> impl Iterator<Item=RpcMessage> + 'a {
         let kv = self.kv.clone();
         let mut count = 0;
         indexes.filter_map(move |index| {
@@ -236,7 +282,6 @@ impl P2PMessageStorage {
                 }
             }
         })
-            .take(limit)
     }
 }
 

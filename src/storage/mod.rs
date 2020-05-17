@@ -86,16 +86,16 @@ impl MessageStore {
         Ok(self.p2p_db.get_types_range(tags, offset, count)?)
     }
 
-    pub fn get_p2p_host_range(&mut self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_remote_range(offset, count, host)?)
+    pub fn get_p2p_host_range(&mut self, offset: u64, count: u64, host: SocketAddr, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
+        Ok(self.p2p_db.get_remote_range(offset, count as usize, host, remote_requested)?)
     }
 
-    pub fn get_p2p_host_type_range(&mut self, offset: usize, count: usize, remote_addr: SocketAddr, types: u32) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_remote_type_range(offset, count, remote_addr, types)?)
+    pub fn get_p2p_host_type_range(&mut self, offset: usize, count: usize, remote_addr: SocketAddr, types: u32, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
+        Ok(self.p2p_db.get_remote_type_range(offset, count, remote_addr, types, remote_requested)?)
     }
 
-    pub fn get_p2p_request_range(&mut self, offset: usize, count: usize, request_id: u64) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_request_range(request_id, offset, count)?)
+    pub fn get_p2p_request_range(&mut self, offset: usize, count: usize, request_id: u64, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
+        Ok(self.p2p_db.get_request_range(request_id, offset, count, remote_requested)?)
     }
 
     pub fn get_rpc_range(&mut self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, Error> {
