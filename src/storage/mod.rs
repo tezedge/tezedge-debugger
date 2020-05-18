@@ -77,29 +77,25 @@ impl MessageStore {
             .map_err(|e| e.into())
     }
 
-    pub fn get_p2p_range(&mut self, offset: Option<u64>, count: usize) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_range(offset, count)?)
-    }
-
-    pub fn get_p2p_reverse_range(&mut self, offset: Option<u64>, count: usize) -> Result<Vec<RpcMessage>, Error> {
+    pub fn get_p2p_reverse_range(&mut self, offset: u64, count: usize) -> Result<Vec<RpcMessage>, Error> {
         Ok(self.p2p_db.get_reverse_range(offset, count)?)
     }
 
 
     pub fn get_p2p_types_range(&mut self, offset: usize, count: usize, tags: u32) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_types_range(tags, offset, count)?)
+        Ok(self.p2p_db.get_types_range(tags, offset as u64, count)?)
     }
 
-    pub fn get_p2p_host_range(&mut self, offset: u64, count: u64, host: SocketAddr) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_remote_range(offset, count, host)?)
+    pub fn get_p2p_host_range(&mut self, offset: u64, count: u64, host: SocketAddr, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
+        Ok(self.p2p_db.get_remote_range(offset, count as usize, host, remote_requested)?)
     }
 
-    pub fn get_p2p_host_type_range(&mut self, offset: usize, count: usize, remote_addr: SocketAddr, types: u32) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_remote_type_range(offset, count, remote_addr, types)?)
+    pub fn get_p2p_host_type_range(&mut self, offset: usize, count: usize, remote_addr: SocketAddr, types: u32, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
+        Ok(self.p2p_db.get_remote_type_range(offset, count, remote_addr, types, remote_requested)?)
     }
 
-    pub fn get_p2p_request_range(&mut self, offset: usize, count: usize, request_id: u64) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_request_range(request_id, offset, count)?)
+    pub fn get_p2p_request_range(&mut self, offset: usize, count: usize, request_id: u64, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
+        Ok(self.p2p_db.get_request_range(request_id, offset, count, remote_requested)?)
     }
 
     pub fn get_rpc_range(&mut self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, Error> {
@@ -203,8 +199,6 @@ pub mod tests {
     use crate::network::connection_message::ConnectionMessage;
     use tezos_messages::p2p::encoding::metadata::MetadataMessage;
     use crate::actors::logs_message::LogMessage;
-    use crate::storage::secondary_index::SecondaryIndex;
-    use crate::storage::log_storage::secondary_indexes::LogLevel;
 
     macro_rules! function {
     () => {{
@@ -259,36 +253,6 @@ pub mod tests {
     }
 
     #[test]
-    fn p2p_read_range() {
-        let mut db = create_test_db(function!());
-        let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
-        for x in 0usize..10 {
-            let res = db.store_p2p_message(
-                &StoreMessage::new_rest(sock, true, RESTMessage::Response {
-                    status: "200".to_string(),
-                    payload: format!("{}", x),
-                })
-            );
-            assert!(res.is_ok(), "failed to store message: {:?}", res);
-        }
-        let msgs = db.get_p2p_range(Some(0), 10).unwrap();
-        assert_eq!(msgs.len(), 10);
-        for (id, msg) in msgs.iter().enumerate() {
-            match msg {
-                RpcMessage::RestMessage { message, .. } => {
-                    match message {
-                        MappedRESTMessage::Response { payload, .. } => {
-                            assert_eq!(payload, &format!("{}", id));
-                        }
-                        msg => panic!("Expected response got {:?}", msg)
-                    }
-                }
-                msg => panic!("Expected rest message got: {:?}", msg),
-            }
-        }
-    }
-
-    #[test]
     fn p2p_read_reverse_range() {
         let mut db = create_test_db(function!());
         let sock: SocketAddr = "0.0.0.0:1010".parse().unwrap();
@@ -302,7 +266,8 @@ pub mod tests {
             assert!(res.is_ok());
         }
 
-        let msgs = db.get_p2p_reverse_range(None, 10).unwrap();
+        let msgs = db.get_p2p_reverse_range(0, 10).unwrap();
+        println!("{:?}", msgs);
 
         assert_eq!(msgs.len(), 10);
         for (id, msg) in msgs.iter().enumerate() {

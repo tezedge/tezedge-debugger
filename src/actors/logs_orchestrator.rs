@@ -20,6 +20,8 @@ pub fn make_logs_reader(path: &str, db: MessageStore) -> Result<(), Error> {
             let line = &buf[..read].trim();
             if let Ok(mut msg) = serde_json::from_str::<LogMessage>(line) {
                 let _ = db.log_db().store_message(&mut msg);
+            } else {
+                let _ = db.log_db().store_message(&mut LogMessage::raw(line.to_string()));
             }
             buf.clear()
         }
