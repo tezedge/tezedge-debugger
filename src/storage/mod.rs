@@ -91,11 +91,11 @@ impl MessageStore {
     }
 
     pub fn get_p2p_host_type_range(&mut self, offset: usize, count: usize, remote_addr: SocketAddr, types: u32, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_remote_type_range(offset, count, remote_addr, types, remote_requested)?)
+        Ok(self.p2p_db.get_remote_type_range(offset as u64, count, remote_addr, types, remote_requested)?)
     }
 
     pub fn get_p2p_request_range(&mut self, offset: usize, count: usize, request_id: u64, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_request_range(request_id, offset, count, remote_requested)?)
+        Ok(self.p2p_db.get_request_range(request_id, offset as u64, count, remote_requested)?)
     }
 
     pub fn get_rpc_range(&mut self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, Error> {

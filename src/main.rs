@@ -379,18 +379,26 @@ async fn main() -> Result<(), MainError> {
     let v2_log = warp::path!("v2" / "log")
         .and(warp::query::query())
         .map(move |query: TsQuery| {
-            let ts = query.starts_from.unwrap_or(0);
             let count = query.count.unwrap_or(100);
 
-            if let Some(ref level) = query.level {
-                match cloner().log_db().get_timestamp_level_range(level, ts, count) {
-                    Ok(value) => serde_json::to_string(&value)
-                        .expect("failed to serialize response"),
-                    Err(err) => serde_json::to_string(&format!("Database error: {}", err))
-                        .expect("failed to serialize response")
+            if let Some(ts) = query.starts_from {
+                if let Some(ref level) = query.level {
+                    match cloner().log_db().get_timestamp_level_range(level, ts, count) {
+                        Ok(value) => serde_json::to_string(&value)
+                            .expect("failed to serialize response"),
+                        Err(err) => serde_json::to_string(&format!("Database error: {}", err))
+                            .expect("failed to serialize response")
+                    }
+                } else {
+                    match cloner().log_db().get_timestamp_range(ts, count) {
+                        Ok(value) => serde_json::to_string(&value)
+                            .expect("failed to serialize response"),
+                        Err(err) => serde_json::to_string(&format!("Database error: {}", err))
+                            .expect("failed to serialize response")
+                    }
                 }
             } else {
-                match cloner().log_db().get_timestamp_range(ts, count) {
+                match cloner().log_db().get_reverse_range(0, count) {
                     Ok(value) => serde_json::to_string(&value)
                         .expect("failed to serialize response"),
                     Err(err) => serde_json::to_string(&format!("Database error: {}", err))
