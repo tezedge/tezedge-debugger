@@ -83,7 +83,7 @@ impl MessageStore {
 
 
     pub fn get_p2p_types_range(&mut self, offset: usize, count: usize, tags: u32) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_types_range(tags, offset, count)?)
+        Ok(self.p2p_db.get_types_range(tags, offset as u64, count)?)
     }
 
     pub fn get_p2p_host_range(&mut self, offset: u64, count: u64, host: SocketAddr, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {

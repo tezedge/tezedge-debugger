@@ -235,15 +235,16 @@ async fn main() -> Result<(), MainError> {
                 Type::parse_tags(&types)
             );
 
+            if let Some(Err(_)) = types {
+                return serde_json::to_string(&format!("Invalid types: {}", query.types.unwrap()))
+                    .expect("failed to serialize response");
+            }
+
             if let Some(remote_host) = query.remote_host {
                 // Host + types
                 if let Some(types) = types {
                     // Match
-                    let types = match types {
-                        Ok(types) => types,
-                        Err(_) => return serde_json::to_string(&format!("Invalid types: {}", query.types.unwrap()))
-                            .expect("failed to serialize response"),
-                    };
+                    let types = types.unwrap();
                     match cloner().get_p2p_host_type_range(offset as usize, count, remote_host, types, query.remote_requested) {
                         Ok(value) => serde_json::to_string(&value)
                             .expect("failed to serialize response"),
@@ -262,6 +263,13 @@ async fn main() -> Result<(), MainError> {
             } else if let Some(request_id) = query.request_id {
                 // Ignore types for now, as it does not truly make sense to filter specific request by types
                 match cloner().get_p2p_request_range(offset as usize, count, request_id, query.remote_requested) {
+                    Ok(value) => serde_json::to_string(&value)
+                        .expect("failed to serialize response"),
+                    Err(e) => serde_json::to_string(&format!("Database error: {}", e))
+                        .expect("failed to serialize response")
+                }
+            } else if let Some(Ok(types)) = types {
+                match cloner().get_p2p_types_range(offset as usize, count, types) {
                     Ok(value) => serde_json::to_string(&value)
                         .expect("failed to serialize response"),
                     Err(e) => serde_json::to_string(&format!("Database error: {}", e))

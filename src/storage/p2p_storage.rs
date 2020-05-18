@@ -118,7 +118,7 @@ impl P2PMessageStorage {
     }
 
     pub fn get_reverse_range(&self, offset_id: u64, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
-        self._get_range(if offset_id == 0 { std::u64::MAX } else { 0 }, count, true)
+        self._get_range(if offset_id == 0 { std::u64::MAX } else { offset_id }, count, true)
     }
 
     fn _get_range(&self, offset_id: u64, count: usize, backwards: bool) -> Result<Vec<RpcMessage>, StorageError> {
@@ -166,7 +166,7 @@ impl P2PMessageStorage {
         })
     }
 
-    pub fn get_types_range(&self, msg_types: u32, offset: usize, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
+    pub fn get_types_range(&self, msg_types: u32, offset: u64, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
         if msg_types == 0 {
             Ok(Default::default())
         } else {
