@@ -379,7 +379,7 @@ async fn main() -> Result<(), MainError> {
     let v2_log = warp::path!("v2" / "log")
         .and(warp::query::query())
         .map(move |query: TsQuery| {
-            let ts = query.starts_from.unwrap_or(0);
+            let ts = query.starts_from.unwrap_or(std::u128::MAX);
             let count = query.count.unwrap_or(100);
 
             if let Some(ref level) = query.level {

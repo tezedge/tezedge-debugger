@@ -140,9 +140,8 @@ impl P2PMessageStorage {
     }
 
     pub fn get_remote_range(&self, offset: u64, count: usize, host: SocketAddr, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
-        let idx = self.remote_index.get_raw_prefix_iterator(host)?
-            .filter_map(|(_, val)| val.ok())
-            .skip(offset as usize);
+        let idx = self.remote_index.get_concrete_prefix_iterator(&offset, host)?
+            .filter_map(|(_, val)| val.ok());
         let iter = self.load_indexes(Box::new(idx))
             .take(count);
         Ok(if let Some(rq) = remote_requested {
@@ -174,17 +173,16 @@ impl P2PMessageStorage {
             let mut idxs = Vec::new();
             let filter = |(_, val): (_, Result<u64, _>)| val.ok();
             let cmp: for<'r, 's> fn(&'r u64, &'s u64) -> bool = |x, y| x > y;
-            idxs.push(self.type_index.get_raw_prefix_iterator(part)?
+            idxs.push(self.type_index.get_concrete_prefix_iterator(&offset, part)?
                 .filter_map(filter));
             while rest != 0 {
                 let (part, step) = dissect(rest);
                 rest = step;
-                idxs.push(self.type_index.get_raw_prefix_iterator(part)?
+                idxs.push(self.type_index.get_concrete_prefix_iterator(&offset, part)?
                     .filter_map(filter));
             }
             let idx = idxs.into_iter()
-                .kmerge_by(cmp)
-                .skip(offset);
+                .kmerge_by(cmp);
             Ok(self.load_indexes(Box::new(idx))
                 .take(count)
                 .fold(Vec::with_capacity(count as usize), |mut acc, value| {
@@ -194,7 +192,7 @@ impl P2PMessageStorage {
         }
     }
 
-    pub fn get_remote_type_range(&self, offset: usize, count: usize, remote_host: SocketAddr, types: u32, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
+    pub fn get_remote_type_range(&self, offset: u64, count: usize, remote_host: SocketAddr, types: u32, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
         if types == 0 {
             Ok(Default::default())
         } else {
@@ -202,17 +200,16 @@ impl P2PMessageStorage {
             let mut idxs = Vec::new();
             let filter = |(_, val): (_, Result<u64, _>)| val.ok();
             let cmp: for<'r, 's> fn(&'r u64, &'s u64) -> bool = |x, y| x > y;
-            idxs.push(self.remote_type_index.get_raw_prefix_iterator((remote_host, part))?
+            idxs.push(self.remote_type_index.get_concrete_prefix_iterator(&offset, (remote_host, part))?
                 .filter_map(filter));
             while rest != 0 {
                 let (part, step) = dissect(rest);
                 rest = step;
-                idxs.push(self.remote_type_index.get_raw_prefix_iterator((remote_host, part))?
+                idxs.push(self.remote_type_index.get_concrete_prefix_iterator(&offset, (remote_host, part))?
                     .filter_map(filter));
             }
             let idx = idxs.into_iter()
-                .kmerge_by(cmp)
-                .skip(offset);
+                .kmerge_by(cmp);
             let iter = self.load_indexes(Box::new(idx)).take(count);
             Ok(if let Some(rq) = remote_requested {
                 iter.filter_map(|msg| if let RpcMessage::P2pMessage { remote_requested, .. } = msg {
@@ -236,10 +233,9 @@ impl P2PMessageStorage {
         }
     }
 
-    pub fn get_request_range(&self, request_id: u64, offset: usize, count: usize, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
-        let idx = self.request_index.get_raw_prefix_iterator(request_id)?
-            .filter_map(|(_, val)| val.ok())
-            .skip(offset as usize);
+    pub fn get_request_range(&self, request_id: u64, offset: u64, count: usize, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
+        let idx = self.request_index.get_concrete_prefix_iterator(&offset, request_id)?
+            .filter_map(|(_, val)| val.ok());
         let iter = self.load_indexes(Box::new(idx))
             .take(count);
         Ok(if let Some(rq) = remote_requested {

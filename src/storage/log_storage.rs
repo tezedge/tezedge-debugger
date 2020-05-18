@@ -92,7 +92,7 @@ impl LogStorage {
     }
 
     pub fn get_timestamp_range(&self, timestamp: u128, count: usize) -> Result<Vec<LogMessage>, Error> {
-        let mut iter = self.timestamp_index.get_raw_prefix_iterator(timestamp)?;
+        let mut iter = self.timestamp_index.get_prefix_iterator(timestamp)?;
         let index = iter.next();
         if let Some((_, index)) = index {
             let pk = index?;
@@ -112,7 +112,7 @@ impl LogStorage {
 
     pub fn get_level_range(&self, level: &str, offset: usize, count: usize) -> Result<Vec<LogMessage>, Error> {
         let level = level.parse()?;
-        let idx = self.level_index.get_raw_prefix_iterator(level)?
+        let idx = self.level_index.get_prefix_iterator(level)?
             .filter_map(|(_, val)| val.ok())
             .skip(offset);
         Ok(self.load_indexes(Box::new(idx), count as usize)
@@ -124,7 +124,7 @@ impl LogStorage {
 
     pub fn get_timestamp_level_range(&self, level: &str, timestamp: u128, count: usize) -> Result<Vec<LogMessage>, Error> {
         let level = level.parse()?;
-        let idx = self.timestamp_level_index.get_raw_prefix_iterator((level, timestamp))?
+        let idx = self.timestamp_level_index.get_prefix_iterator((level, timestamp))?
             .filter_map(|(_, val)| val.ok());
         Ok(self.load_indexes(Box::new(idx), count as usize)
             .fold(Vec::with_capacity(count as usize), |mut acc, value| {
