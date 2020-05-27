@@ -6,7 +6,6 @@ use std::sync::{
 use rocksdb::DB;
 use crate::utility::p2p_message::P2PMessage;
 use storage::StorageError;
-use failure::_core::fmt::Formatter;
 
 pub type P2PStoreKV = dyn KeyValueStoreWithSchema<P2PStore> + Sync + Send;
 
@@ -24,6 +23,7 @@ impl std::fmt::Debug for P2PStore {
     }
 }
 
+#[allow(dead_code)]
 impl P2PStore {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {

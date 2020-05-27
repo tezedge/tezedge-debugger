@@ -31,3 +31,13 @@ impl Actor for Processors {
     fn recv(&mut self, _: &Context<Self::Msg>, _: Self::Msg, _: Sender) {}
 }
 
+impl ActorFactoryArgs<Storage> for Processors {
+    fn create_args(storage: Storage) -> Self {
+        Self {
+            p2p_processors: Default::default(),
+            rpc_processors: Default::default(),
+            storage,
+        }
+    }
+}
+

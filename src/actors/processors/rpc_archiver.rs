@@ -1,6 +1,6 @@
 use riker::actors::*;
 use crate::storage::Storage;
-use crate::utility::http_message::{HttpMessage, RPCMessage};
+use crate::utility::http_message::RPCMessage;
 use crate::storage::rpc_store::RPCStore;
 
 pub struct RPCArchiver {

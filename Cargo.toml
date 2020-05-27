@@ -10,6 +10,7 @@ edition = "2018"
 hex = "0.4"
 log = "0.4"
 nfq = "0.2"
+argh = "0.1"
 bytes = "0.5"
 riker = "0.4"
 smoltcp = "0.6"
@@ -17,6 +18,8 @@ failure = "0.1"
 rocksdb = "0.13"
 crossbeam = "0.7"
 serde_json = "1.0"
+simple_logger = "1.6"
+tokio = { version="0.2", features=["full"] }
 serde = { version="1.0", features=["derive"] }
 crypto = { version="*", git = "https://github.com/simplestaking/tezedge" }
 storage = { version = "*", git = "htps://github.com/simplestaking/tezedge" }

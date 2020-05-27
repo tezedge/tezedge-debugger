@@ -4,10 +4,8 @@ use std::sync::{
     atomic::{Ordering, AtomicU64},
 };
 use rocksdb::DB;
-use crate::utility::p2p_message::P2PMessage;
 use storage::StorageError;
-use failure::_core::fmt::Formatter;
-use crate::utility::http_message::{HttpMessage, RPCMessage};
+use crate::utility::http_message::RPCMessage;
 
 pub type RPCStoreKV = dyn KeyValueStoreWithSchema<RPCStore> + Sync + Send;
 
@@ -25,6 +23,7 @@ impl std::fmt::Debug for RPCStore {
     }
 }
 
+#[allow(dead_code)]
 impl RPCStore {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
