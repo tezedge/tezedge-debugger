@@ -18,9 +18,10 @@ impl ProducerBehaviour for PacketProducer {
         match msg {
             Ok(mut value) => {
                 value.set_verdict(Verdict::Accept);
-                let ret = ProducerOutput::Produced(Packet::new(value.get_payload()));
+                let ret = Packet::new(value.get_payload());
                 let _ = queue.verdict(value);
-                ret
+                std::thread::sleep(std::time::Duration::from_millis(25));
+                ProducerOutput::Produced(ret)
             }
             Err(_) => ProducerOutput::Completed(())
         }
@@ -29,10 +30,21 @@ impl ProducerBehaviour for PacketProducer {
 
 impl ProducerBehaviourFactoryArgs<()> for PacketProducer {
     fn create_args(_: ()) -> Self {
-        let mut queue = Queue::open().expect("failed to open queue");
-        let _ = queue.bind(0);
-        Self {
-            queue: Arc::new(Mutex::new(queue)),
+        let queue = Queue::open();
+        match queue.and_then(|mut queue| {
+            queue.bind(0)
+                .map(|_| queue)
+        }) {
+            Ok(queue) => {
+                log::info!("Binded NFQUEUE: {}", 0);
+                Self {
+                    queue: Arc::new(Mutex::new(queue)),
+                }
+            }
+            Err(err) => {
+                log::error!("Failed to bind NFQUEUE: {}", err);
+                panic!()
+            }
         }
     }
 }

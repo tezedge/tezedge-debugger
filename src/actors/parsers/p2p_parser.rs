@@ -11,7 +11,7 @@ use tezos_messages::p2p::binary_message::cache::CachedData;
 use crypto::nonce::{NoncePair, generate_nonces};
 use crypto::crypto_box::precompute;
 use crate::utility::decrypter::P2PDecrypter;
-use crate::utility::p2p_message::{P2PMessage};
+use crate::utility::p2p_message::{P2pMessage};
 
 #[derive(Debug, Clone)]
 pub struct P2PParserArgs {
@@ -48,29 +48,33 @@ impl P2PParser {
         }
     }
 
-    fn process_message(&mut self, msg: &mut Packet) -> Option<P2PMessage> {
+    fn process_message(&mut self, msg: &mut Packet) -> Result<Option<P2pMessage>, Error> {
         if self.handshake == 3 {
-            if self.initialized {
-                self.process_encrypted_message(msg)
+            if msg.has_payload() {
+                if self.initialized {
+                    self.process_encrypted_message(msg)
+                } else {
+                    self.process_unencrypted_message(msg)
+                }
             } else {
-                self.process_unencrypted_message(msg)
+                Ok(None)
             }
         } else {
             self.process_handshake_message(msg)
         }
     }
 
-    fn process_handshake_message(&mut self, _: &mut Packet) -> Option<P2PMessage> {
+    fn process_handshake_message(&mut self, _: &mut Packet) -> Result<Option<P2pMessage>, Error> {
         self.handshake += 1;
-        None
+        Ok(None)
     }
 
-    fn process_unencrypted_message(&mut self, msg: &mut Packet) -> Option<P2PMessage> {
+    fn process_unencrypted_message(&mut self, msg: &mut Packet) -> Result<Option<P2pMessage>, Error> {
         // -> This *MUST* be one of connection messages exchanged between both nodes
         assert!(!self.initialized, "Connection trying to process encrypted messages as unencrypted");
 
-        let chunk = BinaryChunk::try_from(msg.payload().to_vec()).ok()?;
-        let conn_msg = ConnectionMessage::try_from(chunk).ok()?;
+        let chunk = BinaryChunk::try_from(msg.payload().to_vec())?;
+        let conn_msg = ConnectionMessage::try_from(chunk)?;
 
         if let Some((_, addr)) = self.conn_msgs.get(0) {
             if addr == &msg.source_addr() {
@@ -82,7 +86,7 @@ impl P2PParser {
         self.conn_msgs.push((conn_msg.clone(), msg.source_addr()));
 
         if self.conn_msgs.len() == 2 {
-            self.upgrade().ok()?;
+            self.upgrade()?;
             log::info!("Successfully upgraded peer {}", self.peer_id);
         }
 
@@ -92,27 +96,27 @@ impl P2PParser {
             (msg.destination_address(), false)
         };
 
-        Some(P2PMessage::new(remote, incoming, vec![conn_msg]))
+        Ok(Some(P2pMessage::new(remote, incoming, vec![conn_msg])))
     }
 
     /// Process encrypted messages, after securing connection between nodes.
-    fn process_encrypted_message(&mut self, msg: &mut Packet) -> Option<P2PMessage> {
+    fn process_encrypted_message(&mut self, msg: &mut Packet) -> Result<Option<P2pMessage>, Error> {
         let (decrypter, remote, incoming) = if msg.destination_address().ip() == self.addr {
             (&mut self.incoming_decrypter, msg.source_addr(), true)
         } else {
             (&mut self.outgoing_decrypter, msg.destination_address(), false)
         };
 
-        if let Some(ref mut decrypter) = decrypter {
+        Ok(if let Some(ref mut decrypter) = decrypter {
             let msgs = decrypter.recv_msg(msg);
             if let Some(msgs) = msgs {
-                Some(P2PMessage::new(remote, incoming, msgs))
+                Some(P2pMessage::new(remote, incoming, msgs))
             } else {
                 None
             }
         } else {
             None
-        }
+        })
     }
 
     /// Upgrade processor to encrypted state
@@ -159,10 +163,16 @@ impl Actor for P2PParser {
 
     fn recv(&mut self, ctx: &Context<Self::Msg>, mut msg: Self::Msg, _: Sender) {
         let msg = self.process_message(&mut msg);
-        if let Some(msg) = msg {
-            match ctx.select("/user/processors/*") {
-                Ok(actor_ref) => actor_ref.try_tell(msg, ctx.myself()),
-                Err(err) => log::error!("Failed to propagate parsed p2p message: {}", err),
+        match msg {
+            Ok(Some(msg)) => {
+                match ctx.select("/user/processors/*") {
+                    Ok(actor_ref) => actor_ref.try_tell(msg, ctx.myself()),
+                    Err(err) => log::error!("Failed to propagate parsed p2p message: {}", err),
+                }
+            }
+            Ok(None) => {}
+            Err(err) => {
+                log::error!("Failed to parse message: {}", err)
             }
         }
     }

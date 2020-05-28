@@ -11,16 +11,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use storage::persistent::BincodeEncoded;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct P2PMessage {
+pub struct P2pMessage {
+    pub id: Option<u64>,
     timestamp: u128,
     remote_addr: SocketAddr,
     incoming: bool,
     payload: Vec<PeerMessage>,
 }
 
-impl BincodeEncoded for P2PMessage {}
+impl BincodeEncoded for P2pMessage {}
 
-impl P2PMessage {
+impl P2pMessage {
     fn make_ts() -> u128 {
         SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
     }
@@ -28,6 +29,7 @@ impl P2PMessage {
     pub fn new<T: Into<PeerMessage>>(remote_addr: SocketAddr, incoming: bool, values: Vec<T>) -> Self {
         let payload = values.into_iter().map(|x| x.into()).collect();
         Self {
+            id: None,
             timestamp: Self::make_ts(),
             remote_addr,
             incoming,

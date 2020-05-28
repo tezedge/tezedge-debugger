@@ -20,6 +20,9 @@ pub struct AppConfig {
     #[argh(option)]
     /// address on which runs the ocaml node
     pub local_address: IpAddr,
+    #[argh(option)]
+    /// node logging file
+    pub log_file: String,
 }
 
 impl AppConfig {

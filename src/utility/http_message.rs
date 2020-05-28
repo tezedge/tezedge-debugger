@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RPCMessage {
+    pub id: Option<u64>,
     timestamp: u128,
     remote_addr: SocketAddr,
     payload: HttpMessage,
@@ -19,6 +20,7 @@ impl RPCMessage {
 
     pub fn new(payload: HttpMessage, remote_addr: SocketAddr) -> Self {
         Self {
+            id: None,
             timestamp: Self::make_ts(),
             remote_addr,
             payload,

@@ -43,16 +43,23 @@ impl Packet {
     }
 
     /// Get raw buffer of this packet
-    pub fn buffer(&self) -> &[u8] {
+    pub fn ip_buffer(&self) -> &[u8] {
         match self {
             Self::V4(ref packet) => packet.as_ref(),
             Self::V6(ref packet) => packet.as_ref(),
         }
     }
 
+    pub fn tcp_buffer(&self) -> &[u8] {
+        match self {
+            Self::V4(_) => Ipv4Packet::new_unchecked(self.ip_buffer()).payload(),
+            Self::V6(_) => Ipv6Packet::new_unchecked(self.ip_buffer()).payload(),
+        }
+    }
+
     /// Get Tcp packet (without IP headers) from this IP packet.
     pub fn tcp_packet(&self) -> TcpPacket<&[u8]> {
-        TcpPacket::new_unchecked(self.payload())
+        TcpPacket::new_unchecked(self.tcp_buffer())
     }
 
     #[inline]

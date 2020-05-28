@@ -1,15 +1,15 @@
 use riker::actors::*;
 use std::collections::HashMap;
 use crate::utility::{
-    p2p_message::P2PMessage,
+    p2p_message::P2pMessage,
     http_message::HttpMessage,
 };
 use crate::storage::Storage;
-use crate::actors::processors::p2p_archiver::P2PArchiver;
+use crate::actors::processors::p2p_archiver::P2pArchiver;
 
 #[derive(Clone)]
 pub struct Processors {
-    p2p_processors: HashMap<String, ActorRef<P2PMessage>>,
+    p2p_processors: HashMap<String, ActorRef<P2pMessage>>,
     rpc_processors: HashMap<String, ActorRef<HttpMessage>>,
     storage: Storage,
 }
@@ -18,7 +18,7 @@ impl Actor for Processors {
     type Msg = (); // TODO: Add control messages to spawn new processors
 
     fn pre_start(&mut self, ctx: &Context<Self::Msg>) {
-        match ctx.actor_of_args::<P2PArchiver, _>("p2p_archiver", self.storage.clone()) {
+        match ctx.actor_of_args::<P2pArchiver, _>("p2p_archiver", self.storage.clone()) {
             Ok(actor) => {
                 self.p2p_processors.insert(actor.name().to_string(), actor);
             }

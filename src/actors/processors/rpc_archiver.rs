@@ -1,11 +1,11 @@
 use riker::actors::*;
 use crate::storage::Storage;
 use crate::utility::http_message::RPCMessage;
-use crate::storage::rpc_store::RPCStore;
+use crate::storage::rpc_store::RpcStore;
 
 pub struct RPCArchiver {
     storage: Storage,
-    writers: Vec<ActorRef<(RPCMessage, RPCStore)>>,
+    writers: Vec<ActorRef<(RPCMessage, RpcStore)>>,
     counter: usize,
     writer_count: usize,
 }
@@ -53,7 +53,7 @@ impl ActorFactoryArgs<Storage> for RPCArchiver {
 pub struct RPCWriter;
 
 impl Actor for RPCWriter {
-    type Msg = (RPCMessage, RPCStore);
+    type Msg = (RPCMessage, RpcStore);
 
     fn recv(&mut self, _: &Context<Self::Msg>, msg: Self::Msg, _: Sender) {
         let (msg, store) = msg;

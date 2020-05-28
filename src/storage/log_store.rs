@@ -5,27 +5,27 @@ use std::sync::{
 };
 use rocksdb::DB;
 use storage::{StorageError, IteratorMode, Direction};
-use crate::utility::p2p_message::P2pMessage;
+use crate::utility::log_message::LogMessage;
 use failure::Error;
 
-pub type P2PStoreKV = dyn KeyValueStoreWithSchema<P2pStore> + Sync + Send;
+pub type LogStoreKV = dyn KeyValueStoreWithSchema<LogStore> + Sync + Send;
 
 
 #[derive(Clone)]
-pub struct P2pStore {
-    kv: Arc<P2PStoreKV>,
+pub struct LogStore {
+    kv: Arc<LogStoreKV>,
     seq: Arc<AtomicU64>,
     count: Arc<AtomicU64>,
 }
 
-impl std::fmt::Debug for P2pStore {
+impl std::fmt::Debug for LogStore {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "P2PStore")
+        write!(f, "LogStore")
     }
 }
 
 #[allow(dead_code)]
-impl P2pStore {
+impl LogStore {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
             kv,
@@ -50,14 +50,14 @@ impl P2pStore {
         self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
-    pub fn store_message(&self, msg: &P2pMessage) -> Result<u64, StorageError> {
+    pub fn store_message(&self, msg: &LogMessage) -> Result<u64, StorageError> {
         let index = self.fetch_index();
         self.kv.put(&index, &msg)?;
         self.inc_count();
         Ok(index)
     }
 
-    pub fn get_range(&self, offset_id: Option<u64>, count: usize) -> Result<Vec<P2pMessage>, Error> {
+    pub fn get_range(&self, offset_id: Option<u64>, count: usize) -> Result<Vec<LogMessage>, Error> {
         let mut ret = Vec::with_capacity(count);
         let offset_id = offset_id.unwrap_or(std::u64::MAX);
         let mode = IteratorMode::From(&offset_id, Direction::Reverse);
@@ -72,11 +72,11 @@ impl P2pStore {
     }
 }
 
-impl KeyValueSchema for P2pStore {
+impl KeyValueSchema for LogStore {
     type Key = u64;
-    type Value = P2pMessage;
+    type Value = LogMessage;
 
     fn name() -> &'static str {
-        "p2p_store"
+        "log_store"
     }
 }

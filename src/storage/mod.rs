@@ -1,23 +1,30 @@
 pub mod p2p_store;
 pub mod rpc_store;
+pub mod log_store;
 
 use rocksdb::{DB, ColumnFamilyDescriptor, Options};
 use failure::Error;
 use std::sync::Arc;
 use std::path::Path;
 use storage::persistent::{KeyValueSchema};
-use crate::storage::p2p_store::P2PStore;
-use crate::storage::rpc_store::RPCStore;
+use crate::storage::p2p_store::P2pStore;
+use crate::storage::rpc_store::RpcStore;
+use crate::storage::log_store::LogStore;
 
 #[derive(Clone)]
 pub struct Storage {
-    db: Arc<DB>
+    db: Arc<DB>,
+    p2p: P2pStore,
+    rpc: RpcStore,
+    log: LogStore,
 }
 
 impl Storage {
     fn cfs() -> Vec<ColumnFamilyDescriptor> {
         vec![
-            self::p2p_store::P2PStore::descriptor(),
+            self::p2p_store::P2pStore::descriptor(),
+            self::rpc_store::RpcStore::descriptor(),
+            self::log_store::LogStore::descriptor(),
         ]
     }
 
@@ -27,7 +34,10 @@ impl Storage {
         opts.create_if_missing(true);
         let db = Arc::new(DB::open_cf_descriptors(&opts, path, Self::cfs())?);
         Ok(Self {
-            db
+            db: db.clone(),
+            p2p: P2pStore::new(db.clone()),
+            rpc: RpcStore::new(db.clone()),
+            log: LogStore::new(db.clone()),
         })
     }
 
@@ -35,6 +45,7 @@ impl Storage {
         self.db.clone()
     }
 
-    pub fn p2p_store(&self) -> P2PStore { P2PStore::new(self.kv()) }
-    pub fn rpc_store(&self) -> RPCStore { RPCStore::new(self.kv()) }
+    pub fn p2p_store(&self) -> P2pStore { self.p2p.clone() }
+    pub fn rpc_store(&self) -> RpcStore { self.rpc.clone() }
+    pub fn log_store(&self) -> LogStore { self.log.clone() }
 }

@@ -37,49 +37,48 @@ impl PacketOrchestrator {
             local_identity: self.local_identity.clone(),
             addr: self.local_address.clone(),
         })?;
-        log::info!("Spawned {}", peer_name);
+        // log::info!("Spawned {}", peer_name);
         Ok(act_ref)
     }
 
     fn spawn_rpc(&self, ctx: &Context<ProducerMsg>, port: u16) -> Result<ActorRef<Packet>, Error> {
         let peer_name = format!("rpc-{}", port);
         let act_ref = ctx.actor_of_args::<RPCParser, _>(&peer_name, port)?;
-        log::info!("Spawned {}", peer_name);
+        // log::info!("Spawned {}", peer_name);
         Ok(act_ref)
     }
 }
 
 impl ProducerProcessor<PacketProducer> for PacketOrchestrator {
     fn post_process(&mut self, ctx: &Context<ProducerOutput<<PacketProducer as ProducerBehaviour>::Product, <PacketProducer as ProducerBehaviour>::Completed>>, value: <PacketProducer as ProducerBehaviour>::Product, _: Sender) -> Option<ProducerControl> {
-        if let Some(packet) = value {
-            let is_incoming = packet.destination_address().ip() == self.local_address;
-            let remote_addr = if is_incoming { packet.source_addr() } else { packet.destination_address() };
-            if is_incoming && packet.tcp_packet().dst_port() == self.rpc_port || !is_incoming && packet.tcp_packet().src_port() == self.rpc_port {
-                // Process it with HttpParser
-                if self.rpc_processor.is_none() {
-                    let act = self.spawn_rpc(ctx, self.rpc_port).unwrap();
-                    self.rpc_processor = Some(act);
-                }
-                if let Some(ref mut actor) = self.rpc_processor {
-                    actor.send_msg(packet, ctx.myself())
-                }
-            } else {
-                if let Some(remote) = self.remotes.get_mut(&remote_addr) {
-                    remote
-                } else {
-                    match self.spawn_peer(ctx, remote_addr) {
-                        Ok(actor) => {
-                            self.remotes.insert(remote_addr, actor);
-                            self.remotes.get_mut(&remote_addr)
-                                .expect("just inserted actor disappeared")
-                        }
-                        Err(e) => {
-                            log::warn!("Failed to create actor for message coming from addr {}: {}", remote_addr, e);
-                            return None;
-                        }
-                    }
-                }.send_msg(packet, ctx.myself());
+        let packet = value?;
+        let is_incoming = packet.destination_address().ip() == self.local_address;
+        let remote_addr = if is_incoming { packet.source_addr() } else { packet.destination_address() };
+        if is_incoming && packet.tcp_packet().dst_port() == self.rpc_port || !is_incoming && packet.tcp_packet().src_port() == self.rpc_port {
+            // Process it with HttpParser
+            if self.rpc_processor.is_none() {
+                let act = self.spawn_rpc(ctx, self.rpc_port).unwrap();
+                self.rpc_processor = Some(act);
             }
+            if let Some(ref mut actor) = self.rpc_processor {
+                actor.send_msg(packet, ctx.myself())
+            }
+        } else {
+            if let Some(remote) = self.remotes.get_mut(&remote_addr) {
+                remote
+            } else {
+                match self.spawn_peer(ctx, remote_addr) {
+                    Ok(actor) => {
+                        self.remotes.insert(remote_addr, actor);
+                        self.remotes.get_mut(&remote_addr)
+                            .expect("just inserted actor disappeared")
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to create actor for message coming from addr {}: {}", remote_addr, e);
+                        return None;
+                    }
+                }
+            }.send_msg(packet, ctx.myself());
         }
         None
     }

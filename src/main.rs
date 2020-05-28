@@ -1,4 +1,5 @@
 pub mod actors;
+pub mod server;
 pub mod utility;
 pub mod storage;
 pub mod configuration;
@@ -10,6 +11,8 @@ use riker::actors::*;
 use crate::actors::producers::nfqueue_producer::PacketProducer;
 use crate::actors::producers::packet_orchestrator::{PacketOrchestrator, PacketOrchestratorArgs};
 use crate::actors::processors::processors::Processors;
+use crate::actors::producers::log_producer::LogProducer;
+use crate::actors::processors::log_archiver::LogArchiver;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -25,6 +28,11 @@ async fn main() -> Result<(), Error> {
             local_identity: identity.clone(),
             local_address: cfg.local_address.clone(),
         }
+    ))?;
+
+    system.actor_of_args::<Producer<LogProducer, LogArchiver>, _>("log_producer", (
+        cfg.log_file.clone(),
+        storage.clone(),
     ))?;
 
     system.actor_of_args::<Processors, _>("processors", storage.clone())?;

@@ -4,27 +4,28 @@ use std::sync::{
     atomic::{Ordering, AtomicU64},
 };
 use rocksdb::DB;
-use storage::StorageError;
+use storage::{StorageError, IteratorMode, Direction};
 use crate::utility::http_message::RPCMessage;
+use failure::Error;
 
-pub type RPCStoreKV = dyn KeyValueStoreWithSchema<RPCStore> + Sync + Send;
+pub type RPCStoreKV = dyn KeyValueStoreWithSchema<RpcStore> + Sync + Send;
 
 
 #[derive(Clone)]
-pub struct RPCStore {
+pub struct RpcStore {
     kv: Arc<RPCStoreKV>,
     seq: Arc<AtomicU64>,
     count: Arc<AtomicU64>,
 }
 
-impl std::fmt::Debug for RPCStore {
+impl std::fmt::Debug for RpcStore {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "RPCStore")
     }
 }
 
 #[allow(dead_code)]
-impl RPCStore {
+impl RpcStore {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
             kv,
@@ -55,13 +56,27 @@ impl RPCStore {
         self.inc_count();
         Ok(index)
     }
+
+    pub fn get_range(&self, offset_id: Option<u64>, count: usize) -> Result<Vec<RPCMessage>, Error> {
+        let mut ret = Vec::with_capacity(count);
+        let offset_id = offset_id.unwrap_or(std::u64::MAX);
+        let mode = IteratorMode::From(&offset_id, Direction::Reverse);
+        let iter = self.kv.iterator(mode)?
+            .take(count);
+        for (key, value) in iter {
+            let (key, mut value) = (key?, value?);
+            value.id = Some(key);
+            ret.push(value);
+        }
+        Ok(ret)
+    }
 }
 
-impl KeyValueSchema for RPCStore {
+impl KeyValueSchema for RpcStore {
     type Key = u64;
     type Value = RPCMessage;
 
     fn name() -> &'static str {
-        "p2p_store"
+        "rpc_store"
     }
 }
