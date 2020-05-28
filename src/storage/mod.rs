@@ -15,21 +15,19 @@ pub use log_storage::*;
 pub use p2p_storage::secondary_indexes as p2p_secondary_indexes;
 
 use rocksdb::{DB, WriteOptions, ColumnFamilyDescriptor};
-use failure::Error;
 use std::{
     path::Path,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
-    net::{SocketAddr, IpAddr},
+    net::IpAddr,
 };
-use crate::storage::rpc_message::RpcMessage;
 use storage::persistent::KeyValueSchema;
 // use std::fs::remove_dir_all;
 
 #[derive(Clone)]
 pub struct MessageStore {
-    p2p_db: P2PMessageStorage,
-    rpc_db: RpcMessageStorage,
+    p2p_db: P2PStorage,
+    rpc_db: RpcStorage,
     log_db: LogStorage,
     raw_db: Arc<DB>,
     max_db_size: Option<u64>,
@@ -38,72 +36,24 @@ pub struct MessageStore {
 impl MessageStore {
     pub fn new(db: Arc<DB>) -> Self {
         Self {
-            p2p_db: P2PMessageStorage::new(db.clone()),
-            rpc_db: RpcMessageStorage::new(db.clone()),
+            p2p_db: P2PStorage::new(db.clone()),
+            rpc_db: RpcStorage::new(db.clone()),
             log_db: LogStorage::new(db.clone()),
             raw_db: db,
             max_db_size: None,
         }
     }
 
-    pub fn rpc_db(&mut self) -> &mut RpcMessageStorage {
-        &mut self.rpc_db
+    pub fn rpc(&self) -> &RpcStorage {
+        &self.rpc_db
     }
 
-    pub fn p2p_db(&mut self) -> &mut P2PMessageStorage {
-        &mut self.p2p_db
+    pub fn p2p(&self) -> &P2PStorage {
+        &self.p2p_db
     }
 
-    pub fn log_db(&mut self) -> &mut LogStorage {
-        &mut self.log_db
-    }
-
-    pub fn reserve_p2p_index(&mut self) -> u64 {
-        self.p2p_db.reserve_index()
-    }
-
-    pub fn put_p2p_message(&mut self, index: u64, msg: &StoreMessage) -> Result<(), Error> {
-        Ok(self.p2p_db.put_message(index, msg)?)
-    }
-
-    pub fn store_p2p_message(&mut self, data: &StoreMessage) -> Result<u64, Error> {
-        let ret = self.p2p_db.store_message(&data)
-            .map_err(|e| e.into());
-        ret
-    }
-
-    pub fn store_rpc_message(&mut self, data: &StoreMessage) -> Result<(), Error> {
-        self.rpc_db.store_message(&data)
-            .map_err(|e| e.into())
-    }
-
-    pub fn get_p2p_reverse_range(&mut self, offset: u64, count: usize) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_reverse_range(offset, count)?)
-    }
-
-
-    pub fn get_p2p_types_range(&mut self, offset: usize, count: usize, tags: u32) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_types_range(tags, offset as u64, count)?)
-    }
-
-    pub fn get_p2p_host_range(&mut self, offset: u64, count: u64, host: SocketAddr, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_remote_range(offset, count as usize, host, remote_requested)?)
-    }
-
-    pub fn get_p2p_host_type_range(&mut self, offset: usize, count: usize, remote_addr: SocketAddr, types: u32, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_remote_type_range(offset as u64, count, remote_addr, types, remote_requested)?)
-    }
-
-    pub fn get_p2p_request_range(&mut self, offset: usize, count: usize, request_id: u64, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.p2p_db.get_request_range(request_id, offset as u64, count, remote_requested)?)
-    }
-
-    pub fn get_rpc_range(&mut self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.rpc_db.get_range(offset, count)?)
-    }
-
-    pub fn get_rpc_host_range(&mut self, offset: u64, count: u64, host: IpAddr) -> Result<Vec<RpcMessage>, Error> {
-        Ok(self.rpc_db.get_host_range(offset, count, host)?)
+    pub fn log(&self) -> &LogStorage {
+        &self.log_db
     }
 
     pub(crate) fn database_path(&self) -> &Path {
@@ -113,28 +63,18 @@ impl MessageStore {
     pub(crate) fn database_size(&self) -> std::io::Result<u64> {
         dir_size(self.database_path())
     }
-
-    pub(crate) fn reduce_db(&mut self) -> Result<(), Error> {
-        self.p2p_db.reduce_db()?;
-        Ok(())
-    }
 }
 
 pub(crate) fn cfs() -> Vec<ColumnFamilyDescriptor> {
     use crate::storage::p2p_storage::secondary_indexes as p2p_indexes;
-    use crate::storage::log_storage::secondary_indexes as log_indexes;
     vec![
-        RpcMessageStorage::descriptor(),
-        P2PMessageStorage::descriptor(),
+        RpcStorage::descriptor(),
+        P2PStorage::descriptor(),
         LogStorage::descriptor(),
-        p2p_indexes::RemoteReverseIndex::descriptor(),
+        p2p_indexes::RemoteAddrIndex::descriptor(),
         p2p_indexes::TypeIndex::descriptor(),
-        p2p_indexes::RemoteTypeIndex::descriptor(),
         p2p_indexes::RequestTrackingIndex::descriptor(),
-        log_indexes::LevelIndex::descriptor(),
-        log_indexes::TimeStampIndex::descriptor(),
-        log_indexes::TimeStampLevelIndex::descriptor(),
-        crate::storage::RpcMessageSecondaryIndex::descriptor(),
+        p2p_indexes::IncomingIndex::descriptor(),
     ]
 }
 
@@ -180,10 +120,100 @@ fn decode_address(value: u128) -> IpAddr {
     }
 }
 
-fn dissect(num: u32) -> (u32, u32) {
-    let shift = num.trailing_zeros();
-    let ret = 0x1 << shift;
-    (ret, !ret & num)
+pub fn dissect(mut number: u32) -> Vec<u32> {
+    let mut ret: Vec<u32> = Vec::with_capacity(number.count_ones() as usize);
+    while number != 0 {
+        let value = 0x1 << number.trailing_zeros();
+        number = !value & number;
+        ret.push(value);
+    }
+    ret
+}
+
+pub mod sorted_intersect {
+    use std::cmp::Ordering;
+
+    pub fn sorted_intersect<I>(mut iters: Vec<I>, limit: usize) -> Vec<I::Item>
+        where
+            I: Iterator,
+            I::Item: Ord,
+    {
+        let mut ret = Default::default();
+        let mut heap = Vec::with_capacity(iters.len());
+        // Fill the heap with values
+        if !fill_heap(iters.iter_mut(), &mut heap) {
+            // Hit an exhausted iterator, finish
+            return ret;
+        }
+
+        while ret.len() < limit {
+            if is_hit(&heap) {
+                // We hit intersected item
+                if let Some((item, _)) = heap.pop() {
+                    // Push it into the intersect values
+                    ret.push(item);
+                    // Clear the rest of the heap
+                    heap.clear();
+                    // Build a new heap from new values
+                    if !fill_heap(iters.iter_mut(), &mut heap) {
+                        // Hit an exhausted iterator, finish
+                        return ret;
+                    }
+                } else {
+                    // Hit an exhausted iterator, finish
+                    return ret;
+                }
+            } else {
+                // Remove max element from the heap
+                if let Some((_, iter_num)) = heap.pop() {
+                    if let Some(item) = iters[iter_num].next() {
+                        // Insert replacement from the corresponding iterator to heap
+                        heap.push((item, iter_num));
+                        heapify(&mut heap);
+                    } else {
+                        // Hit an exhausted iterator, finish
+                        return ret;
+                    }
+                } else {
+                    // Hit an exhausted iterator, finish
+                    return ret;
+                }
+            }
+        }
+
+        ret
+    }
+
+    fn heapify<Item: Ord>(heap: &mut Vec<(Item, usize)>) {
+        heap.sort_by(|(a, _), (b, _)| a.cmp(b));
+    }
+
+    fn fill_heap<'a, Item: Ord, Inner: 'a + Iterator<Item=Item>, Outer: Iterator<Item=&'a mut Inner>>(iters: Outer, heap: &mut Vec<(Inner::Item, usize)>) -> bool {
+        for (i, iter) in iters.enumerate() {
+            let value = iter.next();
+            if let Some(value) = value {
+                heap.push((value, i))
+            } else {
+                return false;
+            }
+        }
+        heapify(heap);
+        true
+    }
+
+    fn is_hit<Item: Ord>(heap: &Vec<(Item, usize)>) -> bool {
+        let value = heap.iter().next().map(|(value, _)|
+            heap.iter().fold((value, true), |(a, eq), (b, _)| {
+                (b, eq & (a.cmp(b) == Ordering::Equal))
+            })
+        );
+
+        if let Some((_, true)) = value {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg(test)]
@@ -337,13 +367,13 @@ pub mod tests {
 
         for x in 0usize..10 {
             msg.extra.insert("message".to_string(), format!("{}", x));
-            let res = db.log_db().store_message(&mut msg);
+            let res = db.log().store_message(&mut msg);
             if res.is_err() {
                 assert!(false, "failed to store message: {}", res.unwrap_err())
             }
         }
 
-        let msgs = db.log_db().get_reverse_range(0, 10).unwrap();
+        let msgs = db.log().get_reverse_range(0, 10).unwrap();
         assert_eq!(msgs.len(), 10);
         for (msg, id) in msgs.into_iter().zip((0..10).rev()) {
             let val = msg.extra.get("message").unwrap();
@@ -368,11 +398,11 @@ pub mod tests {
         for x in 0usize..10 {
             msg.extra.insert("message".to_string(), format!("{}", x));
             msg.date = x as u128;
-            db.log_db().store_message(&mut msg).unwrap();
+            db.log().store_message(&mut msg).unwrap();
         }
 
 
-        let msgs = db.log_db().get_timestamp_range(4, 10).unwrap();
+        let msgs = db.log().get_timestamp_range(4, 10).unwrap();
         println!("{:?}", msgs);
         assert_eq!(msgs.len(), 5);
         for (msg, id) in msgs.into_iter().zip((0u128..5).rev()) {
@@ -396,22 +426,22 @@ pub mod tests {
 
         for i in 0u128..5 {
             msg.date = i;
-            db.log_db().store_message(&mut msg).unwrap();
+            db.log().store_message(&mut msg).unwrap();
         }
 
         msg.level = "warn".to_string();
         for i in 0u128..5 {
             msg.date = i;
-            db.log_db().store_message(&mut msg).unwrap();
+            db.log().store_message(&mut msg).unwrap();
         }
 
-        let msgs = db.log_db().get_timestamp_level_range("notice", 0, 10).unwrap();
+        let msgs = db.log().get_timestamp_level_range("notice", 0, 10).unwrap();
         assert_eq!(msgs.len(), 5);
         for (msg, index) in msgs.into_iter().zip((0u128..5).rev()) {
             assert_eq!(msg.date, index)
         }
 
-        let msgs = db.log_db().get_timestamp_level_range("warning", 0, 10).unwrap();
+        let msgs = db.log().get_timestamp_level_range("warning", 0, 10).unwrap();
         assert_eq!(msgs.len(), 5);
         for (msg, index) in msgs.into_iter().zip((0u128..5).rev()) {
             assert_eq!(msg.date, index)

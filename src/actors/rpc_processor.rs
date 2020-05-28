@@ -53,14 +53,14 @@ impl RpcProcessor {
             let parser = self.get_request_parser(msg.remote_addr());
             if let Some(payload) = parser.process_message(msg.payload()) {
                 log::info!("Finished parsing RPC message: {:?}", payload);
-                let _ = self.db.store_rpc_message(&StoreMessage::new_rest(msg.remote_addr(), msg.is_incoming(), payload));
+                let _ = self.db.rpc().store_message(&StoreMessage::new_rest(msg.remote_addr(), msg.is_incoming(), payload));
                 self.requests.remove(&msg.remote_addr());
             }
         } else {
             let parser = self.get_response_parser(msg.remote_addr());
             if let Some(payload) = parser.process_message(msg.payload()) {
                 log::info!("Finished parsing RPC message: {:?}", payload);
-                let _ = self.db.store_rpc_message(&StoreMessage::new_rest(msg.remote_addr(), msg.is_incoming(), payload));
+                let _ = self.db.rpc().store_message(&StoreMessage::new_rest(msg.remote_addr(), msg.is_incoming(), payload));
             }
         }
         Ok(())

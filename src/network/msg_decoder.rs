@@ -66,13 +66,13 @@ impl EncryptedMessageDecoder {
                 if let Some(msg) = self.try_decrypt() {
                     match msg {
                         EncryptedMessage::PeerResponse(msg) => {
-                            let index = self.db.reserve_p2p_index();
+                            let index = self.db.p2p().reserve_index();
                             let mut store_msg = StoreMessage::new_p2p(enc.remote_addr(), enc.is_incoming(), &msg);
                             self.request_tracker.track_request(&mut store_msg, index);
-                            let _ = self.db.put_p2p_message(index, &store_msg);
+                            let _ = self.db.p2p().put_message(index, &store_msg);
                         }
                         EncryptedMessage::Metadata(msg) => {
-                            let _ = self.db.store_p2p_message(&StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg));
+                            let _ = self.db.p2p().store_message(&StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg));
                         }
                     }
                 }

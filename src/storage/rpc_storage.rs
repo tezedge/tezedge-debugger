@@ -13,17 +13,17 @@ use crate::storage::{
     rpc_message::RpcMessage,
 };
 
-pub type RpcMessageStorageKV = dyn KeyValueStoreWithSchema<RpcMessageStorage> + Sync + Send;
+pub type RpcMessageStorageKV = dyn KeyValueStoreWithSchema<RpcStorage> + Sync + Send;
 
 #[derive(Clone)]
-pub struct RpcMessageStorage {
+pub struct RpcStorage {
     kv: Arc<RpcMessageStorageKV>,
     host_index: RpcMessageSecondaryIndex,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
 }
 
-impl RpcMessageStorage {
+impl RpcStorage {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
             kv: kv.clone(),
@@ -53,7 +53,7 @@ impl RpcMessageStorage {
         self.seq.load(Ordering::SeqCst)
     }
 
-    pub fn store_message(&mut self, msg: &StoreMessage) -> Result<(), StorageError> {
+    pub fn store_message(&self, msg: &StoreMessage) -> Result<(), StorageError> {
         let index = self.index_next();
         let remote_addr = msg.remote_addr();
 
@@ -101,7 +101,7 @@ impl RpcMessageStorage {
     }
 }
 
-impl KeyValueSchema for RpcMessageStorage {
+impl KeyValueSchema for RpcStorage {
     type Key = u64;
     type Value = StoreMessage;
 
@@ -121,7 +121,7 @@ impl RpcMessageSecondaryIndex {
     }
 
     #[inline]
-    pub fn put(&mut self, sock_addr: SocketAddr, index: u64) -> Result<(), StorageError> {
+    pub fn put(&self, sock_addr: SocketAddr, index: u64) -> Result<(), StorageError> {
         let key = RpcMessageSecondaryKey::new(sock_addr.ip(), index);
         Ok(self.kv.put(&key, &index)?)
     }

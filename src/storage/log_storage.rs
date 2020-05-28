@@ -56,19 +56,19 @@ impl LogStorage {
         &mut self.timestamp_index
     }
 
-    pub fn make_indexes(&mut self, primary_index: &u64, value: &LogMessage) -> Result<(), StorageError> {
+    pub fn make_indexes(&self, primary_index: &u64, value: &LogMessage) -> Result<(), StorageError> {
         self.level_index.store_index(primary_index, value)?;
         self.timestamp_index.store_index(primary_index, value)?;
         self.timestamp_level_index.store_index(primary_index, value)
     }
 
-    pub fn delete_indexes(&mut self, primary_index: &u64, value: &LogMessage) -> Result<(), StorageError> {
+    pub fn delete_indexes(&self, primary_index: &u64, value: &LogMessage) -> Result<(), StorageError> {
         self.level_index.delete_index(primary_index, value)?;
         self.timestamp_index.delete_index(primary_index, value)?;
         self.timestamp_level_index.delete_index(primary_index, value)
     }
 
-    pub fn store_message(&mut self, msg: &mut LogMessage) -> Result<u64, StorageError> {
+    pub fn store_message(&self, msg: &mut LogMessage) -> Result<u64, StorageError> {
         let index = self.index_next();
         msg.id = Some(index);
         self.make_indexes(&index, &msg)?;
