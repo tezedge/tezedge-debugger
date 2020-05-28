@@ -170,6 +170,7 @@ impl P2PMessageStorage {
             Ok(Default::default())
         } else {
             let (part, mut rest) = dissect(msg_types);
+            let offset = if offset == 0 { std::u64::MAX } else { offset };
             let mut idxs = Vec::new();
             let filter = |(_, val): (_, Result<u64, _>)| val.ok();
             let cmp: for<'r, 's> fn(&'r u64, &'s u64) -> bool = |x, y| x > y;
