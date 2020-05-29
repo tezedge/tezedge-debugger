@@ -28,7 +28,7 @@ impl P2PCursor {
     fn get_types(&self) -> Result<Option<u32>, ParseTypeError> {
         if let Some(ref values) = self.types {
             let mut ret = 0u32;
-            for r#type in values.split(',').next() {
+            for r#type in values.split(',') {
                 let r#type: Type = r#type.parse()?;
                 ret |= r#type as u32;
             }

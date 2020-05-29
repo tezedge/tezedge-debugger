@@ -136,22 +136,15 @@ impl P2PStorage {
     }
 
     pub fn type_iterator<'a>(&'a self, cursor_index: Option<u64>, types: u32) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
-        Ok(Box::new(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), types)?
-            .filter_map(|(_, value)| {
-                value.ok()
-            })))
-        // let mut types = dissect(types);
-        // let cursor_index = cursor_index.unwrap_or(std::u64::MAX);
-        // Ok(Box::new(self.type_index.get_iterator(&0, std::u32::MAX, Direction::Forward)?
-        //     .filter_map(|(v, _)| v.ok())
-        //     .filter_map(move |k| {
-        //         let index: u64 = std::u64::MAX.saturating_sub(k.index);
-        //         if index <= cursor_index && types.contains(&k.r#type) {
-        //             Some(index)
-        //         } else {
-        //             None
-        //         }
-        //     })))
+        let types = dissect(types);
+        let mut iterators = Vec::with_capacity(types.len());
+        for r#type in types {
+            iterators.push(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), r#type)?
+                .filter_map(|(_, value)| {
+                    value.ok()
+                }));
+        }
+        Ok(Box::new(iterators.into_iter().kmerge_by(|x, y| x > y)))
     }
 
     pub fn tracking_iterator<'a>(&'a self, cursor_index: Option<u64>, request_id: u64) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
@@ -198,7 +191,7 @@ impl KeyValueSchema for P2PStorage {
 }
 
 pub(crate) mod secondary_indexes {
-    use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, Decoder, SchemaError, Encoder, BincodeEncoded};
+    use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, Decoder, SchemaError, Encoder};
     use std::sync::Arc;
     use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
     use std::net::SocketAddr;
@@ -206,7 +199,7 @@ pub(crate) mod secondary_indexes {
     use crate::storage::secondary_index::SecondaryIndex;
     use serde::{Serialize, Deserialize};
     use std::str::FromStr;
-    use failure::{Fail, Error};
+    use failure::{Fail};
 
     pub type RemoteAddressIndexKV = dyn KeyValueStoreWithSchema<RemoteAddrIndex> + Sync + Send;
 
@@ -390,7 +383,8 @@ pub(crate) mod secondary_indexes {
         }
 
         fn make_index(key: &<P2PStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
-            TypeKey::new(value, key.clone())
+            let type_key = TypeKey::new(value, key.clone());
+            type_key
         }
 
         fn make_prefix_index(value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
@@ -419,6 +413,7 @@ pub(crate) mod secondary_indexes {
             }
         }
     }
+
 
     /// * bytes layout: `[type(4)][padding(4)][index(8)]`
     impl Decoder for TypeKey {
@@ -653,7 +648,50 @@ pub(crate) mod secondary_indexes {
         }
     }
 
-    impl BincodeEncoded for RequestKey {}
+    /// * bytes layout: `[request_id(8)][index(8)]`
+    impl Decoder for RequestKey {
+        #[inline]
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 16 {
+                return Err(SchemaError::DecodeError);
+            }
+            let request_id_value = &bytes[0..8];
+            let index_value = &bytes[8..];
+            // request_id
+            let mut request_index = [0u8; 8];
+            for (x, y) in request_index.iter_mut().zip(request_id_value) {
+                *x = *y;
+            }
+            let request_index = u64::from_be_bytes(request_index);
+            // index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+            Ok(Self {
+                request_index,
+                index,
+            })
+        }
+    }
+
+    /// * bytes layout: `[request_id(8)][index(8)]`
+    impl Encoder for RequestKey {
+        #[inline]
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf = Vec::with_capacity(16);
+            buf.extend_from_slice(&self.request_index.to_be_bytes()); // request_index
+            buf.extend_from_slice(&self.index.to_be_bytes()); // index
+
+            if buf.len() != 16 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
+            }
+        }
+    }
 
     // 4. Incoming Index
     pub type IncomingIndexKV = dyn KeyValueStoreWithSchema<IncomingIndex> + Sync + Send;
@@ -723,6 +761,53 @@ pub(crate) mod secondary_indexes {
         }
     }
 
-    impl BincodeEncoded for IncomingKey {}
+    /// * bytes layout: `[is_incoming(1)][padding(7)][index(8)]`
+    impl Decoder for IncomingKey {
+        #[inline]
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 16 {
+                return Err(SchemaError::DecodeError);
+            }
+            let is_incoming_value = &bytes[0..1];
+            let _padding_value = &bytes[1..1 + 7];
+            let index_value = &bytes[1 + 7..];
+            // is_incoming
+            let is_incoming = if is_incoming_value == &[true as u8] {
+                true
+            } else if is_incoming_value == &[false as u8] {
+                true
+            } else {
+                return Err(SchemaError::DecodeError);
+            };
+            // index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+            Ok(Self {
+                is_incoming,
+                index,
+            })
+        }
+    }
+
+    /// * bytes layout: `[is_incoming(1)][padding(7)][index(8)]`
+    impl Encoder for IncomingKey {
+        #[inline]
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf = Vec::with_capacity(16);
+            buf.extend_from_slice(&[self.is_incoming as u8]); // is_incoming
+            buf.extend_from_slice(&[0u8; 7]); // padding
+            buf.extend_from_slice(&self.index.to_be_bytes()); // index
+
+            if buf.len() != 16 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
+            }
+        }
+    }
 }
 
