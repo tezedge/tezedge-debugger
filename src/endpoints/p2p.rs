@@ -1,4 +1,7 @@
-use crate::storage::{MessageStore, P2PFilters};
+use crate::storage::{
+    {MessageStore, P2PFilters},
+    p2p_secondary_indexes::{ParseTypeError, Type},
+};
 use warp::{
     Filter, Rejection,
     reply::{with_status, json},
@@ -7,6 +10,7 @@ use warp::{
 use serde::{Serialize, Deserialize};
 use warp::reply::{WithStatus, Json};
 use std::net::SocketAddr;
+use std::convert::TryInto;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct P2PCursor {
@@ -19,19 +23,32 @@ pub struct P2PCursor {
 }
 
 impl P2PCursor {
-    fn convert_types(&self) -> Option<u32> {
-        Some(0)
+    fn get_types(&self) -> Result<Option<u32>, ParseTypeError> {
+        if let Some(ref values) = self.types {
+            let mut ret: u32 = 0;
+
+            for value in values {
+                let parsed: Type = value.parse()?;
+                ret |= parsed as u32;
+            }
+
+            Ok(Some(ret))
+        } else {
+            Ok(None)
+        }
     }
 }
 
-impl Into<crate::storage::P2PFilters> for P2PCursor {
-    fn into(self) -> P2PFilters {
-        P2PFilters {
+impl TryInto<crate::storage::P2PFilters> for P2PCursor {
+    type Error = ParseTypeError;
+
+    fn try_into(self) -> Result<P2PFilters, Self::Error> {
+        Ok(P2PFilters {
             remote_addr: self.remote_addr,
-            types: self.convert_types(),
+            types: self.get_types()?,
             request_id: self.request_id,
             incoming: self.incoming,
-        }
+        })
     }
 }
 
@@ -39,11 +56,14 @@ pub fn p2p(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), E
     warp::path!("v2" / "p2p")
         .and(warp::body::json())
         .map(move |cursor: P2PCursor| -> WithStatus<Json> {
-            let cursor_id = cursor.cursor_id;
             let limit = cursor.limit.unwrap_or(100);
-            match storage.p2p().get_cursor(cursor_id, limit, cursor.into()) {
-                Ok(msgs) => with_status(json(&msgs), StatusCode::OK),
-                Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
+            let cursor_id = cursor.cursor_id.clone();
+            match cursor.try_into() {
+                Ok(filters) => match storage.p2p().get_cursor(cursor_id, limit, filters) {
+                    Ok(msgs) => with_status(json(&msgs), StatusCode::OK),
+                    Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
+                },
+                Err(type_err) => with_status(json(&format!("invalid type-name: {}", type_err)), StatusCode::BAD_REQUEST),
             }
         })
 }

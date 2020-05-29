@@ -99,12 +99,9 @@ impl P2PStorage {
     pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filters: P2PFilters) -> Result<Vec<RpcMessage>, StorageError> {
         let mut ret = Vec::with_capacity(limit);
         if filters.empty() {
-            for (key, value) in self.cursor_iterator(cursor_index)?.take(limit) {
-                ret.push(RpcMessage::from_store(&value, key));
-            }
+            ret.extend(self.cursor_iterator(cursor_index)?.take(limit).map(|(key, value)| RpcMessage::from_store(&value, key)));
         } else {
             let mut iters: Vec<Box<dyn Iterator<Item=u64>>> = Default::default();
-            let cursor_index = cursor_index.unwrap_or(0);
             if let Some(remote_addr) = filters.remote_addr {
                 iters.push(self.remote_addr_iterator(cursor_index, remote_addr)?);
             }
@@ -129,19 +126,19 @@ impl P2PStorage {
             })))
     }
 
-    fn remote_addr_iterator<'a>(&'a self, cursor_index: u64, remote_addr: SocketAddr) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
-        Ok(Box::new(self.remote_addr_index.get_concrete_prefix_iterator(&cursor_index, remote_addr)?
+    fn remote_addr_iterator<'a>(&'a self, cursor_index: Option<u64>, remote_addr: SocketAddr) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(self.remote_addr_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(0), remote_addr)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
     }
 
-    fn type_iterator<'a>(&'a self, cursor_index: u64, types: u32) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+    fn type_iterator<'a>(&'a self, cursor_index: Option<u64>, types: u32) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         let types = dissect(types);
         let mut idxs = Vec::new();
         let filter = |(_, val): (_, Result<u64, _>)| val.ok();
         for r#type in types {
-            idxs.push(self.type_index.get_concrete_prefix_iterator(&cursor_index, r#type)?
+            idxs.push(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(0), r#type)?
                 .filter_map(filter))
         }
         let cmp: for<'r, 's> fn(&'r u64, &'s u64) -> bool = |x, y| x > y;
@@ -149,15 +146,15 @@ impl P2PStorage {
             .kmerge_by(cmp)))
     }
 
-    fn tracking_iterator<'a>(&'a self, cursor_index: u64, request_id: u64) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
-        Ok(Box::new(self.tracking_index.get_concrete_prefix_iterator(&cursor_index, request_id)?
+    fn tracking_iterator<'a>(&'a self, cursor_index: Option<u64>, request_id: u64) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(self.tracking_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(0), request_id)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
     }
 
-    fn incoming_iterator<'a>(&'a self, cursor_index: u64, is_incoming: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
-        Ok(Box::new(self.incoming_index.get_concrete_prefix_iterator(&cursor_index, is_incoming)?
+    fn incoming_iterator<'a>(&'a self, cursor_index: Option<u64>, is_incoming: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(self.incoming_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(0), is_incoming)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
