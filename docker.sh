@@ -47,9 +47,9 @@ if [ ! -d "/var/run/netns" ]; then
   sudo ip netns del make_ns
 fi
 
-docker pull simplestakingcom/tezedge-tezos:"$TAG" &>/dev/null
-docker pull simplestakingcom/tezedge-debuger:"$TAG" &>/dev/null
-docker pull simplestakingcom/tezedge-explorer-ocaml &>/dev/null
+docker pull simplestakingcom/tezedge-tezos:"$TAG"
+docker pull simplestakingcom/tezedge-debuger:"$TAG"
+docker pull simplestakingcom/tezedge-explorer-ocaml
 
 # Check identity
 if [ ! -f "$IDENTITY_FILE" ]; then
