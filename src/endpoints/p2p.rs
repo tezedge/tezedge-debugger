@@ -1,6 +1,6 @@
 use crate::storage::{
     {MessageStore, P2PFilters},
-    p2p_secondary_indexes::{ParseTypeError, Type},
+    p2p_indexes::{ParseTypeError, Type},
 };
 use warp::{
     Filter, Rejection,

@@ -140,7 +140,7 @@ impl KeyValueSchema for RpcStorage {
     fn name() -> &'static str { "rpc_message_storage" }
 }
 
-pub mod secondary_indexes {
+pub(crate) mod secondary_indexes {
     use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, Decoder, SchemaError, Encoder};
     use std::sync::Arc;
     use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
