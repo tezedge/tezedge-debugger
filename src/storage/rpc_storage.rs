@@ -1,24 +1,35 @@
-use storage::{
-    StorageError,
-    persistent::{KeyValueStoreWithSchema, KeyValueSchema, SchemaError, Decoder, Encoder},
-};
-use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
+use storage::{StorageError, persistent::{KeyValueStoreWithSchema, KeyValueSchema}, IteratorMode, Direction};
+use rocksdb::DB;
 use std::{
     sync::{
         Arc, atomic::{AtomicU64, Ordering},
-    }, net::{IpAddr, SocketAddr},
+    }, net::{SocketAddr},
 };
 use crate::storage::{
-    StoreMessage, encode_address,
+    StoreMessage,
     rpc_message::RpcMessage,
 };
+use secondary_indexes::RemoteAddrIndex;
+use crate::storage::secondary_index::SecondaryIndex;
+use crate::storage::sorted_intersect::sorted_intersect;
+
+#[derive(Debug, Default, Clone)]
+pub struct RpcFilters {
+    pub remote_addr: Option<SocketAddr>,
+}
+
+impl RpcFilters {
+    pub fn empty(&self) -> bool {
+        self.remote_addr.is_none()
+    }
+}
 
 pub type RpcMessageStorageKV = dyn KeyValueStoreWithSchema<RpcStorage> + Sync + Send;
 
 #[derive(Clone)]
 pub struct RpcStorage {
     kv: Arc<RpcMessageStorageKV>,
-    host_index: RpcMessageSecondaryIndex,
+    remote_addr_index: RemoteAddrIndex,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
 }
@@ -27,77 +38,98 @@ impl RpcStorage {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
             kv: kv.clone(),
-            host_index: RpcMessageSecondaryIndex::new(kv),
+            remote_addr_index: RemoteAddrIndex::new(kv),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(std::u64::MAX)),
         }
-    }
-
-    fn count(&self) -> u64 {
-        self.count.load(Ordering::SeqCst)
-    }
-
-    fn start(&self) -> u64 {
-        self.seq.load(Ordering::SeqCst).saturating_add(1)
-    }
-
-    fn inc_count(&self) {
-        self.count.fetch_add(1, Ordering::SeqCst);
-    }
-
-    fn index_next(&self) -> u64 {
-        self.seq.fetch_sub(1, Ordering::SeqCst)
     }
 
     fn index(&self) -> u64 {
         self.seq.load(Ordering::SeqCst)
     }
 
-    pub fn store_message(&self, msg: &StoreMessage) -> Result<(), StorageError> {
-        let index = self.index_next();
-        let remote_addr = msg.remote_addr();
-
-        self.host_index.put(remote_addr, index)?;
-        self.kv.put(&index, msg)?;
-        Ok(self.inc_count())
+    fn inc_count(&self) {
+        self.count.fetch_add(1, Ordering::SeqCst);
     }
 
-    pub fn get_range(&self, offset: u64, count: u64) -> Result<Vec<RpcMessage>, StorageError> {
-        let mut ret = Vec::with_capacity(count as usize);
-        let end: u64 = self.index();
-        let start = end.saturating_add(offset.saturating_add(1));
-        let end = start.saturating_add(count);
-        for index in start..=end {
-            match self.kv.get(&index) {
-                Ok(Some(value)) => ret.push(RpcMessage::from_store(&value, index.clone())),
-                Ok(None) => {
-                    log::info!("No value at index: {}", index);
-                    continue;
-                }
-                Err(err) => {
-                    log::warn!("Failed to load value at index {}: {}", index, err);
-                }
+    pub fn reserve_index(&self) -> u64 {
+        self.seq.fetch_add(1, Ordering::SeqCst)
+    }
+
+    pub fn make_indexes(&self, primary_index: u64, value: &StoreMessage) -> Result<(), StorageError> {
+        self.remote_addr_index.store_index(&primary_index, value)
+    }
+
+    pub fn delete_indexes(&self, primary_index: u64, value: &StoreMessage) -> Result<(), StorageError> {
+        self.remote_addr_index.delete_index(&primary_index, value)
+    }
+
+    pub fn put_message(&self, index: u64, msg: &StoreMessage) -> Result<(), StorageError> {
+        if self.kv.contains(&index)? {
+            self.kv.merge(&index, &msg)?;
+        } else {
+            self.kv.put(&index, &msg)?;
+            self.inc_count();
+        }
+        self.make_indexes(index, msg)?;
+        Ok(())
+    }
+
+    pub fn store_message(&self, msg: &StoreMessage) -> Result<u64, StorageError> {
+        let index = self.reserve_index();
+        self.kv.put(&index, &msg)?;
+        self.make_indexes(index, &msg)?;
+        self.inc_count();
+        Ok(index)
+    }
+
+    pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filters: RpcFilters) -> Result<Vec<RpcMessage>, StorageError> {
+        let mut ret = Vec::with_capacity(limit);
+        if filters.empty() {
+            ret.extend(self.cursor_iterator(cursor_index)?.take(limit).map(|(key, value)| RpcMessage::from_store(&value, key)));
+        } else {
+            let mut iters: Vec<Box<dyn Iterator<Item=u64>>> = Default::default();
+            if let Some(remote_addr) = filters.remote_addr {
+                iters.push(self.remote_addr_iterator(cursor_index, remote_addr)?);
             }
+            ret.extend(self.load_indexes(sorted_intersect(iters, limit).into_iter()));
         }
         Ok(ret)
     }
 
-    pub fn get_host_range(&self, offset: u64, count: u64, host: IpAddr) -> Result<Vec<RpcMessage>, StorageError> {
-        let idx = self.host_index.get_for_host(host, offset, count)?;
-        let mut ret = Vec::with_capacity(idx.len());
-        for index in idx.iter() {
-            match self.kv.get(index) {
-                Ok(Some(value)) => ret.push(RpcMessage::from_store(&value, index.clone())),
+    fn cursor_iterator<'a>(&'a self, cursor_index: Option<u64>) -> Result<Box<dyn 'a + Iterator<Item=(u64, StoreMessage)>>, StorageError> {
+        Ok(Box::new(self.kv.iterator(IteratorMode::From(&cursor_index.unwrap_or(std::u64::MAX), Direction::Reverse))?
+            .filter_map(|(k, v)| {
+                k.ok().and_then(|key| Some((key, v.ok()?)))
+            })))
+    }
+
+    fn remote_addr_iterator<'a>(&'a self, cursor_index: Option<u64>, remote_addr: SocketAddr) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(self.remote_addr_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), remote_addr)?
+            .filter_map(|(_, value)| {
+                value.ok()
+            })))
+    }
+
+    fn load_indexes<Iter: 'static + Iterator<Item=u64>>(&self, indexes: Iter) -> impl Iterator<Item=RpcMessage> + 'static {
+        let kv = self.kv.clone();
+        let mut count = 0;
+        indexes.filter_map(move |index| {
+            match kv.get(&index) {
+                Ok(Some(value)) => {
+                    count += 1;
+                    Some(RpcMessage::from_store(&value, index.clone()))
+                }
                 Ok(None) => {
                     log::info!("No value at index: {}", index);
-                    continue;
+                    None
                 }
                 Err(err) => {
-                    log::warn!("Failed to load value at index {}: {}", index, err)
+                    log::warn!("Failed to load value at index {}: {}",index, err);
+                    None
                 }
             }
-        }
-        Ok(ret)
+        })
     }
 }
 
@@ -108,120 +140,148 @@ impl KeyValueSchema for RpcStorage {
     fn name() -> &'static str { "rpc_message_storage" }
 }
 
-pub type RpcMessageSecondaryIndexKV = dyn KeyValueStoreWithSchema<RpcMessageSecondaryIndex> + Sync + Send;
+pub mod secondary_indexes {
+    use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, Decoder, SchemaError, Encoder};
+    use std::sync::Arc;
+    use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
+    use crate::storage::{RpcStorage, P2PStorage, encode_address};
+    use crate::storage::secondary_index::SecondaryIndex;
+    use std::net::SocketAddr;
 
-#[derive(Clone)]
-pub struct RpcMessageSecondaryIndex {
-    kv: Arc<RpcMessageSecondaryIndexKV>,
-}
+    pub type RemoteAddressIndexKV = dyn KeyValueStoreWithSchema<RemoteAddrIndex> + Sync + Send;
 
-impl RpcMessageSecondaryIndex {
-    pub fn new(kv: Arc<DB>) -> Self {
-        Self { kv }
+    // 1. Remote Reverse index for getting latest messages from specific host
+
+    #[derive(Clone)]
+    pub struct RemoteAddrIndex {
+        kv: Arc<RemoteAddressIndexKV>,
     }
 
-    #[inline]
-    pub fn put(&self, sock_addr: SocketAddr, index: u64) -> Result<(), StorageError> {
-        let key = RpcMessageSecondaryKey::new(sock_addr.ip(), index);
-        Ok(self.kv.put(&key, &index)?)
-    }
-
-    pub fn get(&self, sock_addr: SocketAddr, index: u64) -> Result<Option<u64>, StorageError> {
-        let key = RpcMessageSecondaryKey::new(sock_addr.ip(), index);
-        Ok(self.kv.get(&key)?)
-    }
-
-    pub fn get_for_host(&self, sock_addr: IpAddr, offset: u64, limit: u64) -> Result<Vec<u64>, StorageError> {
-        let key = RpcMessageSecondaryKey::new(sock_addr, 0);
-        let (offset, limit) = (offset as usize, limit as usize);
-
-        let mut ret = Vec::with_capacity(limit);
-
-        for index in self.kv.prefix_iterator(&key)?.skip(offset).take(limit).map(|(_, val)| val) {
-            ret.push(index?)
-        }
-
-        Ok(ret)
-    }
-}
-
-impl KeyValueSchema for RpcMessageSecondaryIndex {
-    type Key = RpcMessageSecondaryKey;
-    type Value = u64;
-
-    fn descriptor() -> ColumnFamilyDescriptor {
-        let mut cf_opts = Options::default();
-        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(16));
-        cf_opts.set_memtable_prefix_bloom_ratio(0.2);
-        ColumnFamilyDescriptor::new(Self::name(), cf_opts)
-    }
-
-    fn name() -> &'static str {
-        "rpc_message_secondary_index"
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct RpcMessageSecondaryKey {
-    pub addr: u128,
-    pub index: u64,
-}
-
-impl RpcMessageSecondaryKey {
-    pub fn new(sock_addr: IpAddr, index: u64) -> Self {
-        Self {
-            addr: encode_address(&sock_addr),
-            index,
+    impl RemoteAddrIndex {
+        pub fn new(kv: Arc<DB>) -> Self {
+            Self { kv }
         }
     }
 
-    pub fn prefix(sock_addr: IpAddr) -> Self {
-        Self::new(sock_addr, 0)
+    impl AsRef<(dyn KeyValueStoreWithSchema<RemoteAddrIndex> + 'static)> for RemoteAddrIndex {
+        fn as_ref(&self) -> &(dyn KeyValueStoreWithSchema<RemoteAddrIndex> + 'static) {
+            self.kv.as_ref()
+        }
     }
-}
 
-/// * bytes layout: `[address(16)][port(2)][index(8)]`
-impl Decoder for RpcMessageSecondaryKey {
-    #[inline]
-    fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
-        if bytes.len() != 24 {
-            return Err(SchemaError::DecodeError);
-        }
-        let addr_value = &bytes[0..16];
-        let index_value = &bytes[16 + 2..];
-        // index
-        let mut index = [0u8; 8];
-        for (x, y) in index.iter_mut().zip(index_value) {
-            *x = *y;
-        }
-        let index = u64::from_be_bytes(index);
-        // addr
-        let mut addr = [0u8; 16];
-        for (x, y) in addr.iter_mut().zip(addr_value) {
-            *x = *y;
-        }
-        let addr = u128::from_be_bytes(addr);
+    impl KeyValueSchema for RemoteAddrIndex {
+        type Key = RemoteKey;
+        type Value = <RpcStorage as KeyValueSchema>::Key;
 
-        Ok(Self {
-            addr,
-            index,
-        })
+        fn descriptor() -> ColumnFamilyDescriptor {
+            let mut cf_opts = Options::default();
+            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(16 + 2));
+            cf_opts.set_memtable_prefix_bloom_ratio(0.2);
+            ColumnFamilyDescriptor::new(Self::name(), cf_opts)
+        }
+
+        fn name() -> &'static str {
+            "rpc_reverse_remote_index"
+        }
     }
-}
 
-/// * bytes layout: `[address(16)][port(2)][index(8)]`
-impl Encoder for RpcMessageSecondaryKey {
-    #[inline]
-    fn encode(&self) -> Result<Vec<u8>, SchemaError> {
-        let mut buf = Vec::with_capacity(24);
-        buf.extend_from_slice(&self.addr.to_be_bytes());
-        buf.extend_from_slice(&self.index.to_be_bytes());
+    impl SecondaryIndex<RpcStorage> for RemoteAddrIndex {
+        type FieldType = SocketAddr;
 
-        if buf.len() != 24 {
-            println!("{:?} - {:?}", self, buf);
-            Err(SchemaError::EncodeError)
-        } else {
-            Ok(buf)
+        fn accessor(value: &<P2PStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+            Some(value.remote_addr())
+        }
+
+        fn make_index(key: &<P2PStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
+            RemoteKey::new(value, key.clone())
+        }
+
+        fn make_prefix_index(value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
+            RemoteKey::prefix(value)
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct RemoteKey {
+        pub addr: u128,
+        pub port: u16,
+        pub index: u64,
+    }
+
+    impl RemoteKey {
+        pub fn new(sock_addr: SocketAddr, index: u64) -> Self {
+            let addr = sock_addr.ip();
+            let port = sock_addr.port();
+            Self {
+                addr: encode_address(&addr),
+                port,
+                index: std::u64::MAX.saturating_sub(index),
+            }
+        }
+
+        pub fn prefix(sock_addr: SocketAddr) -> Self {
+            let addr = sock_addr.ip();
+            let port = sock_addr.port();
+            Self {
+                addr: encode_address(&addr),
+                port,
+                index: 0,
+            }
+        }
+    }
+
+    /// * bytes layout: `[address(16)][port(2)][index(8)]`
+    impl Decoder for RemoteKey {
+        #[inline]
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 26 {
+                return Err(SchemaError::DecodeError);
+            }
+            let addr_value = &bytes[0..16];
+            let port_value = &bytes[16..16 + 2];
+            let index_value = &bytes[16 + 2..];
+            // index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+            // port
+            let mut port = [0u8; 2];
+            for (x, y) in port.iter_mut().zip(port_value) {
+                *x = *y;
+            }
+            let port = u16::from_be_bytes(port);
+            // addr
+            let mut addr = [0u8; 16];
+            for (x, y) in addr.iter_mut().zip(addr_value) {
+                *x = *y;
+            }
+            let addr = u128::from_be_bytes(addr);
+
+            Ok(Self {
+                addr,
+                port,
+                index,
+            })
+        }
+    }
+
+    /// * bytes layout: `[address(16)][port(2)][index(8)]`
+    impl Encoder for RemoteKey {
+        #[inline]
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf = Vec::with_capacity(26);
+            buf.extend_from_slice(&self.addr.to_be_bytes());
+            buf.extend_from_slice(&self.port.to_be_bytes());
+            buf.extend_from_slice(&self.index.to_be_bytes());
+
+            if buf.len() != 26 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
+            }
         }
     }
 }
