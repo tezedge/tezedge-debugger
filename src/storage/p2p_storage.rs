@@ -136,22 +136,22 @@ impl P2PStorage {
     }
 
     pub fn type_iterator<'a>(&'a self, cursor_index: Option<u64>, types: u32) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
-        // Ok(Box::new(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), types)?
-        //     .filter_map(|(_, value)| {
-        //         value.ok()
-        //     })))
-        let mut types = dissect(types);
-        let cursor_index = cursor_index.unwrap_or(std::u64::MAX);
-        Ok(Box::new(self.type_index.get_iterator(&0, std::u32::MAX, Direction::Forward)?
-            .filter_map(|(v, _)| v.ok())
-            .filter_map(move |k| {
-                let index: u64 = std::u64::MAX.saturating_sub(k.index);
-                if index <= cursor_index && types.contains(&k.r#type) {
-                    Some(index)
-                } else {
-                    None
-                }
+        Ok(Box::new(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), types)?
+            .filter_map(|(_, value)| {
+                value.ok()
             })))
+        // let mut types = dissect(types);
+        // let cursor_index = cursor_index.unwrap_or(std::u64::MAX);
+        // Ok(Box::new(self.type_index.get_iterator(&0, std::u32::MAX, Direction::Forward)?
+        //     .filter_map(|(v, _)| v.ok())
+        //     .filter_map(move |k| {
+        //         let index: u64 = std::u64::MAX.saturating_sub(k.index);
+        //         if index <= cursor_index && types.contains(&k.r#type) {
+        //             Some(index)
+        //         } else {
+        //             None
+        //         }
+        //     })))
     }
 
     pub fn tracking_iterator<'a>(&'a self, cursor_index: Option<u64>, request_id: u64) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
