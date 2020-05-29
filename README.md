@@ -29,6 +29,16 @@ generated inside said folder. Currently, the script will run three containers:
 
 (WIP) Debugger API
 ==================
+* `/v2/p2p`
+* `/v2/p2p?limit=10`
+* `/v2/p2p?cursor_id=66780`
+* `/v2/p2p?cursor_id=66780&limit=2`
+* `/v2/p2p?types=connection_message`
+* `/v2/p2p?types=connection_message,metadata`
+* `/v2/p2p?types=connection_message,metadata&limit=2`
+* `/v2/p2p?remote_addr=18.182.132.42:9732`
+* `/v2/p2p?remote_addr=18.182.132.42:9732&types=metadata`
+
 
 ## V2 API
 ### P2P

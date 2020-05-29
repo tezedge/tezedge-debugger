@@ -25,7 +25,7 @@ impl Into<crate::storage::RpcFilters> for RpcCursor {
 
 pub fn rpc(storage: MessageStore) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "rpc")
-        .and(warp::body::json())
+        .and(warp::query::query())
         .map(move |cursor: RpcCursor| -> WithStatus<Json> {
             let limit = cursor.limit.unwrap_or(100);
             let cursor_id = cursor.cursor_id.clone();

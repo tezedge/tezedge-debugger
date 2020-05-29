@@ -17,7 +17,7 @@ pub struct P2PCursor {
     cursor_id: Option<u64>,
     limit: Option<usize>,
     remote_addr: Option<SocketAddr>,
-    types: Option<Vec<String>>,
+    types: Option<String>,
     request_id: Option<u64>,
     incoming: Option<bool>,
 }
@@ -26,6 +26,7 @@ impl P2PCursor {
     fn get_types(&self) -> Result<Option<u32>, ParseTypeError> {
         if let Some(ref values) = self.types {
             let mut ret: u32 = 0;
+            let values = values.split(",");
 
             for value in values {
                 let parsed: Type = value.parse()?;
@@ -54,7 +55,7 @@ impl TryInto<crate::storage::P2PFilters> for P2PCursor {
 
 pub fn p2p(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "p2p")
-        .and(warp::body::json())
+        .and(warp::query::query())
         .map(move |cursor: P2PCursor| -> WithStatus<Json> {
             let limit = cursor.limit.unwrap_or(100);
             let cursor_id = cursor.cursor_id.clone();

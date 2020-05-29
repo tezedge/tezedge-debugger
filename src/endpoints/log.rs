@@ -36,7 +36,7 @@ impl TryInto<LogFilters> for LogCursor {
 
 pub fn log(storage: MessageStore) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "log")
-        .and(warp::body::json())
+        .and(warp::query::query())
         .map(move |cursor: LogCursor| -> WithStatus<Json> {
             let limit = cursor.limit.unwrap_or(100);
             let cursor_id = cursor.cursor_id.clone();
