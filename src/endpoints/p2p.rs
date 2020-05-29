@@ -11,6 +11,7 @@ use serde::{Serialize, Deserialize};
 use warp::reply::{WithStatus, Json};
 use std::net::SocketAddr;
 use std::convert::TryInto;
+use itertools::Itertools;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct P2PCursor {
@@ -25,15 +26,16 @@ pub struct P2PCursor {
 impl P2PCursor {
     fn get_types(&self) -> Result<Option<u32>, ParseTypeError> {
         if let Some(ref values) = self.types {
-            let mut ret: u32 = 0;
-            let values = values.split(",");
-
-            for value in values {
-                let parsed: Type = value.parse()?;
-                ret |= parsed as u32;
+            let mut ret = 0u32;
+            for r#type in values.split(',').next() {
+                let r#type: Type = r#type.parse()?;
+                ret |= r#type as u32;
             }
-
-            Ok(Some(ret))
+            if ret == 0 {
+                Ok(None)
+            } else {
+                Ok(Some(ret))
+            }
         } else {
             Ok(None)
         }

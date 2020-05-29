@@ -6,9 +6,9 @@ use std::{
     }, net::SocketAddr,
 };
 use crate::storage::{rpc_message::RpcMessage, secondary_index::SecondaryIndex, StoreMessage, dissect};
-use secondary_indexes::*;
-use itertools::{Itertools};
 use crate::storage::sorted_intersect::sorted_intersect;
+use secondary_indexes::*;
+use itertools::Itertools;
 
 #[derive(Debug, Default, Clone)]
 pub struct P2PFilters {
@@ -106,7 +106,9 @@ impl P2PStorage {
                 iters.push(self.remote_addr_iterator(cursor_index, remote_addr)?);
             }
             if let Some(types) = filters.types {
-                iters.push(self.type_iterator(cursor_index, types)?);
+                if types != 0 {
+                    iters.push(self.type_iterator(cursor_index, types)?);
+                }
             }
             if let Some(tracking) = filters.request_id {
                 iters.push(self.tracking_iterator(cursor_index, tracking)?);
@@ -133,17 +135,21 @@ impl P2PStorage {
             })))
     }
 
-    fn type_iterator<'a>(&'a self, cursor_index: Option<u64>, types: u32) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
-        let types = dissect(types);
+    pub fn type_iterator<'a>(&'a self, cursor_index: Option<u64>, types: u32) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        // Ok(Box::new(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), types)?
+        //     .filter_map(|(_, value)| {
+        //         value.ok()
+        //     })))
         let mut idxs = Vec::new();
         let filter = |(_, val): (_, Result<u64, _>)| val.ok();
+        let types = dissect(types);
         for r#type in types {
             idxs.push(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), r#type)?
                 .filter_map(filter))
         }
         let cmp: for<'r, 's> fn(&'r u64, &'s u64) -> bool = |x, y| x > y;
         Ok(Box::new(idxs.into_iter()
-            .kmerge_by(cmp)))
+            .kmerge_by(cmp).sorted().rev()))
     }
 
     fn tracking_iterator<'a>(&'a self, cursor_index: Option<u64>, request_id: u64) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
@@ -364,7 +370,7 @@ pub(crate) mod secondary_indexes {
 
         fn descriptor() -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
-            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(4));
+            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<u32>()));
             cf_opts.set_memtable_prefix_bloom_ratio(0.2);
             ColumnFamilyDescriptor::new(Self::name(), cf_opts)
         }
@@ -446,16 +452,6 @@ pub(crate) mod secondary_indexes {
     }
 
     impl Type {
-        pub fn parse_tags(tags: &str) -> Result<u32, Error> {
-            let tags = tags.split(',');
-            let mut ret = 0x0;
-            for tag in tags {
-                let type_tag: Type = tag.parse()?;
-                ret |= type_tag as u32;
-            }
-            Ok(ret)
-        }
-
         pub fn extract(value: &StoreMessage) -> u32 {
             use tezos_messages::p2p::encoding::peer::PeerMessage::*;
             match value {
@@ -466,7 +462,7 @@ pub(crate) mod secondary_indexes {
                 StoreMessage::P2PMessage { payload, .. } => {
                     if let Some(msg) = payload.first() {
                         match msg {
-                            Disconnect => Self::Bootstrap as u32,
+                            Disconnect => Self::Disconnect as u32,
                             Bootstrap => Self::Bootstrap as u32,
                             Advertise(..) => Self::Advertise as u32,
                             SwapRequest(..) => Self::SwapRequest as u32,
