@@ -140,33 +140,35 @@ impl P2PStorage {
         //     .filter_map(|(_, value)| {
         //         value.ok()
         //     })))
-        let mut idxs = Vec::new();
-        let filter = |(_, val): (_, Result<u64, _>)| val.ok();
-        let types = dissect(types);
-        for r#type in types {
-            idxs.push(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), r#type)?
-                .filter_map(filter))
-        }
-        let cmp: for<'r, 's> fn(&'r u64, &'s u64) -> bool = |x, y| x > y;
-        Ok(Box::new(idxs.into_iter()
-            .kmerge_by(cmp).sorted().rev()))
+        let mut types = dissect(types);
+        let cursor_index = cursor_index.unwrap_or(std::u64::MAX);
+        Ok(Box::new(self.type_index.get_iterator(&0, std::u32::MAX, Direction::Forward)?
+            .filter_map(|(v, _)| v.ok())
+            .filter_map(move |k| {
+                let index: u64 = std::u64::MAX.saturating_sub(k.index);
+                if index <= cursor_index && types.contains(&k.r#type) {
+                    Some(index)
+                } else {
+                    None
+                }
+            })))
     }
 
-    fn tracking_iterator<'a>(&'a self, cursor_index: Option<u64>, request_id: u64) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+    pub fn tracking_iterator<'a>(&'a self, cursor_index: Option<u64>, request_id: u64) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(self.tracking_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), request_id)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
     }
 
-    fn incoming_iterator<'a>(&'a self, cursor_index: Option<u64>, is_incoming: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+    pub fn incoming_iterator<'a>(&'a self, cursor_index: Option<u64>, is_incoming: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(self.incoming_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), is_incoming)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
     }
 
-    fn load_indexes<Iter: 'static + Iterator<Item=u64>>(&self, indexes: Iter) -> impl Iterator<Item=RpcMessage> + 'static {
+    pub fn load_indexes<Iter: 'static + Iterator<Item=u64>>(&self, indexes: Iter) -> impl Iterator<Item=RpcMessage> + 'static {
         let kv = self.kv.clone();
         let mut count = 0;
         indexes.filter_map(move |index| {
@@ -418,7 +420,51 @@ pub(crate) mod secondary_indexes {
         }
     }
 
-    impl BincodeEncoded for TypeKey {}
+    /// * bytes layout: `[type(4)][padding(4)][index(8)]`
+    impl Decoder for TypeKey {
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 16 {
+                return Err(SchemaError::DecodeError);
+            }
+            let type_value = &bytes[0..4];
+            let _padding = &bytes[4..4 + 4];
+            let index_value = &bytes[4 + 4..];
+            // Type
+            let mut r#type = [0u8; 4];
+            for (x, y) in r#type.iter_mut().zip(type_value) {
+                *x = *y;
+            }
+            let r#type = u32::from_be_bytes(r#type);
+            // Index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+
+            Ok(Self {
+                r#type,
+                index,
+            })
+        }
+    }
+
+    /// * bytes layout: `[type(4)][padding(4)][index(8)]`
+    impl Encoder for TypeKey {
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf: Vec<u8> = Vec::with_capacity(16);
+            buf.extend_from_slice(&self.r#type.to_be_bytes());
+            buf.extend_from_slice(&[0, 0, 0, 0]);
+            buf.extend_from_slice(&self.index.to_be_bytes());
+
+            if buf.len() != 16 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
+            }
+        }
+    }
 
     #[repr(u32)]
     pub enum Type {

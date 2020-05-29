@@ -12,6 +12,7 @@ use warp::reply::{WithStatus, Json};
 use std::net::SocketAddr;
 use std::convert::TryInto;
 use itertools::Itertools;
+// use storage::StorageError;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct P2PCursor {
@@ -67,6 +68,18 @@ pub fn p2p(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), E
                     Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
                 },
                 Err(type_err) => with_status(json(&format!("invalid type-name: {}", type_err)), StatusCode::BAD_REQUEST),
+            }
+        })
+}
+
+pub fn types(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
+    warp::path!("types"/ u64 / u32)
+        .map(move |index: u64, types: u32| -> WithStatus<Json> {
+            match storage.p2p().type_iterator(Some(index), types) {
+                Ok(values) => {
+                    with_status(json(&values.collect_vec()), StatusCode::OK)
+                }
+                Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
             }
         })
 }
