@@ -127,7 +127,7 @@ impl P2PStorage {
     }
 
     fn remote_addr_iterator<'a>(&'a self, cursor_index: Option<u64>, remote_addr: SocketAddr) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
-        Ok(Box::new(self.remote_addr_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(0), remote_addr)?
+        Ok(Box::new(self.remote_addr_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), remote_addr)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
@@ -138,7 +138,7 @@ impl P2PStorage {
         let mut idxs = Vec::new();
         let filter = |(_, val): (_, Result<u64, _>)| val.ok();
         for r#type in types {
-            idxs.push(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(0), r#type)?
+            idxs.push(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), r#type)?
                 .filter_map(filter))
         }
         let cmp: for<'r, 's> fn(&'r u64, &'s u64) -> bool = |x, y| x > y;
@@ -147,14 +147,14 @@ impl P2PStorage {
     }
 
     fn tracking_iterator<'a>(&'a self, cursor_index: Option<u64>, request_id: u64) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
-        Ok(Box::new(self.tracking_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(0), request_id)?
+        Ok(Box::new(self.tracking_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), request_id)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
     }
 
     fn incoming_iterator<'a>(&'a self, cursor_index: Option<u64>, is_incoming: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
-        Ok(Box::new(self.incoming_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(0), is_incoming)?
+        Ok(Box::new(self.incoming_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), is_incoming)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
