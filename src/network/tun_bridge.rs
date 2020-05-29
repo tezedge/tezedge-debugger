@@ -36,20 +36,20 @@ pub fn make_bridge(_in_addr_space: &str, _out_addr_space: &str,
         .map_err(BridgeError::from)?;
 
     // Run health-checks -- retrying
-    // loop {
-    //     match internet_accessibility_check(&mut out_dev, out_addr) {
-    //         Ok(_) => {
-    //             log::info!("Internet access set correctly");
-    //         }
-    //         Err(err) => {
-    //             log::info!("Internet unreachable: {}", err);
-    //             std::thread::sleep(Duration::from_secs(3));
-    //             continue;
-    //         }
-    //     };
-    //
-    //     break;
-    // }
+    loop {
+        match internet_accessibility_check(&mut out_dev, out_addr) {
+            Ok(_) => {
+                log::info!("Internet access set correctly");
+            }
+            Err(err) => {
+                log::info!("Internet unreachable: {}", err);
+                std::thread::sleep(Duration::from_secs(3));
+                continue;
+            }
+        };
+
+        break;
+    }
 
     let (in_reader, in_writer) = in_dev.split();
     let (out_reader, out_writer) = out_dev.split();
