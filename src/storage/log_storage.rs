@@ -4,7 +4,7 @@ use rocksdb::{DB};
 use std::sync::atomic::{AtomicU64, Ordering};
 use crate::actors::logs_message::LogMessage;
 use storage::{StorageError, IteratorMode, Direction};
-use crate::storage::log_storage::secondary_indexes::{LevelIndex, LogLevel};
+use crate::storage::log_storage::secondary_indexes::{LevelIndex, LogLevel, TimestampIndex};
 use crate::storage::secondary_index::SecondaryIndex;
 use crate::storage::sorted_intersect::sorted_intersect;
 
@@ -13,11 +13,12 @@ pub type LogStorageKV = dyn KeyValueStoreWithSchema<LogStorage> + Sync + Send;
 #[derive(Debug, Default, Clone)]
 pub struct LogFilters {
     pub level: Option<LogLevel>,
+    pub date: Option<u128>,
 }
 
 impl LogFilters {
     pub fn empty(&self) -> bool {
-        self.level.is_none()
+        self.level.is_none() && self.date.is_none()
     }
 }
 
@@ -25,6 +26,7 @@ impl LogFilters {
 pub struct LogStorage {
     kv: Arc<LogStorageKV>,
     level_index: LevelIndex,
+    timestamp_index: TimestampIndex,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
 }
@@ -33,7 +35,8 @@ impl LogStorage {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
             kv: kv.clone(),
-            level_index: LevelIndex::new(kv),
+            level_index: LevelIndex::new(kv.clone()),
+            timestamp_index: TimestampIndex::new(kv),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(0)),
         }
@@ -51,15 +54,18 @@ impl LogStorage {
         self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
-    pub fn make_indexes(&self, _primary_index: u64, _value: &LogMessage) -> Result<(), StorageError> {
-        Ok(())
+    pub fn make_indexes(&self, primary_index: u64, value: &LogMessage) -> Result<(), StorageError> {
+        self.level_index.store_index(&primary_index, value)?;
+        self.timestamp_index.store_index(&primary_index, value)
     }
 
-    pub fn delete_indexes(&self, _primary_index: u64, _value: &LogMessage) -> Result<(), StorageError> {
-        Ok(())
+    pub fn delete_indexes(&self, primary_index: u64, value: &LogMessage) -> Result<(), StorageError> {
+        self.level_index.delete_index(&primary_index, value)?;
+        self.timestamp_index.delete_index(&primary_index, value)
     }
 
-    pub fn put_message(&self, index: u64, msg: &LogMessage) -> Result<(), StorageError> {
+    pub fn put_message(&self, index: u64, msg: &mut LogMessage) -> Result<(), StorageError> {
+        msg.id = Some(index);
         if self.kv.contains(&index)? {
             self.kv.merge(&index, &msg)?;
         } else {
@@ -70,8 +76,9 @@ impl LogStorage {
         Ok(())
     }
 
-    pub fn store_message(&self, msg: &LogMessage) -> Result<u64, StorageError> {
+    pub fn store_message(&self, msg: &mut LogMessage) -> Result<u64, StorageError> {
         let index = self.reserve_index();
+        msg.id = Some(index);
         self.kv.put(&index, &msg)?;
         self.make_indexes(index, &msg)?;
         self.inc_count();
@@ -87,6 +94,9 @@ impl LogStorage {
             if let Some(level) = filters.level {
                 iters.push(self.level_iterator(cursor_index, level)?);
             }
+            if let Some(timestamp) = filters.date {
+                iters.push(self.timestamp_iterator(cursor_index, timestamp)?);
+            }
             ret.extend(self.load_indexes(sorted_intersect(iters, limit).into_iter()));
         }
         Ok(ret)
@@ -101,6 +111,14 @@ impl LogStorage {
 
     pub fn level_iterator<'a>(&'a self, cursor_index: Option<u64>, level: LogLevel) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(self.level_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), level)?
+            .filter_map(|(_, value)| {
+                value.ok()
+            })))
+    }
+
+    pub fn timestamp_iterator<'a>(&'a self, cursor_index: Option<u64>, timestamp: u128) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        println!("Getting the timestamp iterator");
+        Ok(Box::new(self.timestamp_index.get_iterator(&cursor_index.unwrap_or(std::u64::MAX), timestamp, Direction::Reverse)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
@@ -136,7 +154,7 @@ impl KeyValueSchema for LogStorage {
 }
 
 pub(crate) mod secondary_indexes {
-    use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, BincodeEncoded};
+    use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, Decoder, SchemaError, Encoder};
     use std::{
         sync::Arc,
         str::FromStr,
@@ -146,6 +164,7 @@ pub(crate) mod secondary_indexes {
     use serde::{Serialize, Deserialize};
     use failure::{Fail};
     use crate::storage::secondary_index::SecondaryIndex;
+    use std::convert::{TryFrom, TryInto};
 
     pub type LevelIndexKV = dyn KeyValueStoreWithSchema<LevelIndex> + Sync + Send;
 
@@ -226,7 +245,47 @@ pub(crate) mod secondary_indexes {
         }
     }
 
-    impl BincodeEncoded for LogLevelKey {}
+    /// * bytes layout: `[level(1)][padding(7)][index(8)]`
+    impl Decoder for LogLevelKey {
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 16 {
+                return Err(SchemaError::DecodeError);
+            }
+            let level_value = &bytes[0..1];
+            let _padding_value = &bytes[1..7 + 1];
+            let index_value = &bytes[7 + 1..];
+            // level
+            let level = level_value[0].try_into().map_err(|_| SchemaError::DecodeError)?;
+            // index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+            Ok(Self {
+                level,
+                index,
+            })
+        }
+    }
+
+    /// * bytes layout: `[level(1)][padding(7)][index(8)]`
+    impl Encoder for LogLevelKey {
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf = Vec::with_capacity(16);
+
+            buf.extend_from_slice(&[self.level.clone() as u8]);
+            buf.extend_from_slice(&[0u8; 7]);
+            buf.extend_from_slice(&self.index.to_be_bytes());
+
+            if buf.len() != 16 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
+            }
+        }
+    }
 
     #[repr(u8)]
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -241,8 +300,29 @@ pub(crate) mod secondary_indexes {
     }
 
     #[derive(Debug, Fail)]
-    #[fail(display = "Invalid log level {}", _0)]
-    pub struct ParseLogLevel(String);
+    pub enum ParseLogLevel {
+        #[fail(display = "Invalid log level name {}", _0)]
+        InvalidName(String),
+        #[fail(display = "Invalid log level value {}", _0)]
+        InvalidValue(u8),
+    }
+
+    impl TryFrom<u8> for LogLevel {
+        type Error = ParseLogLevel;
+
+        fn try_from(value: u8) -> Result<Self, ParseLogLevel> {
+            match value {
+                x if x == Self::Trace as u8 => { Ok(Self::Trace) }
+                x if x == Self::Debug as u8 => { Ok(Self::Debug) }
+                x if x == Self::Info as u8 => { Ok(Self::Info) }
+                x if x == Self::Notice as u8 => { Ok(Self::Notice) }
+                x if x == Self::Warning as u8 => { Ok(Self::Warning) }
+                x if x == Self::Error as u8 => { Ok(Self::Error) }
+                x if x == Self::Fatal as u8 => { Ok(Self::Fatal) }
+                x => Err(ParseLogLevel::InvalidValue(x)),
+            }
+        }
+    }
 
     impl FromStr for LogLevel {
         type Err = ParseLogLevel;
@@ -257,8 +337,123 @@ pub(crate) mod secondary_indexes {
                 "warn" | "warning" => Self::Warning,
                 "error" => Self::Error,
                 "fatal" => Self::Fatal,
-                _ => return Err(ParseLogLevel(level)),
+                _ => return Err(ParseLogLevel::InvalidName(level)),
             })
+        }
+    }
+
+    // Timestamp
+    pub type TimestampIndexKV = dyn KeyValueStoreWithSchema<TimestampIndex> + Sync + Send;
+
+    #[derive(Clone)]
+    pub struct TimestampIndex {
+        kv: Arc<TimestampIndexKV>,
+    }
+
+    impl AsRef<(dyn KeyValueStoreWithSchema<TimestampIndex> + 'static)> for TimestampIndex {
+        fn as_ref(&self) -> &(dyn KeyValueStoreWithSchema<TimestampIndex> + 'static) {
+            self.kv.as_ref()
+        }
+    }
+
+    impl KeyValueSchema for TimestampIndex {
+        type Key = TimestampKey;
+        type Value = <LogStorage as KeyValueSchema>::Key;
+
+        fn name() -> &'static str {
+            "log_timestamp_index"
+        }
+    }
+
+    impl TimestampIndex {
+        pub fn new(kv: Arc<DB>) -> Self {
+            Self { kv }
+        }
+    }
+
+    impl SecondaryIndex<LogStorage> for TimestampIndex {
+        type FieldType = u128;
+
+        fn accessor(value: &<LogStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+            Some(value.date)
+        }
+
+        fn make_index(key: &<LogStorage as KeyValueSchema>::Key, value: Self::FieldType) -> TimestampKey {
+            TimestampKey::new(value, key.clone())
+        }
+
+        fn make_prefix_index(value: Self::FieldType) -> TimestampKey {
+            TimestampKey::prefix(value)
+        }
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct TimestampKey {
+        pub timestamp: u128,
+        pub index: u64,
+    }
+
+    impl TimestampKey {
+        pub fn new(timestamp: u128, index: u64) -> Self {
+            Self {
+                timestamp,
+                index,
+            }
+        }
+
+        pub fn prefix(timestamp: u128) -> Self {
+            Self {
+                timestamp,
+                index: 0,
+            }
+        }
+    }
+
+    /// * bytes layout: `[timestamp(16)][index(8)]`
+    impl Decoder for TimestampKey {
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 24 {
+                return Err(SchemaError::DecodeError);
+            }
+
+            let timestamp_value = &bytes[0..16];
+            let index_value = &bytes[16..];
+
+            // timestamp
+            let mut timestamp = [0u8; 16];
+            for (x, y) in timestamp.iter_mut().zip(timestamp_value) {
+                *x = *y;
+            }
+            let timestamp = u128::from_be_bytes(timestamp);
+
+            // index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+
+            Ok(Self {
+                timestamp,
+                index,
+            })
+        }
+    }
+
+    /// * bytes layout: `[timestamp(16)][index(8)]`
+    impl Encoder for TimestampKey {
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf = Vec::with_capacity(24);
+
+            buf.extend_from_slice(&self.timestamp.to_be_bytes());
+            buf.extend_from_slice(&self.index.to_be_bytes());
+
+            if buf.len() != 24 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
+            }
         }
     }
 }

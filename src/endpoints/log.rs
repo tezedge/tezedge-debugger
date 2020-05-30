@@ -12,6 +12,7 @@ pub struct LogCursor {
     pub cursor_id: Option<u64>,
     pub limit: Option<usize>,
     pub level: Option<String>,
+    pub date: Option<u64>,
 }
 
 impl LogCursor {
@@ -29,7 +30,8 @@ impl TryInto<LogFilters> for LogCursor {
 
     fn try_into(self) -> Result<LogFilters, Self::Error> {
         Ok(LogFilters {
-            level: self.get_level()?
+            level: self.get_level()?,
+            date: self.date.map(|x| x as u128),
         })
     }
 }
