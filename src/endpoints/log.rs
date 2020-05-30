@@ -1,4 +1,5 @@
 use crate::storage::{MessageStore, log_indexes::{LogLevel, ParseLogLevel}, LogFilters};
+use failure::Error;
 use warp::{
     Filter, Reply, Rejection,
     reply::{with_status, json, WithStatus, Json},
@@ -12,10 +13,18 @@ pub struct LogCursor {
     pub cursor_id: Option<u64>,
     pub limit: Option<usize>,
     pub level: Option<String>,
-    pub date: Option<u64>,
+    pub timestamp: Option<String>,
 }
 
 impl LogCursor {
+    fn get_timestamp(&self) -> Result<Option<u128>, Error> {
+        if let Some(ref ts) = self.timestamp {
+            Ok(Some(ts.parse()?))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn get_level(&self) -> Result<Option<LogLevel>, ParseLogLevel> {
         if let Some(ref level) = self.level {
             Ok(Some(level.parse()?))
@@ -26,12 +35,12 @@ impl LogCursor {
 }
 
 impl TryInto<LogFilters> for LogCursor {
-    type Error = ParseLogLevel;
+    type Error = Error;
 
     fn try_into(self) -> Result<LogFilters, Self::Error> {
         Ok(LogFilters {
             level: self.get_level()?,
-            date: self.date.map(|x| x as u128),
+            date: self.get_timestamp()?,
         })
     }
 }
