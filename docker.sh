@@ -66,6 +66,7 @@ sleep 1
 # 1. make inactive container
 NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/tezedge-tezos:"$TAG" sleep inf)
 docker exec "$NODE_ID" cp /root/identity/identity.json /root/.tezos-node/
+docker exec "$NODE_ID" rm -f /root/identity/tezos.log
 docker exec "$NODE_ID" mkfifo /root/identity/tezos.log
 echo "Spawned tezedge container $NODE_ID"
 mount_ns "$NODE_ID"
