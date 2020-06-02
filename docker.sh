@@ -47,9 +47,9 @@ if [ ! -d "/var/run/netns" ]; then
   sudo ip netns del make_ns
 fi
 
-docker pull simplestakingcom/tezedge-tezos:"$TAG" &>/dev/null
-docker pull simplestakingcom/tezedge-debuger:"$TAG" &>/dev/null
-docker pull simplestakingcom/tezedge-explorer-ocaml &>/dev/null
+#docker pull simplestakingcom/tezedge-tezos:"$TAG"
+#docker pull simplestakingcom/tezedge-debuger:"$TAG"
+#docker pull simplestakingcom/tezedge-explorer-ocaml
 
 # Check identity
 if [ ! -f "$IDENTITY_FILE" ]; then
@@ -81,7 +81,8 @@ sudo ip netns exec "$NODE_ID" ip route del 0/0
 sudo ip netns exec "$NODE_ID" ip route del 172.17.0.0/16
 sudo ip netns exec "$NODE_ID" ip route add default via 10.0.1.1
 echo "Moved tun0 from proxy container to node container"
-until curl -X GET --output /dev/null --silent --head --fail "localhost:$PROXY_RPC_PORT/v2/p2p?count=0"; do
+#until curl -X GET -H "Content-Type: application/json" --data '{"limit": 0}' --output /dev/null --silent --head --fail "localhost:$PROXY_RPC_PORT/v2/p2p"; do
+until curl -X GET -H "Content-Type: application/json" -d '{}' --output /dev/null --silent --fail "localhost:$PROXY_RPC_PORT/v2/p2p"; do
   sleep 1
 done
 echo "Proxy running successfully on port $PROXY_RPC_PORT"

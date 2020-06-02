@@ -12,4 +12,5 @@ pub mod prelude {
     pub use super::peer_message::*;
     pub use super::peer_processor::{PeerProcessor, PeerArgs};
     pub use super::packet_orchestrator::{PacketOrchestrator, PacketOrchestratorArgs};
+    pub use super::logs_orchestrator::make_logs_reader;
 }

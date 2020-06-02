@@ -123,6 +123,15 @@ impl StoreMessage {
             StoreMessage::Metadata { remote_addr, .. } => remote_addr.clone()
         }
     }
+
+    /// Check if message is incoming to this node
+    pub fn is_incoming(&self) -> bool {
+        match self {
+            StoreMessage::RestMessage { incoming, .. } | StoreMessage::ConnectionMessage { incoming, .. } |
+            StoreMessage::P2PMessage { incoming, .. } | StoreMessage::TcpMessage { incoming, .. } |
+            StoreMessage::Metadata { incoming, .. } => incoming.clone()
+        }
+    }
 }
 
 impl BincodeEncoded for StoreMessage {}

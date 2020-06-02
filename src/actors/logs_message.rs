@@ -55,7 +55,7 @@ fn deserialize_date<'de, D>(deserializer: D) -> Result<u128, D::Error>
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogMessage {
     pub level: String,
-    #[serde(deserialize_with = "deserialize_date")]
+    #[serde(alias = "timestamp", rename(serialize = "timestamp"), deserialize_with = "deserialize_date")]
     pub date: u128,
     pub section: String,
     #[serde(skip_serializing_if = "Option::is_none")]

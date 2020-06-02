@@ -6,261 +6,162 @@ use std::{
     }, net::SocketAddr,
 };
 use crate::storage::{rpc_message::RpcMessage, secondary_index::SecondaryIndex, StoreMessage, dissect};
+use crate::storage::sorted_intersect::sorted_intersect;
 use secondary_indexes::*;
-use itertools::{Itertools};
+use itertools::Itertools;
 
-pub type P2PMessageStorageKV = dyn KeyValueStoreWithSchema<P2PMessageStorage> + Sync + Send;
+#[derive(Debug, Default, Clone)]
+pub struct P2PFilters {
+    pub remote_addr: Option<SocketAddr>,
+    pub types: Option<u32>,
+    pub request_id: Option<u64>,
+    pub incoming: Option<bool>,
+}
+
+impl P2PFilters {
+    pub fn empty(&self) -> bool {
+        self.remote_addr.is_none() && self.types.is_none()
+            && self.request_id.is_none() && self.incoming.is_none()
+    }
+}
+
+pub type P2PMessageStorageKV = dyn KeyValueStoreWithSchema<P2PStorage> + Sync + Send;
 
 #[derive(Clone)]
-pub struct P2PMessageStorage {
-    base_index: Arc<AtomicU64>,
+pub struct P2PStorage {
     kv: Arc<P2PMessageStorageKV>,
-    remote_index: RemoteReverseIndex,
+    remote_addr_index: RemoteAddrIndex,
     type_index: TypeIndex,
-    request_index: RequestTrackingIndex,
-    remote_type_index: RemoteTypeIndex,
+    tracking_index: RequestTrackingIndex,
+    incoming_index: IncomingIndex,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
 }
 
-impl P2PMessageStorage {
+impl P2PStorage {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
-            base_index: Arc::new(AtomicU64::new(std::u64::MAX)),
             kv: kv.clone(),
-            remote_index: RemoteReverseIndex::new(kv.clone()),
+            remote_addr_index: RemoteAddrIndex::new(kv.clone()),
             type_index: TypeIndex::new(kv.clone()),
-            request_index: RequestTrackingIndex::new(kv.clone()),
-            remote_type_index: RemoteTypeIndex::new(kv.clone()),
+            tracking_index: RequestTrackingIndex::new(kv.clone()),
+            incoming_index: IncomingIndex::new(kv.clone()),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(0)),
         }
-    }
-
-    fn count(&self) -> u64 {
-        self.count.load(Ordering::SeqCst)
-    }
-
-    fn start(&self) -> u64 {
-        self.seq.load(Ordering::SeqCst).saturating_add(1)
-    }
-
-    fn inc_count(&self) {
-        self.count.fetch_add(1, Ordering::SeqCst);
-    }
-
-    fn index_next(&self) -> u64 {
-        self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
     fn index(&self) -> u64 {
         self.seq.load(Ordering::SeqCst)
     }
 
-    fn base_index(&self) -> u64 {
-        self.base_index.load(Ordering::SeqCst)
+    fn inc_count(&self) {
+        self.count.fetch_add(1, Ordering::SeqCst);
     }
 
-    fn make_indexes(&mut self, primary_index: &u64, value: &StoreMessage) -> Result<(), StorageError> {
-        self.remote_index.store_index(primary_index, value)?;
-        self.type_index.store_index(primary_index, value)?;
-        self.remote_index.store_index(primary_index, value)?;
-        self.remote_type_index.store_index(primary_index, value)
+    pub fn reserve_index(&self) -> u64 {
+        self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
-    fn delete_indexes(&mut self, primary_index: &u64, value: &StoreMessage) -> Result<(), StorageError> {
-        self.remote_index.delete_index(primary_index, value)?;
-        self.type_index.delete_index(primary_index, value)?;
-        self.remote_index.delete_index(primary_index, value)?;
-        self.remote_type_index.delete_index(primary_index, value)
+    pub fn make_indexes(&self, primary_index: u64, value: &StoreMessage) -> Result<(), StorageError> {
+        self.remote_addr_index.store_index(&primary_index, value)?;
+        self.type_index.store_index(&primary_index, value)?;
+        self.tracking_index.store_index(&primary_index, value)?;
+        self.incoming_index.store_index(&primary_index, value)
     }
 
-    pub fn reserve_index(&mut self) -> u64 {
-        self.index_next()
+    pub fn delete_indexes(&self, primary_index: u64, value: &StoreMessage) -> Result<(), StorageError> {
+        self.remote_addr_index.delete_index(&primary_index, value)?;
+        self.type_index.delete_index(&primary_index, value)?;
+        self.tracking_index.delete_index(&primary_index, value)?;
+        self.incoming_index.delete_index(&primary_index, value)
     }
 
-    pub fn put_message(&mut self, index: u64, msg: &StoreMessage) -> Result<(), StorageError> {
-        self.make_indexes(&index, &msg)?;
+    pub fn put_message(&self, index: u64, msg: &StoreMessage) -> Result<(), StorageError> {
         if self.kv.contains(&index)? {
             self.kv.merge(&index, &msg)?;
         } else {
             self.kv.put(&index, &msg)?;
-            self.inc_count()
+            self.inc_count();
         }
+        self.make_indexes(index, msg)?;
         Ok(())
     }
 
-    pub fn store_message(&mut self, msg: &StoreMessage) -> Result<u64, StorageError> {
-        let index = self.index_next();
-        self.make_indexes(&index, &msg)?;
+    pub fn store_message(&self, msg: &StoreMessage) -> Result<u64, StorageError> {
+        let index = self.reserve_index();
         self.kv.put(&index, &msg)?;
+        self.make_indexes(index, &msg)?;
         self.inc_count();
         Ok(index)
     }
 
-    pub fn delete_message(&mut self, index: u64) -> Result<(), StorageError> {
-        if let Ok(Some(msg)) = self.kv.get(&index) {
-            self.kv.delete(&index)?;
-            self.delete_indexes(&index, &msg)?;
-        }
-        Ok(())
-    }
-
-    pub fn reduce_db(&mut self) -> Result<(), StorageError> {
-        let base = self.base_index();
-        let index = self.index();
-        let count = (base - index) / 2;
-        let start = base - count;
-        for index in start..=base {
-            let _ = self.delete_message(index);
-        }
-        Ok(())
-    }
-
-    pub fn get_reverse_range(&self, offset_id: u64, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
-        self._get_range(if offset_id == 0 { std::u64::MAX } else { offset_id }, count, true)
-    }
-
-    fn _get_range(&self, offset_id: u64, count: usize, backwards: bool) -> Result<Vec<RpcMessage>, StorageError> {
-        let mut ret = Vec::with_capacity(count);
-        let mode = IteratorMode::From(&offset_id, if backwards { Direction::Reverse } else { Direction::Forward });
-        let iter = self.kv.iterator(mode)?.take(count);
-        for (key, value) in iter {
-            let value = key.and_then(|id| value.map(|value| (id, value)));
-            match value {
-                Ok((id, value)) => {
-                    ret.push(RpcMessage::from_store(&value, id));
-                }
-                Err(err) => {
-                    log::warn!("Failed to load value from iterator: {}", err);
+    pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filters: P2PFilters) -> Result<Vec<RpcMessage>, StorageError> {
+        let mut ret = Vec::with_capacity(limit);
+        if filters.empty() {
+            ret.extend(self.cursor_iterator(cursor_index)?.take(limit).map(|(key, value)| RpcMessage::from_store(&value, key)));
+        } else {
+            let mut iters: Vec<Box<dyn Iterator<Item=u64>>> = Default::default();
+            if let Some(remote_addr) = filters.remote_addr {
+                iters.push(self.remote_addr_iterator(cursor_index, remote_addr)?);
+            }
+            if let Some(types) = filters.types {
+                if types != 0 {
+                    iters.push(self.type_iterator(cursor_index, types)?);
                 }
             }
+            if let Some(tracking) = filters.request_id {
+                iters.push(self.tracking_iterator(cursor_index, tracking)?);
+            }
+            if let Some(incoming) = filters.incoming {
+                iters.push(self.incoming_iterator(cursor_index, incoming)?);
+            }
+            ret.extend(self.load_indexes(sorted_intersect(iters, limit).into_iter()));
         }
         Ok(ret)
     }
 
-    pub fn get_remote_range(&self, offset: u64, count: usize, host: SocketAddr, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
-        let idx = self.remote_index.get_concrete_prefix_iterator(&offset, host)?
-            .filter_map(|(_, val)| val.ok());
-        let iter = self.load_indexes(Box::new(idx))
-            .take(count);
-        Ok(if let Some(rq) = remote_requested {
-            iter.filter_map(|msg| if let RpcMessage::P2pMessage { remote_requested, .. } = msg {
-                if remote_requested == Some(rq) {
-                    Some(msg)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }).fold(Vec::with_capacity(count), |mut acc, value| {
-                acc.push(value);
-                acc
-            })
-        } else {
-            iter.fold(Vec::with_capacity(count), |mut acc, value| {
-                acc.push(value);
-                acc
-            })
-        })
+    fn cursor_iterator<'a>(&'a self, cursor_index: Option<u64>) -> Result<Box<dyn 'a + Iterator<Item=(u64, StoreMessage)>>, StorageError> {
+        Ok(Box::new(self.kv.iterator(IteratorMode::From(&cursor_index.unwrap_or(std::u64::MAX), Direction::Reverse))?
+            .filter_map(|(k, v)| {
+                k.ok().and_then(|key| Some((key, v.ok()?)))
+            })))
     }
 
-    pub fn get_types_range(&self, msg_types: u32, offset: u64, count: usize) -> Result<Vec<RpcMessage>, StorageError> {
-        if msg_types == 0 {
-            Ok(Default::default())
-        } else {
-            let (part, mut rest) = dissect(msg_types);
-            let offset = if offset == 0 { std::u64::MAX } else { offset };
-            let mut idxs = Vec::new();
-            let filter = |(_, val): (_, Result<u64, _>)| val.ok();
-            let cmp: for<'r, 's> fn(&'r u64, &'s u64) -> bool = |x, y| x > y;
-            idxs.push(self.type_index.get_concrete_prefix_iterator(&offset, part)?
-                .filter_map(filter));
-            while rest != 0 {
-                let (part, step) = dissect(rest);
-                rest = step;
-                idxs.push(self.type_index.get_concrete_prefix_iterator(&offset, part)?
-                    .filter_map(filter));
-            }
-            let idx = idxs.into_iter()
-                .kmerge_by(cmp);
-            Ok(self.load_indexes(Box::new(idx))
-                .take(count)
-                .fold(Vec::with_capacity(count as usize), |mut acc, value| {
-                    acc.push(value);
-                    acc
-                }))
+    fn remote_addr_iterator<'a>(&'a self, cursor_index: Option<u64>, remote_addr: SocketAddr) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(self.remote_addr_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), remote_addr)?
+            .filter_map(|(_, value)| {
+                value.ok()
+            })))
+    }
+
+    pub fn type_iterator<'a>(&'a self, cursor_index: Option<u64>, types: u32) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        let types = dissect(types);
+        let mut iterators = Vec::with_capacity(types.len());
+        for r#type in types {
+            iterators.push(self.type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), r#type)?
+                .filter_map(|(_, value)| {
+                    value.ok()
+                }));
         }
+        Ok(Box::new(iterators.into_iter().kmerge_by(|x, y| x > y)))
     }
 
-    pub fn get_remote_type_range(&self, offset: u64, count: usize, remote_host: SocketAddr, types: u32, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
-        if types == 0 {
-            Ok(Default::default())
-        } else {
-            let (part, mut rest) = dissect(types);
-            let mut idxs = Vec::new();
-            let filter = |(_, val): (_, Result<u64, _>)| val.ok();
-            let cmp: for<'r, 's> fn(&'r u64, &'s u64) -> bool = |x, y| x > y;
-            idxs.push(self.remote_type_index.get_concrete_prefix_iterator(&offset, (remote_host, part))?
-                .filter_map(filter));
-            while rest != 0 {
-                let (part, step) = dissect(rest);
-                rest = step;
-                idxs.push(self.remote_type_index.get_concrete_prefix_iterator(&offset, (remote_host, part))?
-                    .filter_map(filter));
-            }
-            let idx = idxs.into_iter()
-                .kmerge_by(cmp);
-            let iter = self.load_indexes(Box::new(idx)).take(count);
-            Ok(if let Some(rq) = remote_requested {
-                iter.filter_map(|msg| if let RpcMessage::P2pMessage { remote_requested, .. } = msg {
-                    if remote_requested == Some(rq) {
-                        Some(msg)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }).fold(Vec::with_capacity(count), |mut acc, value| {
-                    acc.push(value);
-                    acc
-                })
-            } else {
-                iter.fold(Vec::with_capacity(count), |mut acc, value| {
-                    acc.push(value);
-                    acc
-                })
-            })
-        }
+    pub fn tracking_iterator<'a>(&'a self, cursor_index: Option<u64>, request_id: u64) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(self.tracking_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), request_id)?
+            .filter_map(|(_, value)| {
+                value.ok()
+            })))
     }
 
-    pub fn get_request_range(&self, request_id: u64, offset: u64, count: usize, remote_requested: Option<bool>) -> Result<Vec<RpcMessage>, StorageError> {
-        let idx = self.request_index.get_concrete_prefix_iterator(&offset, request_id)?
-            .filter_map(|(_, val)| val.ok());
-        let iter = self.load_indexes(Box::new(idx))
-            .take(count);
-        Ok(if let Some(rq) = remote_requested {
-            iter.filter_map(|msg| if let RpcMessage::P2pMessage { remote_requested, .. } = msg {
-                if remote_requested == Some(rq) {
-                    Some(msg)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }).fold(Vec::with_capacity(count), |mut acc, value| {
-                acc.push(value);
-                acc
-            })
-        } else {
-            iter.fold(Vec::with_capacity(count), |mut acc, value| {
-                acc.push(value);
-                acc
-            })
-        })
+    pub fn incoming_iterator<'a>(&'a self, cursor_index: Option<u64>, is_incoming: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(self.incoming_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), is_incoming)?
+            .filter_map(|(_, value)| {
+                value.ok()
+            })))
     }
 
-    fn load_indexes<'a>(&self, indexes: Box<dyn Iterator<Item=u64> + 'a>) -> impl Iterator<Item=RpcMessage> + 'a {
+    pub fn load_indexes<Iter: 'static + Iterator<Item=u64>>(&self, indexes: Iter) -> impl Iterator<Item=RpcMessage> + 'static {
         let kv = self.kv.clone();
         let mut count = 0;
         indexes.filter_map(move |index| {
@@ -282,48 +183,48 @@ impl P2PMessageStorage {
     }
 }
 
-impl KeyValueSchema for P2PMessageStorage {
+impl KeyValueSchema for P2PStorage {
     type Key = u64;
     type Value = StoreMessage;
 
     fn name() -> &'static str { "p2p_message_storage" }
 }
 
-pub mod secondary_indexes {
-    use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, Decoder, SchemaError, Encoder, BincodeEncoded};
+pub(crate) mod secondary_indexes {
+    use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, Decoder, SchemaError, Encoder};
     use std::sync::Arc;
     use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
     use std::net::SocketAddr;
-    use crate::storage::{encode_address, P2PMessageStorage, StoreMessage};
+    use crate::storage::{encode_address, P2PStorage, StoreMessage};
     use crate::storage::secondary_index::SecondaryIndex;
     use serde::{Serialize, Deserialize};
     use std::str::FromStr;
-    use failure::{Fail, Error};
+    use failure::{Fail};
 
-    pub type RemoteReverseIndexKV = dyn KeyValueStoreWithSchema<RemoteReverseIndex> + Sync + Send;
+    pub type RemoteAddressIndexKV = dyn KeyValueStoreWithSchema<RemoteAddrIndex> + Sync + Send;
 
     // 1. Remote Reverse index for getting latest messages from specific host
 
     #[derive(Clone)]
-    pub struct RemoteReverseIndex {
-        kv: Arc<RemoteReverseIndexKV>,
+    pub struct RemoteAddrIndex {
+        kv: Arc<RemoteAddressIndexKV>,
     }
 
-    impl RemoteReverseIndex {
+    impl RemoteAddrIndex {
         pub fn new(kv: Arc<DB>) -> Self {
             Self { kv }
         }
     }
 
-    impl AsRef<(dyn KeyValueStoreWithSchema<RemoteReverseIndex> + 'static)> for RemoteReverseIndex {
-        fn as_ref(&self) -> &(dyn KeyValueStoreWithSchema<RemoteReverseIndex> + 'static) {
+    impl AsRef<(dyn KeyValueStoreWithSchema<RemoteAddrIndex> + 'static)> for RemoteAddrIndex {
+        fn as_ref(&self) -> &(dyn KeyValueStoreWithSchema<RemoteAddrIndex> + 'static) {
             self.kv.as_ref()
         }
     }
 
-    impl KeyValueSchema for RemoteReverseIndex {
-        type Key = RemoteIndex;
-        type Value = <P2PMessageStorage as KeyValueSchema>::Key;
+    impl KeyValueSchema for RemoteAddrIndex {
+        type Key = RemoteKey;
+        type Value = <P2PStorage as KeyValueSchema>::Key;
 
         fn descriptor() -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
@@ -337,30 +238,30 @@ pub mod secondary_indexes {
         }
     }
 
-    impl SecondaryIndex<P2PMessageStorage> for RemoteReverseIndex {
+    impl SecondaryIndex<P2PStorage> for RemoteAddrIndex {
         type FieldType = SocketAddr;
 
-        fn accessor(value: &<P2PMessageStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+        fn accessor(value: &<P2PStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
             Some(value.remote_addr())
         }
 
-        fn make_index(key: &<P2PMessageStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
-            RemoteIndex::new(value, key.clone())
+        fn make_index(key: &<P2PStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
+            RemoteKey::new(value, key.clone())
         }
 
         fn make_prefix_index(value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
-            RemoteIndex::prefix(value)
+            RemoteKey::prefix(value)
         }
     }
 
     #[derive(Debug, Clone)]
-    pub struct RemoteIndex {
+    pub struct RemoteKey {
         pub addr: u128,
         pub port: u16,
         pub index: u64,
     }
 
-    impl RemoteIndex {
+    impl RemoteKey {
         pub fn new(sock_addr: SocketAddr, index: u64) -> Self {
             let addr = sock_addr.ip();
             let port = sock_addr.port();
@@ -383,7 +284,7 @@ pub mod secondary_indexes {
     }
 
     /// * bytes layout: `[address(16)][port(2)][index(8)]`
-    impl Decoder for RemoteIndex {
+    impl Decoder for RemoteKey {
         #[inline]
         fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
             if bytes.len() != 26 {
@@ -420,7 +321,7 @@ pub mod secondary_indexes {
     }
 
     /// * bytes layout: `[address(16)][port(2)][index(8)]`
-    impl Encoder for RemoteIndex {
+    impl Encoder for RemoteKey {
         #[inline]
         fn encode(&self) -> Result<Vec<u8>, SchemaError> {
             let mut buf = Vec::with_capacity(26);
@@ -459,12 +360,12 @@ pub mod secondary_indexes {
     }
 
     impl KeyValueSchema for TypeIndex {
-        type Key = TypeId;
-        type Value = <P2PMessageStorage as KeyValueSchema>::Key;
+        type Key = TypeKey;
+        type Value = <P2PStorage as KeyValueSchema>::Key;
 
         fn descriptor() -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
-            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(4));
+            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<u32>()));
             cf_opts.set_memtable_prefix_bloom_ratio(0.2);
             ColumnFamilyDescriptor::new(Self::name(), cf_opts)
         }
@@ -474,29 +375,30 @@ pub mod secondary_indexes {
         }
     }
 
-    impl SecondaryIndex<P2PMessageStorage> for TypeIndex {
+    impl SecondaryIndex<P2PStorage> for TypeIndex {
         type FieldType = u32;
 
-        fn accessor(value: &<P2PMessageStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+        fn accessor(value: &<P2PStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
             Some(Type::extract(value))
         }
 
-        fn make_index(key: &<P2PMessageStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
-            TypeId::new(value, key.clone())
+        fn make_index(key: &<P2PStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
+            let type_key = TypeKey::new(value, key.clone());
+            type_key
         }
 
         fn make_prefix_index(value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
-            TypeId::prefix(value)
+            TypeKey::prefix(value)
         }
     }
 
     #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-    pub struct TypeId {
+    pub struct TypeKey {
         pub r#type: u32,
         pub index: u64,
     }
 
-    impl TypeId {
+    impl TypeKey {
         pub fn new(r#type: u32, index: u64) -> Self {
             Self {
                 r#type,
@@ -512,7 +414,52 @@ pub mod secondary_indexes {
         }
     }
 
-    impl BincodeEncoded for TypeId {}
+
+    /// * bytes layout: `[type(4)][padding(4)][index(8)]`
+    impl Decoder for TypeKey {
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 16 {
+                return Err(SchemaError::DecodeError);
+            }
+            let type_value = &bytes[0..4];
+            let _padding = &bytes[4..4 + 4];
+            let index_value = &bytes[4 + 4..];
+            // Type
+            let mut r#type = [0u8; 4];
+            for (x, y) in r#type.iter_mut().zip(type_value) {
+                *x = *y;
+            }
+            let r#type = u32::from_be_bytes(r#type);
+            // Index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+
+            Ok(Self {
+                r#type,
+                index,
+            })
+        }
+    }
+
+    /// * bytes layout: `[type(4)][padding(4)][index(8)]`
+    impl Encoder for TypeKey {
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf: Vec<u8> = Vec::with_capacity(16);
+            buf.extend_from_slice(&self.r#type.to_be_bytes());
+            buf.extend_from_slice(&[0, 0, 0, 0]);
+            buf.extend_from_slice(&self.index.to_be_bytes());
+
+            if buf.len() != 16 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
+            }
+        }
+    }
 
     #[repr(u32)]
     pub enum Type {
@@ -546,16 +493,6 @@ pub mod secondary_indexes {
     }
 
     impl Type {
-        pub fn parse_tags(tags: &str) -> Result<u32, Error> {
-            let tags = tags.split(',');
-            let mut ret = 0x0;
-            for tag in tags {
-                let type_tag: Type = tag.parse()?;
-                ret |= type_tag as u32;
-            }
-            Ok(ret)
-        }
-
         pub fn extract(value: &StoreMessage) -> u32 {
             use tezos_messages::p2p::encoding::peer::PeerMessage::*;
             match value {
@@ -566,7 +503,7 @@ pub mod secondary_indexes {
                 StoreMessage::P2PMessage { payload, .. } => {
                     if let Some(msg) = payload.first() {
                         match msg {
-                            Disconnect => Self::Bootstrap as u32,
+                            Disconnect => Self::Disconnect as u32,
                             Bootstrap => Self::Bootstrap as u32,
                             Advertise(..) => Self::Advertise as u32,
                             SwapRequest(..) => Self::SwapRequest as u32,
@@ -661,8 +598,8 @@ pub mod secondary_indexes {
     }
 
     impl KeyValueSchema for RequestTrackingIndex {
-        type Key = RequestIndex;
-        type Value = <P2PMessageStorage as KeyValueSchema>::Key;
+        type Key = RequestKey;
+        type Value = <P2PStorage as KeyValueSchema>::Key;
 
         fn descriptor() -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
@@ -676,32 +613,32 @@ pub mod secondary_indexes {
         }
     }
 
-    impl SecondaryIndex<P2PMessageStorage> for RequestTrackingIndex {
+    impl SecondaryIndex<P2PStorage> for RequestTrackingIndex {
         type FieldType = u64;
 
-        fn accessor(value: &<P2PMessageStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+        fn accessor(value: &<P2PStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
             match value {
                 StoreMessage::P2PMessage { request_id, .. } => request_id.clone(),
                 _ => None
             }
         }
 
-        fn make_index(key: &<P2PMessageStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
-            RequestIndex::new(key.clone(), value)
+        fn make_index(key: &<P2PStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
+            RequestKey::new(key.clone(), value)
         }
 
         fn make_prefix_index(value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
-            RequestIndex::prefix(value)
+            RequestKey::prefix(value)
         }
     }
 
     #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-    pub struct RequestIndex {
+    pub struct RequestKey {
         pub request_index: u64,
         pub index: u64,
     }
 
-    impl RequestIndex {
+    impl RequestKey {
         pub fn new(request_index: u64, index: u64) -> Self {
             Self { request_index, index: std::u64::MAX.saturating_sub(index) }
         }
@@ -711,145 +648,160 @@ pub mod secondary_indexes {
         }
     }
 
-    impl BincodeEncoded for RequestIndex {}
-
-    // 4. Remote (host) + Type index
-    pub type RemoteTypeIndexKV = dyn KeyValueStoreWithSchema<RemoteTypeIndex> + Sync + Send;
-
-    #[derive(Clone)]
-    pub struct RemoteTypeIndex {
-        kv: Arc<RemoteTypeIndexKV>
+    /// * bytes layout: `[request_id(8)][index(8)]`
+    impl Decoder for RequestKey {
+        #[inline]
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 16 {
+                return Err(SchemaError::DecodeError);
+            }
+            let request_id_value = &bytes[0..8];
+            let index_value = &bytes[8..];
+            // request_id
+            let mut request_index = [0u8; 8];
+            for (x, y) in request_index.iter_mut().zip(request_id_value) {
+                *x = *y;
+            }
+            let request_index = u64::from_be_bytes(request_index);
+            // index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+            Ok(Self {
+                request_index,
+                index,
+            })
+        }
     }
 
-    impl RemoteTypeIndex {
+    /// * bytes layout: `[request_id(8)][index(8)]`
+    impl Encoder for RequestKey {
+        #[inline]
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf = Vec::with_capacity(16);
+            buf.extend_from_slice(&self.request_index.to_be_bytes()); // request_index
+            buf.extend_from_slice(&self.index.to_be_bytes()); // index
+
+            if buf.len() != 16 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
+            }
+        }
+    }
+
+    // 4. Incoming Index
+    pub type IncomingIndexKV = dyn KeyValueStoreWithSchema<IncomingIndex> + Sync + Send;
+
+    #[derive(Clone)]
+    pub struct IncomingIndex {
+        kv: Arc<IncomingIndexKV>,
+    }
+
+    impl IncomingIndex {
         pub fn new(kv: Arc<DB>) -> Self {
             Self { kv }
         }
     }
 
-    impl AsRef<(dyn KeyValueStoreWithSchema<RemoteTypeIndex> + 'static)> for RemoteTypeIndex {
-        fn as_ref(&self) -> &(dyn KeyValueStoreWithSchema<RemoteTypeIndex> + 'static) {
+    impl AsRef<(dyn KeyValueStoreWithSchema<IncomingIndex> + 'static)> for IncomingIndex {
+        fn as_ref(&self) -> &(dyn KeyValueStoreWithSchema<IncomingIndex> + 'static) {
             self.kv.as_ref()
         }
     }
 
-    impl KeyValueSchema for RemoteTypeIndex {
-        type Key = RemoteTypeKey;
-        type Value = <P2PMessageStorage as KeyValueSchema>::Key;
+    impl KeyValueSchema for IncomingIndex {
+        type Key = IncomingKey;
+        type Value = <P2PStorage as KeyValueSchema>::Key;
 
         fn descriptor() -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
-            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(16 + 2 + 4));
+            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<bool>()));
             cf_opts.set_memtable_prefix_bloom_ratio(0.2);
             ColumnFamilyDescriptor::new(Self::name(), cf_opts)
         }
 
         fn name() -> &'static str {
-            "p2p_remote_type_index"
+            "p2p_incoming_index"
         }
     }
 
-    impl SecondaryIndex<P2PMessageStorage> for RemoteTypeIndex {
-        type FieldType = (SocketAddr, u32);
+    impl SecondaryIndex<P2PStorage> for IncomingIndex {
+        type FieldType = bool;
 
-        fn accessor(value: &<P2PMessageStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
-            Some((value.remote_addr(), Type::extract(value)))
+        fn accessor(value: &<P2PStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+            Some(value.is_incoming())
         }
 
-        fn make_index(key: &<P2PMessageStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
-            let (addr, typ) = value;
-            RemoteTypeKey::new(addr, typ, key.clone())
+        fn make_index(key: &<P2PStorage as KeyValueSchema>::Key, value: Self::FieldType) -> IncomingKey {
+            IncomingKey::new(value, key.clone())
         }
 
-        fn make_prefix_index(value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
-            let (addr, typ) = value;
-            RemoteTypeKey::prefix(addr, typ)
+        fn make_prefix_index(value: Self::FieldType) -> IncomingKey {
+            IncomingKey::prefix(value)
         }
     }
 
     #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-    pub struct RemoteTypeKey {
-        pub remote_addr: u128,
-        pub port: u16,
-        pub r#type: u32,
+    pub struct IncomingKey {
+        pub is_incoming: bool,
         pub index: u64,
     }
 
-    impl RemoteTypeKey {
-        pub fn new(sock_addr: SocketAddr, r#type: u32, index: u64) -> Self {
-            Self {
-                remote_addr: encode_address(&sock_addr.ip()),
-                port: sock_addr.port(),
-                r#type,
-                index: std::u64::MAX.saturating_sub(index),
-            }
+    impl IncomingKey {
+        pub fn new(is_incoming: bool, index: u64) -> Self {
+            Self { is_incoming, index: std::u64::MAX.saturating_sub(index) }
         }
 
-        pub fn prefix(sock_addr: SocketAddr, r#type: u32) -> Self {
-            Self {
-                remote_addr: encode_address(&sock_addr.ip()),
-                port: sock_addr.port(),
-                r#type,
-                index: 0,
-            }
+        pub fn prefix(is_incoming: bool) -> Self {
+            Self { is_incoming, index: 0 }
         }
     }
 
-    impl Decoder for RemoteTypeKey {
+    /// * bytes layout: `[is_incoming(1)][padding(7)][index(8)]`
+    impl Decoder for IncomingKey {
         #[inline]
         fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
-            if bytes.len() != 30 {
-                Err(SchemaError::DecodeError)
-            } else {
-                let addr_value = &bytes[0..16];
-                let port_value = &bytes[16..16 + 2];
-                let type_value = &bytes[16 + 2..16 + 2 + 4];
-                let index_value = &bytes[16 + 2 + 4..];
-                // index
-                let mut index = [0u8; 8];
-                for (x, y) in index.iter_mut().zip(index_value) {
-                    *x = *y;
-                }
-                let index = u64::from_be_bytes(index);
-                // port
-                let mut port = [0u8; 2];
-                for (x, y) in port.iter_mut().zip(port_value) {
-                    *x = *y;
-                }
-                let port = u16::from_be_bytes(port);
-                // addr
-                let mut addr = [0u8; 16];
-                for (x, y) in addr.iter_mut().zip(addr_value) {
-                    *x = *y;
-                }
-                let remote_addr = u128::from_be_bytes(addr);
-                // type
-                let mut typ = [0u8; 4];
-                for (x, y) in typ.iter_mut().zip(type_value) {
-                    *x = *y;
-                }
-                let r#type = u32::from_be_bytes(typ);
-
-                Ok(Self {
-                    remote_addr,
-                    r#type,
-                    port,
-                    index,
-                })
+            if bytes.len() != 16 {
+                return Err(SchemaError::DecodeError);
             }
+            let is_incoming_value = &bytes[0..1];
+            let _padding_value = &bytes[1..1 + 7];
+            let index_value = &bytes[1 + 7..];
+            // is_incoming
+            let is_incoming = if is_incoming_value == &[true as u8] {
+                true
+            } else if is_incoming_value == &[false as u8] {
+                true
+            } else {
+                return Err(SchemaError::DecodeError);
+            };
+            // index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+            Ok(Self {
+                is_incoming,
+                index,
+            })
         }
     }
 
-    impl Encoder for RemoteTypeKey {
+    /// * bytes layout: `[is_incoming(1)][padding(7)][index(8)]`
+    impl Encoder for IncomingKey {
         #[inline]
         fn encode(&self) -> Result<Vec<u8>, SchemaError> {
-            let mut buf = Vec::with_capacity(30);
-            buf.extend_from_slice(&self.remote_addr.to_be_bytes());
-            buf.extend_from_slice(&self.port.to_be_bytes());
-            buf.extend_from_slice(&self.r#type.to_be_bytes());
-            buf.extend_from_slice(&self.index.to_be_bytes());
+            let mut buf = Vec::with_capacity(16);
+            buf.extend_from_slice(&[self.is_incoming as u8]); // is_incoming
+            buf.extend_from_slice(&[0u8; 7]); // padding
+            buf.extend_from_slice(&self.index.to_be_bytes()); // index
 
-            if buf.len() != 30 {
+            if buf.len() != 16 {
                 println!("{:?} - {:?}", self, buf);
                 Err(SchemaError::EncodeError)
             } else {
@@ -858,3 +810,4 @@ pub mod secondary_indexes {
         }
     }
 }
+

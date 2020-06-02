@@ -7,7 +7,7 @@ use crate::storage::MessageStore;
 pub fn make_logs_reader(path: &str, db: MessageStore) -> Result<(), Error> {
     let path = path.to_string();
     std::thread::spawn(move || {
-        let mut db = db;
+        let db = db;
         let file = File::open(path).unwrap();
         let mut reader = BufReader::new(file);
         let mut buf = String::new();
@@ -19,9 +19,9 @@ pub fn make_logs_reader(path: &str, db: MessageStore) -> Result<(), Error> {
             }
             let line = &buf[..read].trim();
             if let Ok(mut msg) = serde_json::from_str::<LogMessage>(line) {
-                let _ = db.log_db().store_message(&mut msg);
+                let _ = db.log().store_message(&mut msg);
             } else {
-                let _ = db.log_db().store_message(&mut LogMessage::raw(line.to_string()));
+                let _ = db.log().store_message(&mut LogMessage::raw(line.to_string()));
             }
             buf.clear()
         }
