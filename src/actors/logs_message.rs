@@ -46,7 +46,7 @@ fn deserialize_date<'de, D>(deserializer: D) -> Result<u128, D::Error>
         D: Deserializer<'de>
 {
     if deserializer.is_human_readable() {
-        Ok(parse_date(&String::deserialize(deserializer)?).unwrap())
+        Ok(parse_date(&String::deserialize(deserializer)?).unwrap_or(get_ts()))
     } else {
         u128::deserialize(deserializer)
     }
