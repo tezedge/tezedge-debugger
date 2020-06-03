@@ -1,9 +1,6 @@
 use serde::{Serialize, Deserialize, Deserializer};
 use std::collections::HashMap;
 use storage::persistent::{Encoder, SchemaError, Decoder};
-use lazy_static::lazy_static;
-use regex::Captures;
-use chrono::{Utc, TimeZone, Datelike};
 use crate::storage::get_ts;
 use serde_json::Value;
 
@@ -69,13 +66,12 @@ pub struct LogMessage {
 
 impl LogMessage {
     pub fn raw(line: String) -> Self {
-        let mut extra = HashMap::with_capacity(0);
         Self {
             level: "fatal".to_string(),
             date: get_ts(),
             section: "".to_string(),
             id: None,
-            extra,
+            extra: Default::default(),
             message: line,
         }
     }

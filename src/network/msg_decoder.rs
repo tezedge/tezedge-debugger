@@ -15,7 +15,6 @@ use crate::actors::peer_message::*;
 use crate::storage::{MessageStore, StoreMessage};
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 use crate::network::request_tracker::RequestTracker;
-use tezos_messages::p2p::encoding::ack::AckMessage;
 
 /// P2P Message decrypter from captured connection messages
 pub struct EncryptedMessageDecoder {
@@ -100,7 +99,7 @@ impl EncryptedMessageDecoder {
                 Ok(msg) => {
                     self.try_deserialize(msg)
                 }
-                Err(err) => {
+                Err(_err) => {
                     None
                 }
             }
