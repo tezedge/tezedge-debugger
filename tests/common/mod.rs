@@ -6,6 +6,8 @@ use std::env;
 use warp::hyper::Client;
 use bytes::buf::BufExt;
 
+pub const DEFAULT_LIMIT: usize = 100;
+
 pub async fn get_rpc_as_json(url: &str) -> Result<serde_json::value::Value, serde_json::error::Error> {
     let client = Client::new();
     let uri = url.parse().expect("Invalid URL");
