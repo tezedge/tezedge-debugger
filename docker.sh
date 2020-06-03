@@ -47,6 +47,16 @@ if [ ! -d "/var/run/netns" ]; then
   sudo ip netns del make_ns
 fi
 
+if [ -z "${NODE_TYPE+x}" ]; then
+  NODE_TYPE="OCAML"
+fi
+
+if [ "$NODE_TYPE" = "OCAML" ] || [ "$NODE_TYPE" = "RUST" ]; then
+  echo "Running debugger with $NODE_TYPE node"
+else
+  err "NODE_TYPE set to invalid value: $NODE_TYPE. Valid are OCAML or RUST"
+fi
+
 docker pull simplestakingcom/tezedge-debuger:"$TAG"
 docker pull simplestakingcom/tezedge-explorer-ocaml
 
@@ -63,7 +73,7 @@ sleep 1
 
 # == START NODE IN DETACHED MODE ==
 # 1. make inactive container
-if [ "$RUN_TEZOS" -eq "1" ]; then
+if [ "$NODE_TYPE" = "OCAML" ]; then
   docker pull simplestakingcom/tezedge-tezos:"$TAG"
   NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/tezedge-tezos:"$TAG" sleep inf)
 else
@@ -71,7 +81,7 @@ else
   NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/light-node:latest sleep inf)
 fi
 
-if [ "$RUN_TEZOS" -eq "1" ]; then
+if [ "$NODE_TYPE" = "OCAML" ]; then
   docker exec "$NODE_ID" cp /root/identity/identity.json /root/.tezos-node/
 fi
 
@@ -102,11 +112,11 @@ unmount_ns "$PROXY_ID"
 EXPLORER_ID=$(docker run -d -p "8080:8080" simplestakingcom/tezedge-explorer-ocaml:latest)
 echo "Running explorer on port 8080 in container $EXPLORER_ID"
 
-if [ "$RUN_TEZOS" -eq "1" ]; then
-  echo "[+] Running tezos node"
+if [ "$NODE_TYPE" = "OCAML" ]; then
+  echo "[+] Running ocaml node"
   docker exec "$NODE_ID" sh -c "./tezos-node run --cors-header='content-type' --log-output=/root/identity/tezos.log --cors-origin='*' --rpc-addr 0.0.0.0:8732 --config-file \"/root/config.json\""
 else
-  echo "[+] Running tezedge node"
+  echo "[+] Running rust node"
   docker exec "$NODE_ID" mkdir -p /tmp/tezedge
   docker exec "$NODE_ID" sh -c "./run.sh release --config-file ./tezedge.config --identity-file /root/identity/identity.json --log-file /root/identity/tezos.log"
 fi
