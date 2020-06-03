@@ -65,7 +65,6 @@ else
 fi
 
 docker pull simplestakingcom/tezedge-debuger:"$TAG"
-docker pull simplestakingcom/tezedge-explorer-ocaml
 
 # Check identity
 if [ ! -f "$IDENTITY_FILE" ]; then

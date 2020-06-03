@@ -75,6 +75,24 @@ impl LogMessage {
             message: line,
         }
     }
+
+    pub fn compress(mut self) -> Self {
+        use itertools::Itertools;
+
+        let result = &mut self.message;
+        let map = std::mem::take(&mut self.extra);
+        for k in map.keys().filter(|key| !["hostname", "pid", "line"].contains(&key.as_str())).sorted() {
+            if let Some(v) = map.get(k) {
+                if v.is_string() {
+                    let v = v.as_str().unwrap();
+                    result.push_str(&format!(", {}: {}", k, v));
+                } else {
+                    result.push_str(&format!(", {}: {}", k, v));
+                }
+            }
+        }
+        self
+    }
 }
 
 impl Encoder for LogMessage {
