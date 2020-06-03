@@ -40,7 +40,7 @@ impl RpcStorage {
             kv: kv.clone(),
             remote_addr_index: RemoteAddrIndex::new(kv),
             count: Arc::new(AtomicU64::new(0)),
-            seq: Arc::new(AtomicU64::new(std::u64::MAX)),
+            seq: Arc::new(AtomicU64::new(0)),
         }
     }
 
