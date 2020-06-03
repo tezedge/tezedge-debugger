@@ -47,7 +47,6 @@ if [ ! -d "/var/run/netns" ]; then
   sudo ip netns del make_ns
 fi
 
-docker pull simplestakingcom/tezedge-tezos:"$TAG"
 docker pull simplestakingcom/tezedge-debuger:"$TAG"
 docker pull simplestakingcom/tezedge-explorer-ocaml
 
@@ -65,9 +64,11 @@ sleep 1
 # == START NODE IN DETACHED MODE ==
 # 1. make inactive container
 if [ "$RUN_TEZOS" -eq "1" ]; then
+  docker pull simplestakingcom/tezedge-tezos:"$TAG"
   NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/tezedge-tezos:"$TAG" sleep inf)
 else
-  NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/tezedge:latest sleep inf)
+  docker pull simplestakingcom/light-node:latest
+  NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/light-node:latest sleep inf)
 fi
 
 if [ "$RUN_TEZOS" -eq "1" ]; then
