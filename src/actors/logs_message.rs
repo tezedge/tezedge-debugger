@@ -5,85 +5,78 @@ use lazy_static::lazy_static;
 use regex::Captures;
 use chrono::{Utc, TimeZone, Datelike};
 use crate::storage::get_ts;
-
-fn parse_month(month: &str) -> Option<u32> {
-    match month {
-        "Jan" | "January" => Some(1),
-        "Feb" | "February" => Some(2),
-        "Mar" | "March" => Some(3),
-        "Apr" | "April" => Some(4),
-        "May" => Some(5),
-        "Jun" | "June" => Some(6),
-        "Jul" | "July" => Some(7),
-        "Aug" | "August" => Some(8),
-        "Sep" | "September" => Some(9),
-        "Oct" | "October" => Some(10),
-        "Nov" | "November" => Some(11),
-        "Dec" | "December" => Some(11),
-        _ => None,
-    }
-}
-
-fn parse_date(date: &str) -> Option<u128> {
-    use regex::Regex;
-    lazy_static! {
-        static ref DATE_RE: Regex = Regex::new(
-            r"^(?P<month>\w+) (?P<day>\d+) (?P<hour>\d+):(?P<minute>\d+):(?P<second>\d+)$"
-        ).expect("Invalid regex format");
-    }
-    let captures: Captures = DATE_RE.captures(date)?;
-    let month = parse_month(captures.name("month")?.as_str())?;
-    let day = captures.name("day")?.as_str().parse().unwrap();
-    let hour = captures.name("hour")?.as_str().parse().unwrap();
-    let minute = captures.name("minute")?.as_str().parse().unwrap();
-    let second = captures.name("second")?.as_str().parse().unwrap();
-    let dt = Utc.ymd(Utc::now().year(), month, day).and_hms(hour, minute, second);
-    Some(dt.timestamp_nanos() as u128)
-}
+use serde_json::Value;
 
 fn deserialize_date<'de, D>(deserializer: D) -> Result<u128, D::Error>
     where
         D: Deserializer<'de>
 {
     if deserializer.is_human_readable() {
-        Ok(parse_date(&String::deserialize(deserializer)?).unwrap_or(get_ts()))
+        let _ = String::deserialize(deserializer)?;
+        Ok(get_ts())
     } else {
         u128::deserialize(deserializer)
     }
 }
 
+fn deserialize_level<'de, D>(deserializer: D) -> Result<String, D::Error>
+    where
+        D: Deserializer<'de>
+{
+    let value = InnerLevel::deserialize(deserializer)?;
+    Ok(value.consume())
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(untagged)]
+enum InnerLevel {
+    Numeral(i32),
+    String(String),
+}
+
+impl InnerLevel {
+    pub fn consume(self) -> String {
+        match self {
+            InnerLevel::Numeral(value) => match value {
+                10 => "trace".to_string(),
+                20 => "debug".to_string(),
+                30 => "info".to_string(),
+                40 => "warn".to_string(),
+                50 => "error".to_string(),
+                _ => "info".to_string(),
+            },
+            InnerLevel::String(value) => value,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogMessage {
+    #[serde(deserialize_with = "deserialize_level")]
     pub level: String,
-    #[serde(alias = "timestamp", rename(serialize = "timestamp"), deserialize_with = "deserialize_date")]
+    #[serde(alias = "timestamp", alias = "time", rename(serialize = "timestamp"), deserialize_with = "deserialize_date")]
     pub date: u128,
+    #[serde(alias = "module")]
     pub section: String,
+    #[serde(alias = "msg", rename(serialize = "message"))]
+    pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<u64>,
-    #[serde(rename = "loc-file", skip_serializing_if = "Option::is_none")]
-    pub file: Option<String>,
-    #[serde(rename = "loc-line", skip_serializing_if = "Option::is_none")]
-    pub line: Option<String>,
-    #[serde(rename = "loc-column", skip_serializing_if = "Option::is_none")]
-    pub column: Option<String>,
 
     #[serde(flatten)]
-    pub extra: HashMap<String, String>,
+    pub extra: HashMap<String, Value>,
 }
 
 impl LogMessage {
     pub fn raw(line: String) -> Self {
-        let mut extra = HashMap::with_capacity(1);
-        extra.insert("message".to_string(), line);
+        let mut extra = HashMap::with_capacity(0);
         Self {
             level: "fatal".to_string(),
             date: get_ts(),
             section: "".to_string(),
             id: None,
-            file: None,
-            line: None,
-            column: None,
             extra,
+            message: line,
         }
     }
 }

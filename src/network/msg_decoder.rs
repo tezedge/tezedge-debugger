@@ -15,6 +15,7 @@ use crate::actors::peer_message::*;
 use crate::storage::{MessageStore, StoreMessage};
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 use crate::network::request_tracker::RequestTracker;
+use tezos_messages::p2p::encoding::ack::AckMessage;
 
 /// P2P Message decrypter from captured connection messages
 pub struct EncryptedMessageDecoder {
@@ -62,7 +63,7 @@ impl EncryptedMessageDecoder {
         if enc.has_payload() {
             self.inc_buf.extend_from_slice(&enc.payload());
 
-            if self.inc_buf.len() > 2 {
+            if self.inc_buf.len() > 2 && enc.is_push() {
                 if let Some(msg) = self.try_decrypt() {
                     match msg {
                         EncryptedMessage::PeerResponse(msg) => {
@@ -94,11 +95,12 @@ impl EncryptedMessageDecoder {
             };
 
             self.inc_buf.drain(0..len + 2);
-            match decrypt(chunk.content(), &self.nonce_fetch_increment(), &self.precomputed_key) {
+            let nonce = self.nonce_fetch_increment();
+            match decrypt(chunk.content(), &nonce, &self.precomputed_key) {
                 Ok(msg) => {
                     self.try_deserialize(msg)
                 }
-                Err(_err) => {
+                Err(err) => {
                     None
                 }
             }

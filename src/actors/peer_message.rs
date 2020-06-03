@@ -150,6 +150,24 @@ impl RawPacketMessage {
     }
 
     #[inline]
+    /// Check if is reset (RST) flag set in TCP header
+    pub fn is_reset(&self) -> bool {
+        self.tcp_packet().rst()
+    }
+
+    #[inline]
+    /// Check if is reset (FIN) flag set in TCP header
+    pub fn is_finish(&self) -> bool {
+        self.tcp_packet().fin()
+    }
+
+    #[inline]
+    /// Check if packet is to supposed to close the connection.
+    pub fn is_closing(&self) -> bool {
+        self.is_reset() || self.is_finish()
+    }
+
+    #[inline]
     /// Check if this packet is incoming to the local node
     pub fn is_incoming(&self) -> bool {
         self.is_incoming
