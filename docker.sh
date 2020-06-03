@@ -1,8 +1,15 @@
 #!/bin/bash
-VOLUME="$PWD/identity"
+if [ -z "${VOLUME+x}" ]; then
+  VOLUME="$PWD/identity"
+fi
+
 IDENTITY_FILE="$VOLUME/identity.json"
-PROXY_RPC_PORT=17732
+# RPC endpoints for debugger / node
+DEBUGGER_RPC_PORT=17732
 NODE_RPC_PORT=18732
+# Node specific ports
+NODE_P2P_PORT=19732
+NODE_WS_PORT=4972
 TAG=dev
 
 trap clean EXIT
@@ -66,7 +73,7 @@ if [ ! -f "$IDENTITY_FILE" ]; then
 fi
 
 # == START PROXY IN DETACHED MODE ==
-PROXY_ID=$(docker run -d --cap-add=NET_ADMIN -p "$PROXY_RPC_PORT:10000" -p "$NODE_RPC_PORT:8732" -p "19732:9732" -p "4927:4927" --volume "$VOLUME:/home/appuser/proxy/identity" --device /dev/net/tun:/dev/net/tun -it simplestakingcom/tezedge-debuger:"$TAG")
+PROXY_ID=$(docker run -d --cap-add=NET_ADMIN -p "$DEBUGGER_RPC_PORT:10000" -p "$NODE_RPC_PORT:8732" -p "$NODE_P2P_PORT:9732" -p "$NODE_WS_PORT:4927" --volume "$VOLUME:/home/appuser/proxy/identity" --device /dev/net/tun:/dev/net/tun -it simplestakingcom/tezedge-debuger:"$TAG")
 docker exec "$PROXY_ID" iptables -t nat -A PREROUTING -p tcp --dport 8732 -j DNAT --to-destination 10.0.1.1
 echo "Spawned proxy in container $PROXY_ID"
 sleep 1
@@ -81,9 +88,7 @@ else
   NODE_ID=$(docker run -d --volume "$VOLUME:/root/identity/" simplestakingcom/light-node:latest sleep inf)
 fi
 
-if [ "$NODE_TYPE" = "OCAML" ]; then
-  docker exec "$NODE_ID" cp /root/identity/identity.json /root/.tezos-node/
-fi
+docker exec "$NODE_ID" cp /root/identity/identity.json /root/.tezos-node/
 
 #docker exec "$NODE_ID" cp /root/identity/identity.json /root/.tezos-node/
 docker exec "$NODE_ID" mkfifo /root/identity/tezos.log
@@ -100,17 +105,16 @@ sudo ip netns exec "$NODE_ID" ip route del 0/0
 sudo ip netns exec "$NODE_ID" ip route del 172.17.0.0/16
 sudo ip netns exec "$NODE_ID" ip route add default via 10.0.1.1
 echo "Moved tun0 from proxy container to node container"
-#until curl -X GET -H "Content-Type: application/json" --data '{"limit": 0}' --output /dev/null --silent --head --fail "localhost:$PROXY_RPC_PORT/v2/p2p"; do
-until curl -X GET -H "Content-Type: application/json" -d '{}' --output /dev/null --silent --fail "localhost:$PROXY_RPC_PORT/v2/p2p"; do
+until curl -X GET --output /dev/null --silent --fail "localhost:$DEBUGGER_RPC_PORT/v2/p2p"; do
   sleep 1
 done
-echo "Proxy running successfully on port $PROXY_RPC_PORT"
+echo "Proxy running successfully on port $DEBUGGER_RPC_PORT"
 unmount_ns "$NODE_ID"
 unmount_ns "$PROXY_ID"
 # 4. start node in existing container
 #docker exec -it "$NODE_ID" /bin/bash
-EXPLORER_ID=$(docker run -d -p "8080:8080" simplestakingcom/tezedge-explorer-ocaml:latest)
-echo "Running explorer on port 8080 in container $EXPLORER_ID"
+#EXPLORER_ID=$(docker run -d -p "8080:8080" simplestakingcom/tezedge-explorer-ocaml:latest)
+#echo "Running explorer on port 8080 in container $EXPLORER_ID"
 
 if [ "$NODE_TYPE" = "OCAML" ]; then
   echo "[+] Running ocaml node"
