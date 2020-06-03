@@ -1,14 +1,16 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use warp::hyper::Client;
-use bytes::buf::BufExt;
+pub mod common;
+use common::{debugger_url, get_rpc_as_json};
+
+/// Running these tests requires a running instance of the tezedge debugger with a tezos node
 
 #[tokio::test]
 async fn test_p2p_rpc_limit() {
 
     // TODO: make an env var
-    let base_url = "http://116.202.128.230:17732/v2/p2p";
+    let base_url = format!("{}/{}", debugger_url(), "v2/p2p");
 
     let limit: usize = 12;
     let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "limit", limit)).await.unwrap();
@@ -26,7 +28,7 @@ async fn test_p2p_rpc_limit() {
 #[tokio::test]
 async fn test_p2p_rpc_cursor_id() {
     // TODO: make an env var
-    let base_url = "http://116.202.128.230:17732/v2/p2p";
+    let base_url = format!("{}/{}", debugger_url(), "v2/p2p");
 
     let cursor_id: usize = 15000;
     let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "cursor_id", cursor_id)).await.unwrap();
@@ -43,7 +45,7 @@ async fn test_p2p_rpc_cursor_id() {
 #[tokio::test]
 async fn test_p2p_rpc_types() {
     // TODO: make an env var
-    let base_url = "http://116.202.128.230:17732/v2/p2p";
+    let base_url = format!("{}/{}", debugger_url(), "v2/p2p");
 
     let message_type = "connection_message";
     let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "types", message_type)).await.unwrap();
@@ -55,16 +57,14 @@ async fn test_p2p_rpc_types() {
         assert_eq!(elem["type"], message_type);
     }
 
-}
+    let message_type = "metadata";
+    let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "types", message_type)).await.unwrap();
 
-async fn get_rpc_as_json(url: &str) -> Result<serde_json::value::Value, serde_json::error::Error> {
-    let client = Client::new();
-    let uri = url.parse().expect("Invalid URL");
+    let response_array = response.as_array().unwrap();
+    assert_eq!(response_array.len(), 100);
 
-    let body = match client.get(uri).await {
-        Ok(res) => warp::hyper::body::aggregate(res.into_body()).await.expect("Failed to read response body"),
-        Err(e) => panic!("RPC call failed with: {}", e)
-    };
+    for elem in response_array {
+        assert_eq!(elem["type"], message_type);
+    }
 
-    serde_json::from_reader(&mut body.reader())
 }
