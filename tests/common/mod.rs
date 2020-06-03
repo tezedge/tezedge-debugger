@@ -22,12 +22,25 @@ pub async fn get_rpc_as_json(url: &str) -> Result<serde_json::value::Value, serd
 
 /// Make x number of rpc calls to the node
 pub async fn make_rpc_calls(x: i32) {
+    let node_url = node_url();
     for _ in 0..x {
-        let _ = get_rpc_as_json(&"http://116.202.128.230:48732/chains/main/blocks/head").await.unwrap();
+        let _ = get_rpc_as_json(&format!("{}/{}", node_url, "chains/main/blocks/head")).await.unwrap();
     }
 }
 
 pub fn debugger_url() -> String {
     env::var("DEBUGGER_URL")
-        .unwrap_or("http://116.202.128.230:17732".to_string())
+        //.unwrap_or("http://116.202.128.230:17732".to_string())
+        .unwrap()
+}
+
+pub fn node_url() -> String {
+    env::var("NODE_URL")
+        //.unwrap_or("http://116.202.128.230:48732".to_string())
+        .unwrap()
+}
+
+pub fn node_type() -> String {
+    env::var("NODE_TYPE")
+        .unwrap()
 }
