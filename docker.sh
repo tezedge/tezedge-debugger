@@ -69,11 +69,11 @@ docker pull simplestakingcom/tezedge-explorer-ocaml
 
 # Check identity
 if [ ! -f "$IDENTITY_FILE" ]; then
-  docker run --volume "$VOLUME:/root/identity" -it simplestakingcom/tezedge-tezos:"$TAG" /bin/bash -c "./tezos-node identity generate && cp /root/.tezos-node/identity.json /root/identity"
+  docker run --volume "$VOLUME:/root/identity" -i simplestakingcom/tezedge-tezos:"$TAG" /bin/bash -c "./tezos-node identity generate && cp /root/.tezos-node/identity.json /root/identity"
 fi
 
 # == START PROXY IN DETACHED MODE ==
-PROXY_ID=$(docker run -d --cap-add=NET_ADMIN -p "$DEBUGGER_RPC_PORT:10000" -p "$NODE_RPC_PORT:8732" -p "$NODE_P2P_PORT:9732" -p "$NODE_WS_PORT:4927" --volume "$VOLUME:/home/appuser/proxy/identity" --device /dev/net/tun:/dev/net/tun -it simplestakingcom/tezedge-debuger:"$TAG")
+PROXY_ID=$(docker run -d --cap-add=NET_ADMIN -p "$DEBUGGER_RPC_PORT:10000" -p "$NODE_RPC_PORT:8732" -p "$NODE_P2P_PORT:9732" -p "$NODE_WS_PORT:4927" --volume "$VOLUME:/home/appuser/proxy/identity" --device /dev/net/tun:/dev/net/tun -i simplestakingcom/tezedge-debuger:"$TAG")
 docker exec "$PROXY_ID" iptables -t nat -A PREROUTING -p tcp --dport 8732 -j DNAT --to-destination 10.0.1.1
 echo "Spawned proxy in container $PROXY_ID"
 sleep 1
