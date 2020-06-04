@@ -562,7 +562,7 @@ pub(crate) mod secondary_indexes {
                 "deactivate" => Ok(Self::Deactivate),
                 "get_current_head" => Ok(Self::GetCurrentHead),
                 "current_head" => Ok(Self::CurrentHead),
-                "get_block_header" => Ok(Self::GetBlockHeaders),
+                "get_block_headers" => Ok(Self::GetBlockHeaders),
                 "block_header" => Ok(Self::BlockHeader),
                 "get_operations" => Ok(Self::GetOperations),
                 "operation" => Ok(Self::Operation),
