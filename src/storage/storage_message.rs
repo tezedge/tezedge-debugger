@@ -42,6 +42,8 @@ pub enum StoreMessage {
         timestamp: u128,
         incoming: bool,
         remote_addr: SocketAddr,
+        request_id: Option<u64>,
+        remote_requested: Option<bool>,
         payload: Vec<PeerMessage>,
     },
     /// RPC Request/Response
@@ -97,6 +99,8 @@ impl StoreMessage {
             remote_addr,
             incoming,
             payload,
+            request_id: None,
+            remote_requested: None,
             timestamp: Self::make_ts(),
         }
     }
@@ -117,6 +121,15 @@ impl StoreMessage {
             StoreMessage::RestMessage { remote_addr, .. } | StoreMessage::ConnectionMessage { remote_addr, .. } |
             StoreMessage::P2PMessage { remote_addr, .. } | StoreMessage::TcpMessage { remote_addr, .. } |
             StoreMessage::Metadata { remote_addr, .. } => remote_addr.clone()
+        }
+    }
+
+    /// Check if message is incoming to this node
+    pub fn is_incoming(&self) -> bool {
+        match self {
+            StoreMessage::RestMessage { incoming, .. } | StoreMessage::ConnectionMessage { incoming, .. } |
+            StoreMessage::P2PMessage { incoming, .. } | StoreMessage::TcpMessage { incoming, .. } |
+            StoreMessage::Metadata { incoming, .. } => incoming.clone()
         }
     }
 }

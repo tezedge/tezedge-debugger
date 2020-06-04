@@ -7,8 +7,8 @@ use std::{
 use argh::FromArgs;
 use failure::Error;
 use serde::{Serialize, Deserialize};
-use crate::storage::MessageStore;
-use storage::persistent::{KeyValueSchema, open_kv};
+use crate::storage::{MessageStore, cfs};
+use storage::persistent::open_kv;
 
 
 #[derive(FromArgs, Debug, Clone, PartialEq)]
@@ -36,6 +36,9 @@ pub struct AppConfig {
     #[argh(option, default = "\"./storage\".to_string()")]
     /// path to initialize storage
     pub storage_path: String,
+    #[argh(option, default = "\"./identity/tezos.log\".to_string()")]
+    /// path to initialize storage
+    pub logs_path: String,
     #[argh(option, default = "true")]
     /// clean storage when starting the tool
     pub clean_storage: bool,
@@ -74,12 +77,7 @@ impl AppConfig {
     /// Open new databes specified in --storage-path argument
     pub fn open_database(&self) -> Result<MessageStore, Error> {
         let path = Path::new(&self.storage_path);
-        let schemas = vec![
-            crate::storage::RpcMessageStorage::descriptor(),
-            crate::storage::P2PMessageStorage::descriptor(),
-            crate::storage::RpcMessageSecondaryIndex::descriptor(),
-            crate::storage::P2PMessageSecondaryIndex::descriptor(),
-        ];
+        let schemas = cfs();
         let rocksdb = Arc::new(open_kv(path, schemas)?);
         Ok(MessageStore::new(rocksdb))
     }

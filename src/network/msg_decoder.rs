@@ -14,6 +14,7 @@ use bytes::Buf;
 use crate::actors::peer_message::*;
 use crate::storage::{MessageStore, StoreMessage};
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
+use crate::network::request_tracker::RequestTracker;
 
 /// P2P Message decrypter from captured connection messages
 pub struct EncryptedMessageDecoder {
@@ -26,6 +27,7 @@ pub struct EncryptedMessageDecoder {
     inc_buf: Vec<u8>,
     out_buf: Vec<u8>,
     dec_buf: Vec<u8>,
+    request_tracker: RequestTracker,
     input_remaining: usize,
 }
 
@@ -50,23 +52,27 @@ impl EncryptedMessageDecoder {
             inc_buf: Default::default(),
             out_buf: Default::default(),
             dec_buf: Default::default(),
+            request_tracker: Default::default(),
             input_remaining: 0,
         }
     }
 
-    /// Process received message, if complete message is received, decypher, deserialize and store it.
+    /// Process received message, if complete message is received, decipher, deserialize and store it.
     pub fn recv_msg(&mut self, enc: &RawPacketMessage) {
         if enc.has_payload() {
             self.inc_buf.extend_from_slice(&enc.payload());
 
-            if self.inc_buf.len() > 2 {
+            if self.inc_buf.len() > 2 && enc.is_push() {
                 if let Some(msg) = self.try_decrypt() {
                     match msg {
                         EncryptedMessage::PeerResponse(msg) => {
-                            let _ = self.db.store_p2p_message(&StoreMessage::new_p2p(enc.remote_addr(), enc.is_incoming(), &msg));
+                            let index = self.db.p2p().reserve_index();
+                            let mut store_msg = StoreMessage::new_p2p(enc.remote_addr(), enc.is_incoming(), &msg);
+                            self.request_tracker.track_request(&mut store_msg, index);
+                            let _ = self.db.p2p().put_message(index, &store_msg);
                         }
                         EncryptedMessage::Metadata(msg) => {
-                            let _ = self.db.store_p2p_message(&StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg));
+                            let _ = self.db.p2p().store_message(&StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg));
                         }
                     }
                 }
@@ -88,7 +94,8 @@ impl EncryptedMessageDecoder {
             };
 
             self.inc_buf.drain(0..len + 2);
-            match decrypt(chunk.content(), &self.nonce_fetch_increment(), &self.precomputed_key) {
+            let nonce = self.nonce_fetch_increment();
+            match decrypt(chunk.content(), &nonce, &self.precomputed_key) {
                 Ok(msg) => {
                     self.try_deserialize(msg)
                 }

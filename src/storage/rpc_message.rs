@@ -43,6 +43,8 @@ pub enum RpcMessage {
         timestamp: u128,
         id: u64,
         remote_addr: SocketAddr,
+        request_id: Option<u64>,
+        remote_requested: Option<bool>,
         message: Vec<MappedPeerMessage>,
     },
     RestMessage {
@@ -58,7 +60,6 @@ impl BincodeEncoded for RpcMessage {}
 
 impl RpcMessage {
     pub fn from_store(msg: &StoreMessage, id: u64) -> Self {
-        let id = Self::fix_id(id);
         match msg {
             StoreMessage::TcpMessage { remote_addr, incoming, packet, timestamp } => {
                 RpcMessage::Packet {
@@ -78,9 +79,11 @@ impl RpcMessage {
                     message: payload.clone().into(),
                 }
             }
-            StoreMessage::P2PMessage { remote_addr, incoming, payload, timestamp } => {
+            StoreMessage::P2PMessage { remote_addr, incoming, payload, request_id, remote_requested, timestamp } => {
                 RpcMessage::P2pMessage {
                     id,
+                    request_id: request_id.clone(),
+                    remote_requested: remote_requested.clone(),
                     timestamp: timestamp.clone(),
                     remote_addr: remote_addr.clone(),
                     incoming: incoming.clone(),
@@ -110,6 +113,16 @@ impl RpcMessage {
 
     fn fix_id(id: u64) -> u64 {
         std::u64::MAX.saturating_sub(id)
+    }
+
+    pub fn id(&self) -> u64 {
+        match self {
+            Self::Packet { id, .. } => id.clone(),
+            Self::Metadata { id, .. } => id.clone(),
+            Self::ConnectionMessage { id, .. } => id.clone(),
+            Self::P2pMessage { id, .. } => id.clone(),
+            Self::RestMessage { id, .. } => id.clone(),
+        }
     }
 }
 

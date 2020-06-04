@@ -4,24 +4,18 @@ mod configuration;
 mod actors;
 mod network;
 mod storage;
-
-use std::{
-    sync::{Mutex, Arc},
-};
-
-use failure::Fail;
-use main_error::MainError;
-use riker::actors::*;
-use warp::{
-    Filter,
-    http::Response,
-};
+mod endpoints;
 
 use crate::{
+    endpoints::routes,
     actors::prelude::*,
     network::prelude::*,
     configuration::AppConfig,
 };
+use failure::Fail;
+use riker::actors::*;
+use main_error::MainError;
+use std::sync::{Mutex, Arc};
 
 #[derive(Debug, Fail)]
 enum AppError {
@@ -49,6 +43,12 @@ async fn main() -> Result<(), MainError> {
     // -- Initialize RocksDB
     let db = app_config.open_database()?;
     log::info!("Created RocksDB storage in: {}", app_config.storage_path);
+
+    // -- Create logs reader
+    make_logs_reader(&app_config.logs_path, db.clone())?;
+    log::info!("Reading logs from: {}", app_config.logs_path);
+
+    // loop {}
 
     // -- Create TUN devices
     let ((_, receiver), writer) = make_bridge(
@@ -87,114 +87,8 @@ async fn main() -> Result<(), MainError> {
 
     log::info!("Started to analyze traffic through {} device", app_config.tun0_name);
 
-    let tmp = db.clone();
-    let cloner = move || {
-        tmp.clone()
-    };
-
-    // -- Initialize server
-    let p2p_raw = warp::path!("p2p" / u64 / u64)
-        .map(move |offset, count| {
-            match cloner().get_p2p_range(offset, count) {
-                Ok(value) => {
-                    serde_json::to_string(&value)
-                        .expect("failed to serialize the array")
-                }
-                Err(e) => serde_json::to_string(
-                    &format!("Failed to read database: {}", e)
-                ).unwrap(),
-            }
-        }).map(|value| {
-        Response::builder()
-            .header("Content-Type", "application/json")
-            .header("Access-Control-Allow-Origin", "*")
-            .body(value)
-    });
-
-    let tmp = db.clone();
-    let cloner = move || {
-        tmp.clone()
-    };
-
-    let p2p_host = warp::path!("p2p" / u64 / u64 / String)
-        .map(move |offset, count, host: String| {
-            match host.parse() {
-                Ok(addr) => match cloner().get_p2p_host_range(offset, count, addr) {
-                    Ok(value) => {
-                        serde_json::to_string(&value)
-                            .expect("failed to serialize the array")
-                    }
-                    Err(e) => serde_json::to_string(
-                        &format!("Failed to read database: {}", e),
-                    ).unwrap()
-                },
-                Err(e) => serde_json::to_string(
-                    &format!("Invalid socket address: {}", e),
-                ).unwrap(),
-            }
-        }).map(|value| {
-        Response::builder()
-            .header("Content-Type", "application/json")
-            .header("Access-Control-Allow-Origin", "*")
-            .body(value)
-    });
-
-    let tmp = db.clone();
-    let cloner = move || {
-        tmp.clone()
-    };
-
-    let rpc_raw = warp::path!("rpc" / u64 / u64)
-        .map(move |offset, count| {
-            match cloner().get_rpc_range(offset, count) {
-                Ok(value) => {
-                    serde_json::to_string(&value)
-                        .expect("failed to serialize the array")
-                }
-                Err(e) => serde_json::to_string(
-                    &format!("Failed to read database: {}", e)
-                ).unwrap(),
-            }
-        }).map(|value| {
-        Response::builder()
-            .header("Content-Type", "application/json")
-            .header("Access-Control-Allow-Origin", "*")
-            .body(value)
-    });
-
-    let tmp = db.clone();
-    let cloner = move || {
-        tmp.clone()
-    };
-
-    let rpc_host = warp::path!("rpc" / u64 / u64 / String)
-        .map(move |offset, count, host: String| {
-            match host.parse() {
-                Ok(addr) => match cloner().get_rpc_host_range(offset, count, addr) {
-                    Ok(value) => {
-                        serde_json::to_string(&value)
-                            .expect("failed to serialize the array")
-                    }
-                    Err(e) => serde_json::to_string(
-                        &format!("Failed to read database: {}", e),
-                    ).unwrap()
-                },
-                Err(e) => serde_json::to_string(
-                    &format!("Invalid socket address: {}", e),
-                ).unwrap(),
-            }
-        }).map(|value| {
-        Response::builder()
-            .header("Content-Type", "application/json")
-            .header("Access-Control-Allow-Origin", "*")
-            .body(value)
-    });
-
-    let router = warp::get().and(p2p_raw.or(p2p_host).or(rpc_raw).or(rpc_host));
-
-    warp::serve(router)
-        // TODO: Add as config settings
-        .run(([0, 0, 0, 0], app_config.rpc_port))
+    warp::serve(routes(db))
+        .run(([0, 0, 0, 0], 10000))
         .await;
 
     Ok(())

@@ -18,6 +18,7 @@ use crate::{
     network::tun_bridge::BridgeWriter,
 };
 use crate::actors::rpc_processor::{RpcProcessor, RpcArgs};
+use riker::system::SystemCmd;
 
 #[derive(Clone)]
 /// Arguments required to create PacketOrchestrator actor
@@ -115,7 +116,7 @@ impl Actor for PacketOrchestrator {
         match msg {
             SenderMessage::Process(msg) => match msg.character() {
                 PacketCharacter::InnerOutgoing | PacketCharacter::OuterIncoming => {
-                    // Process packet first
+                    // Process rpc packet first
                     if msg.is_incoming() && msg.tcp_packet().dst_port() == 8732 || msg.is_outgoing() && msg.tcp_packet().src_port() == 8732 {
                         if let Some(ref mut remote) = self.rpc_processor {
                             remote.tell(msg, ctx.myself().into())
@@ -125,7 +126,7 @@ impl Actor for PacketOrchestrator {
                         return;
                     }
 
-                    if let Some(remote) = self.remotes.get_mut(&msg.remote_addr()) {
+                    let actor = if let Some(remote) = self.remotes.get_mut(&msg.remote_addr()) {
                         remote
                     } else {
                         match self.spawn_peer(ctx, msg.remote_addr()) {
@@ -139,7 +140,18 @@ impl Actor for PacketOrchestrator {
                                 return;
                             }
                         }
-                    }.tell(msg, ctx.myself().into());
+                    };
+
+                    if !msg.has_payload() {
+                        if msg.is_closing() {
+                            log::info!("Peer {} closed connection", actor.name());
+                            actor.sys_tell(SystemMsg::Command(SystemCmd::Stop));
+                            self.remotes.remove(&msg.remote_addr());
+                        }
+                        self.relay(msg);
+                    } else {
+                        actor.send_msg(msg, ctx.myself())
+                    }
                 }
                 _ => self.relay(msg),
             },

@@ -26,6 +26,7 @@ use crate::{
     network::connection_message::ConnectionMessage,
     storage::StoreMessage,
 };
+use riker::system::SystemCmd;
 
 #[derive(Clone)]
 /// Argument structure to create new P2P message processor
@@ -44,7 +45,6 @@ pub struct PeerProcessor {
     is_dead: bool,
     waiting: bool,
     conn_msgs: Vec<(ConnectionMessage, SocketAddr)>,
-    handshake: u8,
     local_identity: Identity,
     peer_id: String,
     public_key: Vec<u8>,
@@ -59,7 +59,6 @@ impl PeerProcessor {
             db: args.db,
             addr: args.addr,
             local_identity: args.local_identity,
-            handshake: 0,
             initialized: false,
             incoming: false,
             is_dead: false,
@@ -74,24 +73,15 @@ impl PeerProcessor {
 
     /// Process given message (check its content, and if needed decypher/deserialize/store it)
     fn process_message(&mut self, msg: &mut RawPacketMessage) -> Result<(), Error> {
-        if self.handshake == 3 {
+        if msg.has_payload() {
             if self.initialized {
                 self.process_encrypted_message(msg)
             } else {
                 self.process_unencrypted_message(msg)
             }
         } else {
-            self.process_handshake_message(msg)
+            Ok(())
         }
-    }
-
-
-    /// Process TCP handshake message
-    fn process_handshake_message(&mut self, _msg: &mut RawPacketMessage) -> Result<(), Error> {
-        self.handshake += 1;
-        // Disable Raw TCP packet storing for now
-        // self.db.store_p2p_message(&StoreMessage::new_tcp(&msg), msg.remote_addr())
-        Ok(())
     }
 
     /// Process non-TCP handshake message included in tezos bootstrap (handshake) process
@@ -102,7 +92,7 @@ impl PeerProcessor {
         let chunk = BinaryChunk::try_from(msg.payload().to_vec())?;
         let conn_msg = ConnectionMessage::try_from(chunk)?;
 
-        self.db.store_p2p_message(&StoreMessage::new_connection(msg.remote_addr(), msg.is_incoming(), &conn_msg))?;
+        self.db.p2p().store_message(&StoreMessage::new_connection(msg.remote_addr(), msg.is_incoming(), &conn_msg))?;
 
         if let Some((_, addr)) = self.conn_msgs.get(0) {
             if addr == &msg.source_addr() {
@@ -128,6 +118,7 @@ impl PeerProcessor {
         } else {
             &mut self.outgoing_decrypter
         };
+
         if let Some(ref mut decrypter) = decrypter {
             decrypter.recv_msg(msg)
         }
@@ -175,6 +166,12 @@ impl PeerProcessor {
 
 impl Actor for PeerProcessor {
     type Msg = RawPacketMessage;
+
+    fn sys_recv(&mut self, ctx: &Context<Self::Msg>, msg: SystemMsg, _: Sender) {
+        if let SystemMsg::Command(SystemCmd::Stop) = msg {
+            ctx.stop(ctx.myself());
+        }
+    }
 
     fn recv(&mut self, ctx: &Context<RawPacketMessage>, mut msg: RawPacketMessage, sender: Sender) {
         let _ = self.process_message(&mut msg);
