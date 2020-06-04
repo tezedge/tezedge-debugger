@@ -19,15 +19,15 @@ Requirements
 
 How to run
 ==========
-The easiest way to try the debugger is by running it through the following script: `./docker.sh`. This script will setup
+The easiest way to try the debugger is by running it through the following script: `NODE_TYPE=RUST ./docker.sh`, where `NODE_TYPE` specifies type of node (`OCAML` or `RUST` are allowed). 
+This script will setup
 all the required containers and networking settings. If the required capabilities are not satisfied, the script will prompt the user
 for a password to elevate its rights. The script checks `./identity` folder for `identity.json` file, if not provided one will be
 generated inside said folder. Currently, the script will run three containers:
 * `tezedge_debugger` - with RPC on port `17732`
-* `tezedge_explorer` - UI for presenting data from debugger on `localhost:8080`
 * `tezos_node` - on P2P port `9732` and its own [RPC](https://tezos.gitlab.io/api/rpc.html) on port `18732`
 
-(WIP) Debugger API
+(V2) Debugger API
 ==================
 ## V2 API
 ### P2P

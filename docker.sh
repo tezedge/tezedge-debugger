@@ -1,8 +1,5 @@
 #!/bin/bash
-if [ -z "${VOLUME+x}" ]; then
-  VOLUME="$PWD/identity"
-fi
-
+VOLUME="$PWD/identity"
 IDENTITY_FILE="$VOLUME/identity.json"
 # RPC endpoints for debugger / node
 DEBUGGER_RPC_PORT=17732
@@ -10,7 +7,7 @@ NODE_RPC_PORT=18732
 # Node specific ports
 NODE_P2P_PORT=19732
 NODE_WS_PORT=4972
-TAG=dev
+TAG=latest
 
 trap clean EXIT
 
@@ -89,7 +86,6 @@ fi
 
 docker exec "$NODE_ID" cp /root/identity/identity.json /root/.tezos-node/
 
-#docker exec "$NODE_ID" cp /root/identity/identity.json /root/.tezos-node/
 docker exec "$NODE_ID" mkfifo /root/identity/tezos.log
 echo "Spawned tezos container $NODE_ID"
 mount_ns "$NODE_ID"
@@ -110,10 +106,6 @@ done
 echo "Proxy running successfully on port $DEBUGGER_RPC_PORT"
 unmount_ns "$NODE_ID"
 unmount_ns "$PROXY_ID"
-# 4. start node in existing container
-#docker exec -it "$NODE_ID" /bin/bash
-#EXPLORER_ID=$(docker run -d -p "8080:8080" simplestakingcom/tezedge-explorer-ocaml:latest)
-#echo "Running explorer on port 8080 in container $EXPLORER_ID"
 
 if [ "$NODE_TYPE" = "OCAML" ]; then
   echo "[+] Running ocaml node"
