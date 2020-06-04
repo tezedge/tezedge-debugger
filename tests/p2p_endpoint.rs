@@ -73,6 +73,72 @@ async fn test_p2p_rpc_types() {
 
 #[ignore]
 #[tokio::test]
+async fn test_p2p_rpc_all_types() {
+
+    let types = vec![
+        "tcp",
+        "metadata",
+        "connection_message",
+        "rest_message",
+        "disconnect",
+        "swap_request",
+        "swap_ack",
+        "deactivate",
+        
+    ];
+
+    let nested_types = vec![
+        "get_current_head",
+        "current_head",
+        "get_block_headers",
+        "block_header",
+        "get_operations",
+        "operation",
+        "get_protocols",
+        "protocol",
+        "get_operation_hashes_for_blocks",
+        "operation_hashes_for_block",
+        "get_operations_for_blocks",
+        "operations_for_blocks",
+        "bootstrap",
+        "get_current_branch",
+        "current_branch",
+        "advertise",
+    ];
+
+    let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
+
+    for t in types {
+        let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "types", t)).await.unwrap();
+
+        let response_array = response.as_array().unwrap();
+        assert!(response_array.len() <= DEFAULT_LIMIT);
+
+        for elem in response_array {
+            assert_eq!(elem["type"], t);
+        }
+    }
+
+    for t in nested_types {
+        let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "types", t)).await.unwrap();
+
+        let empty_vec = Vec::new();
+        let response_array = response.as_array().unwrap_or(&empty_vec);
+
+        if response_array.len() == 0 {
+            println!("Empty response for type {}, no message found for this type", t);
+        }
+
+        assert!(response_array.len() <= DEFAULT_LIMIT);
+
+        for elem in response_array {
+            assert_eq!(elem["message"][0]["type"], t);
+        }
+    }
+}
+
+#[ignore]
+#[tokio::test]
 async fn test_p2p_rpc_incoming() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
