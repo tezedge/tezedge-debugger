@@ -76,6 +76,7 @@ pub(crate) fn cfs() -> Vec<ColumnFamilyDescriptor> {
         p2p_indexes::TypeIndex::descriptor(),
         p2p_indexes::RequestTrackingIndex::descriptor(),
         p2p_indexes::IncomingIndex::descriptor(),
+        p2p_indexes::RemoteRequestedIndex::descriptor(),
         rpc_indexes::RemoteAddrIndex::descriptor(),
         log_indexes::LevelIndex::descriptor(),
         log_indexes::TimestampIndex::descriptor(),

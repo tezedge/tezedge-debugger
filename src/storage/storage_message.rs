@@ -132,6 +132,13 @@ impl StoreMessage {
             StoreMessage::Metadata { incoming, .. } => incoming.clone()
         }
     }
+
+    pub fn is_remote_requested(&self) -> bool {
+        match self {
+            StoreMessage::P2PMessage { remote_requested, .. } => remote_requested.unwrap_or(false),
+            _ => false
+        }
+    }
 }
 
 impl BincodeEncoded for StoreMessage {}

@@ -16,12 +16,14 @@ pub struct P2PFilters {
     pub types: Option<u32>,
     pub request_id: Option<u64>,
     pub incoming: Option<bool>,
+    pub remote_requested: Option<bool>,
 }
 
 impl P2PFilters {
     pub fn empty(&self) -> bool {
         self.remote_addr.is_none() && self.types.is_none()
             && self.request_id.is_none() && self.incoming.is_none()
+            && self.remote_requested.is_none()
     }
 }
 
@@ -34,6 +36,7 @@ pub struct P2PStorage {
     type_index: TypeIndex,
     tracking_index: RequestTrackingIndex,
     incoming_index: IncomingIndex,
+    remote_requested_index: RemoteRequestedIndex,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
 }
@@ -46,6 +49,7 @@ impl P2PStorage {
             type_index: TypeIndex::new(kv.clone()),
             tracking_index: RequestTrackingIndex::new(kv.clone()),
             incoming_index: IncomingIndex::new(kv.clone()),
+            remote_requested_index: RemoteRequestedIndex::new(kv.clone()),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(0)),
         }
@@ -67,14 +71,16 @@ impl P2PStorage {
         self.remote_addr_index.store_index(&primary_index, value)?;
         self.type_index.store_index(&primary_index, value)?;
         self.tracking_index.store_index(&primary_index, value)?;
-        self.incoming_index.store_index(&primary_index, value)
+        self.incoming_index.store_index(&primary_index, value)?;
+        self.remote_requested_index.store_index(&primary_index, value)
     }
 
     pub fn delete_indexes(&self, primary_index: u64, value: &StoreMessage) -> Result<(), StorageError> {
         self.remote_addr_index.delete_index(&primary_index, value)?;
         self.type_index.delete_index(&primary_index, value)?;
         self.tracking_index.delete_index(&primary_index, value)?;
-        self.incoming_index.delete_index(&primary_index, value)
+        self.incoming_index.delete_index(&primary_index, value)?;
+        self.remote_requested_index.delete_index(&primary_index, value)
     }
 
     pub fn put_message(&self, index: u64, msg: &StoreMessage) -> Result<(), StorageError> {
@@ -116,6 +122,9 @@ impl P2PStorage {
             if let Some(incoming) = filters.incoming {
                 iters.push(self.incoming_iterator(cursor_index, incoming)?);
             }
+            if let Some(remote_requested) = filters.remote_requested {
+                iters.push(self.remote_requested_iterator(cursor_index, remote_requested)?);
+            }
             ret.extend(self.load_indexes(sorted_intersect(iters, limit).into_iter()));
         }
         Ok(ret)
@@ -156,6 +165,13 @@ impl P2PStorage {
 
     pub fn incoming_iterator<'a>(&'a self, cursor_index: Option<u64>, is_incoming: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(self.incoming_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), is_incoming)?
+            .filter_map(|(_, value)| {
+                value.ok()
+            })))
+    }
+
+    pub fn remote_requested_iterator<'a>(&'a self, cursor_index: Option<u64>, is_remote_requested: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(self.remote_requested_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), is_remote_requested)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
@@ -798,6 +814,123 @@ pub(crate) mod secondary_indexes {
         fn encode(&self) -> Result<Vec<u8>, SchemaError> {
             let mut buf = Vec::with_capacity(16);
             buf.extend_from_slice(&[self.is_incoming as u8]); // is_incoming
+            buf.extend_from_slice(&[0u8; 7]); // padding
+            buf.extend_from_slice(&self.index.to_be_bytes()); // index
+
+            if buf.len() != 16 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
+            }
+        }
+    }
+
+    // 5. Remote requested Index
+    pub type RemoteRequestedIndexKV = dyn KeyValueStoreWithSchema<RemoteRequestedIndex> + Sync + Send;
+
+    #[derive(Clone)]
+    pub struct RemoteRequestedIndex {
+        kv: Arc<RemoteRequestedIndexKV>,
+    }
+
+    impl RemoteRequestedIndex {
+        pub fn new(kv: Arc<DB>) -> Self {
+            Self { kv }
+        }
+    }
+
+    impl AsRef<(dyn KeyValueStoreWithSchema<RemoteRequestedIndex> + 'static)> for RemoteRequestedIndex {
+        fn as_ref(&self) -> &(dyn KeyValueStoreWithSchema<RemoteRequestedIndex> + 'static) {
+            self.kv.as_ref()
+        }
+    }
+
+    impl KeyValueSchema for RemoteRequestedIndex {
+        type Key = RemoteRequestedKey;
+        type Value = <P2PStorage as KeyValueSchema>::Key;
+
+        fn descriptor() -> ColumnFamilyDescriptor {
+            let mut cf_opts = Options::default();
+            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<bool>()));
+            cf_opts.set_memtable_prefix_bloom_ratio(0.2);
+            ColumnFamilyDescriptor::new(Self::name(), cf_opts)
+        }
+
+        fn name() -> &'static str {
+            "p2p_remote_requested_index"
+        }
+    }
+
+    impl SecondaryIndex<P2PStorage> for RemoteRequestedIndex {
+        type FieldType = bool;
+
+        fn accessor(value: &<P2PStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+            Some(value.is_remote_requested())
+        }
+
+        fn make_index(key: &<P2PStorage as KeyValueSchema>::Key, value: Self::FieldType) -> RemoteRequestedKey {
+            RemoteRequestedKey::new(value, key.clone())
+        }
+
+        fn make_prefix_index(value: Self::FieldType) -> RemoteRequestedKey {
+            RemoteRequestedKey::prefix(value)
+        }
+    }
+
+    #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+    pub struct RemoteRequestedKey {
+        pub is_remote_requested: bool,
+        pub index: u64,
+    }
+
+    impl RemoteRequestedKey {
+        pub fn new(is_remote_requested: bool, index: u64) -> Self {
+            Self { is_remote_requested, index: std::u64::MAX.saturating_sub(index) }
+        }
+
+        pub fn prefix(is_remote_requested: bool) -> Self {
+            Self { is_remote_requested, index: 0 }
+        }
+    }
+
+    /// * bytes layout: `[is_remote_requested(1)][padding(7)][index(8)]`
+    impl Decoder for RemoteRequestedKey {
+        #[inline]
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 16 {
+                return Err(SchemaError::DecodeError);
+            }
+            let is_remote_requested_value = &bytes[0..1];
+            let _padding_value = &bytes[1..1 + 7];
+            let index_value = &bytes[1 + 7..];
+            // is_remote_requested
+            let is_remote_requested = if is_remote_requested_value == &[true as u8] {
+                true
+            } else if is_remote_requested_value == &[false as u8] {
+                true
+            } else {
+                return Err(SchemaError::DecodeError);
+            };
+            // index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+            Ok(Self {
+                is_remote_requested,
+                index,
+            })
+        }
+    }
+
+    /// * bytes layout: `[is_remote_requested(1)][padding(7)][index(8)]`
+    impl Encoder for RemoteRequestedKey {
+        #[inline]
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf = Vec::with_capacity(16);
+            buf.extend_from_slice(&[self.is_remote_requested as u8]); // is_remote_requested
             buf.extend_from_slice(&[0u8; 7]); // padding
             buf.extend_from_slice(&self.index.to_be_bytes()); // index
 

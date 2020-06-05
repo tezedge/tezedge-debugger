@@ -22,6 +22,7 @@ pub struct P2PCursor {
     types: Option<String>,
     request_id: Option<u64>,
     incoming: Option<bool>,
+    remote_requested: Option<bool>,
 }
 
 impl P2PCursor {
@@ -52,6 +53,7 @@ impl TryInto<crate::storage::P2PFilters> for P2PCursor {
             types: self.get_types()?,
             request_id: self.request_id,
             incoming: self.incoming,
+            remote_requested: self.remote_requested,
         })
     }
 }
