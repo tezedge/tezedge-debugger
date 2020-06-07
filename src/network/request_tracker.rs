@@ -47,6 +47,8 @@ impl RequestTracker {
                             if let Some(rt) = self.swap_request {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
+                            } else {
+                                *remote_requested = Some(*incoming);
                             }
                         }
                         PeerMessage::GetCurrentBranch(_) => {
@@ -58,6 +60,8 @@ impl RequestTracker {
                             if let Some(rt) = self.current_branch_request {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
+                            } else {
+                                *remote_requested = Some(*incoming);
                             }
                         }
                         PeerMessage::GetCurrentHead(_) => {
@@ -69,6 +73,8 @@ impl RequestTracker {
                             if let Some(rt) = self.current_head {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
+                            } else {
+                                *remote_requested = Some(*incoming);
                             }
                         }
                         PeerMessage::GetBlockHeaders(_) => {
@@ -80,6 +86,8 @@ impl RequestTracker {
                             if let Some(rt) = self.block_header_request {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
+                            } else {
+                                *remote_requested = Some(*incoming);
                             }
                         }
                         PeerMessage::GetOperations(_) => {
@@ -91,6 +99,8 @@ impl RequestTracker {
                             if let Some(rt) = self.operations_request {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
+                            } else {
+                                *remote_requested = Some(*incoming);
                             }
                         }
                         PeerMessage::GetProtocols(_) => {
@@ -102,6 +112,8 @@ impl RequestTracker {
                             if let Some(rt) = self.protocols_request {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
+                            } else {
+                                *remote_requested = Some(*incoming);
                             }
                         }
                         PeerMessage::GetOperationHashesForBlocks(_) => {
@@ -113,6 +125,8 @@ impl RequestTracker {
                             if let Some(rt) = self.operation_hashes_for_blocks {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
+                            } else {
+                                *remote_requested = Some(*incoming);
                             }
                         }
                         PeerMessage::GetOperationsForBlocks(_) => {
@@ -124,6 +138,8 @@ impl RequestTracker {
                             if let Some(rt) = self.operations_for_blocks {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
+                            } else {
+                                *remote_requested = Some(*incoming);
                             }
                         }
                         _ => return,
