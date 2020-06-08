@@ -85,7 +85,7 @@ All fields are _optional_.
 * __deactivate__
 * __get_current_head__
 * __current_head__
-* __get_block_header__
+* __get_block_headers__
 * __block_header__
 * __get_operations__
 * __operation__
