@@ -282,7 +282,7 @@ async fn test_p2p_rpc_source_type_combinations() {
 
 #[ignore]
 #[tokio::test]
-async fn test_p2p_rpc_incoming_and_no_request_types() {
+async fn test_p2p_rpc_one_way_types() {
     // no request-response pattern messages
     // incoming also indicates the source_type
     let types = vec![
@@ -296,7 +296,6 @@ async fn test_p2p_rpc_incoming_and_no_request_types() {
         "deactivate",
         "advertise",
         "bootstrap",
-        
     ];
 
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
@@ -316,7 +315,7 @@ async fn test_p2p_rpc_incoming_and_no_request_types() {
                 // the message is incoming, so the source_type is the remote
                 assert_eq!(elem["source_type"], "remote");
             } else {
-                // the message is NOT incoming (outgoing), so the source_type is the remote
+                // the message is NOT incoming (outgoing), so the source_type is the local
                 assert_eq!(elem["source_type"], "local");
             }
         }
