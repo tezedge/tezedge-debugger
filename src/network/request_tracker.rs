@@ -48,7 +48,7 @@ impl RequestTracker {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
                             } else {
-                                *remote_requested = Some(*incoming);
+                                *remote_requested = Some(!*incoming);
                             }
                         }
                         PeerMessage::GetCurrentBranch(_) => {
@@ -61,7 +61,7 @@ impl RequestTracker {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
                             } else {
-                                *remote_requested = Some(*incoming);
+                                *remote_requested = Some(!*incoming);
                             }
                         }
                         PeerMessage::GetCurrentHead(_) => {
@@ -74,7 +74,7 @@ impl RequestTracker {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
                             } else {
-                                *remote_requested = Some(*incoming);
+                                *remote_requested = Some(!*incoming);
                             }
                         }
                         PeerMessage::GetBlockHeaders(_) => {
@@ -87,7 +87,7 @@ impl RequestTracker {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
                             } else {
-                                *remote_requested = Some(*incoming);
+                                *remote_requested = Some(!*incoming);
                             }
                         }
                         PeerMessage::GetOperations(_) => {
@@ -100,7 +100,7 @@ impl RequestTracker {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
                             } else {
-                                *remote_requested = Some(*incoming);
+                                *remote_requested = Some(!*incoming);
                             }
                         }
                         PeerMessage::GetProtocols(_) => {
@@ -113,7 +113,7 @@ impl RequestTracker {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
                             } else {
-                                *remote_requested = Some(*incoming);
+                                *remote_requested = Some(!*incoming);
                             }
                         }
                         PeerMessage::GetOperationHashesForBlocks(_) => {
@@ -126,7 +126,7 @@ impl RequestTracker {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
                             } else {
-                                *remote_requested = Some(*incoming);
+                                *remote_requested = Some(!*incoming);
                             }
                         }
                         PeerMessage::GetOperationsForBlocks(_) => {
@@ -139,7 +139,7 @@ impl RequestTracker {
                                 *request_id = Some(rt.request_id);
                                 *remote_requested = Some(rt.incoming);
                             } else {
-                                *remote_requested = Some(*incoming);
+                                *remote_requested = Some(!*incoming);
                             }
                         }
                         _ => return,
