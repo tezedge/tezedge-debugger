@@ -1,9 +1,6 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::thread::sleep;
-use std::time::Duration;
-
 pub mod common;
 use common::{debugger_url, get_rpc_as_json, DEFAULT_LIMIT};
 
@@ -125,12 +122,7 @@ async fn test_p2p_rpc_all_types() {
     for t in nested_types {
         let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "types", t)).await.unwrap();
 
-        let empty_vec = Vec::new();
-        let response_array = response.as_array().unwrap_or(&empty_vec);
-
-        if response_array.len() == 0 {
-            println!("Empty response for type {}, no message found for this type", t);
-        }
+        let response_array = response.as_array().unwrap();
 
         assert!(response_array.len() <= DEFAULT_LIMIT);
 
@@ -192,63 +184,141 @@ async fn test_p2p_rpc_combinations() {
 
 #[ignore]
 #[tokio::test]
-async fn test_p2p_rpc_remote_requested() {
+async fn test_p2p_rpc_source_type_combinations() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
-    let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "remote_requested", false)).await.unwrap();
-    let response_array = response.as_array().unwrap();
-    assert!(response_array.len() <= DEFAULT_LIMIT);
+    // get implying these are requests
+    let known_request_types = vec![
+        "get_current_head",
+        "get_block_headers",
+        "get_operations",
+        "get_protocols",
+        "get_operation_hashes_for_blocks",
+        "get_operations_for_blocks",
+        "get_current_branch",
+    ];
 
-    for elem in response_array {
-        assert!(elem["remote_requested"] == false);
+    // complement types to gets, implying responses
+    let known_response_types = vec![
+        "current_head",
+        "block_header",
+        "operation",
+        "protocol",
+        "operation_hashes_for_block",
+        "operations_for_blocks",
+        "current_branch",
+    ];
+
+    // REQUEST
+    // LOCAL -> REMOTE: filter the request types
+    let incoming = false;
+    for request_type in known_request_types.clone() {
+        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "types", request_type, "incoming", incoming)).await.unwrap();
+        let response_array = response.as_array().unwrap();
+
+        // there is a chance that this concrete message type was never sent, this is a legit case, so we do not panic
+        assert!(response_array.len() <= DEFAULT_LIMIT);
+
+        for elem in response_array {
+            assert_eq!(elem["source_type"], "local");
+            assert_eq!(elem["incoming"], incoming);
+            assert_eq!(elem["message"][0]["type"], request_type);
+        }
     }
 
-    let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "remote_requested", true)).await.unwrap();
-    let response_array = response.as_array().unwrap();
-    assert!(response_array.len() <= DEFAULT_LIMIT);
+    // RESPONSE
+    // LOCAL -> REMOTE: filter the response types
+    let incoming = false;
+    for response_type in known_response_types.clone() {
+        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "types", response_type, "incoming", incoming)).await.unwrap();
+        let response_array = response.as_array().unwrap();
+        
+        // there is a chance that this concrete message type was never sent, this is a legit case, so we do not panic
+        assert!(response_array.len() <= DEFAULT_LIMIT);
 
-    for elem in response_array {
-        assert_eq!(elem["remote_requested"], true);
+        println!("Request: {}", format!("{}?{}={}&{}={}", base_url, "types", response_type, "incoming", incoming));
+
+        for elem in response_array {
+            assert_eq!(elem["source_type"], "remote");
+            assert_eq!(elem["incoming"], incoming);
+            assert_eq!(elem["message"][0]["type"], response_type);
+        }
+    }
+
+    // REQUEST
+    // LOCAL <- REMOTE: filter the response types
+    let incoming = true;
+    for request_type in known_request_types {
+        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "types", request_type, "incoming", incoming)).await.unwrap();
+        let response_array = response.as_array().unwrap();
+        
+        // there is a chance that this concrete message type was never sent, this is a legit case, so we do not panic
+        assert!(response_array.len() <= DEFAULT_LIMIT);
+
+        for elem in response_array {
+            assert_eq!(elem["source_type"], "remote");
+            assert_eq!(elem["incoming"], incoming);
+            assert_eq!(elem["message"][0]["type"], request_type);
+        }
+    }
+
+    // RESPONSE
+    // LOCAL <- REMOTE: filter the response types
+    let incoming = true;
+    for response_type in known_response_types.clone() {
+        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "types", response_type, "incoming", incoming)).await.unwrap();
+        let response_array = response.as_array().unwrap();
+        
+        // there is a chance that this concrete message type was never sent, this is a legit case, so we do not panic
+        assert!(response_array.len() <= DEFAULT_LIMIT);
+
+        for elem in response_array {
+            assert_eq!(elem["source_type"], "local");
+            assert_eq!(elem["incoming"], incoming);
+            assert_eq!(elem["message"][0]["type"], response_type);
+        }
     }
 }
 
-
 #[ignore]
 #[tokio::test]
-async fn test_p2p_request_tracking() {
+async fn test_p2p_rpc_incoming_and_no_request_types() {
+    // no request-response pattern messages
+    // incoming also indicates the source_type
+    let types = vec![
+        "tcp",
+        "metadata",
+        "connection_message",
+        "rest_message",
+        "disconnect",
+        "swap_request",
+        "swap_ack",
+        "deactivate",
+        "advertise",
+        "bootstrap",
+        
+    ];
+
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
-    // get 1 response to a remote request (incoming: false, remote_requested: true)
-    // be optimistic and give the debugger 10 tries
-    let mut response: serde_json::Value = serde_json::json!([]);
-    let mut counter: usize = 0;
-    while counter < 10 {
-        response = get_rpc_as_json(&format!("{}?{}", base_url, "remote_requested=true&incoming=false&limit=1")).await.unwrap();
-        counter += 1;
-        if response.as_array().unwrap().len() > 0 {
-            break
+    for t in types {
+        let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "types", t)).await.unwrap();
+        let response_array = response.as_array().unwrap();
+
+        println!("Checking type: {}", t);
+
+        assert!(response_array.len() <= DEFAULT_LIMIT);
+
+        for elem in response_array {
+            assert_eq!(elem["type"], t);
+
+            if elem["incoming"].as_bool().unwrap() {
+                // the message is incoming, so the source_type is the remote
+                assert_eq!(elem["source_type"], "remote");
+            } else {
+                // the message is NOT incoming (outgoing), so the source_type is the remote
+                assert_eq!(elem["source_type"], "local");
+            }
         }
-        sleep(Duration::from_secs(1));
     }
-    
-    let response_array = response.as_array().unwrap();
-
-    // check whether we recieved any response
-    assert_eq!(response_array.len(), 1);
-
-    // check if we got the desired message with the provided filter
-    assert_eq!(response_array[0]["remote_requested"], true);
-    assert_eq!(response_array[0]["incoming"], false);
-
-    // track back the request for the outgoing response
-    let cursor_id = response_array[0]["request_id"].clone();
-
-    let response = get_rpc_as_json(&format!("{}?{}={}&{}", base_url, "cursor_id", cursor_id, "limit=1")).await.unwrap();
-
-    // flags should be set as: incoming = true, remote_requested = true
-    assert_eq!(response[0]["incoming"], true);
-    assert_eq!(response[0]["remote_requested"], true);
-
-    // the id and the request_id should be equal, as it is the request (the response should have the same request_id)
-    assert_eq!(response[0]["id"], response_array[0]["request_id"]);
 }
