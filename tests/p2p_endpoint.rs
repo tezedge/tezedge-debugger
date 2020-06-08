@@ -137,17 +137,18 @@ async fn test_p2p_rpc_all_types() {
 async fn test_p2p_rpc_incoming() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
-    let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "incoming", false)).await.unwrap();
+    let limit = 1000;
+    let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "incoming", false, "limit", limit)).await.unwrap();
     let response_array = response.as_array().unwrap();
-    assert!(response_array.len() <= DEFAULT_LIMIT);
+    assert!(response_array.len() <= limit);
 
     for elem in response_array {
         assert_eq!(elem["incoming"], false);
     }
 
-    let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "incoming", true)).await.unwrap();
+    let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "incoming", true, "limit", limit)).await.unwrap();
     let response_array = response.as_array().unwrap();
-    assert!(response_array.len() <= DEFAULT_LIMIT);
+    assert!(response_array.len() <= limit);
 
     for elem in response_array {
         assert_eq!(elem["incoming"], true);
@@ -209,15 +210,17 @@ async fn test_p2p_rpc_source_type_combinations() {
         "current_branch",
     ];
 
+    let limit = 1000;
+
     // REQUEST
     // LOCAL -> REMOTE: filter the request types
     let incoming = false;
     for request_type in known_request_types.clone() {
-        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "types", request_type, "incoming", incoming)).await.unwrap();
+        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}&{}={}", base_url, "types", request_type, "incoming", incoming, "limit", limit)).await.unwrap();
         let response_array = response.as_array().unwrap();
 
         // there is a chance that this concrete message type was never sent, this is a legit case, so we do not panic
-        assert!(response_array.len() <= DEFAULT_LIMIT);
+        assert!(response_array.len() <= limit);
 
         for elem in response_array {
             assert_eq!(elem["source_type"], "local");
@@ -230,13 +233,11 @@ async fn test_p2p_rpc_source_type_combinations() {
     // LOCAL -> REMOTE: filter the response types
     let incoming = false;
     for response_type in known_response_types.clone() {
-        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "types", response_type, "incoming", incoming)).await.unwrap();
+        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}&{}={}", base_url, "types", response_type, "incoming", incoming, "limit", limit)).await.unwrap();
         let response_array = response.as_array().unwrap();
         
         // there is a chance that this concrete message type was never sent, this is a legit case, so we do not panic
-        assert!(response_array.len() <= DEFAULT_LIMIT);
-
-        println!("Request: {}", format!("{}?{}={}&{}={}", base_url, "types", response_type, "incoming", incoming));
+        assert!(response_array.len() <= limit);
 
         for elem in response_array {
             assert_eq!(elem["source_type"], "remote");
@@ -249,11 +250,11 @@ async fn test_p2p_rpc_source_type_combinations() {
     // LOCAL <- REMOTE: filter the response types
     let incoming = true;
     for request_type in known_request_types {
-        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "types", request_type, "incoming", incoming)).await.unwrap();
+        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}&{}={}", base_url, "types", request_type, "incoming", incoming, "limit", limit)).await.unwrap();
         let response_array = response.as_array().unwrap();
         
         // there is a chance that this concrete message type was never sent, this is a legit case, so we do not panic
-        assert!(response_array.len() <= DEFAULT_LIMIT);
+        assert!(response_array.len() <= limit);
 
         for elem in response_array {
             assert_eq!(elem["source_type"], "remote");
@@ -266,11 +267,11 @@ async fn test_p2p_rpc_source_type_combinations() {
     // LOCAL <- REMOTE: filter the response types
     let incoming = true;
     for response_type in known_response_types.clone() {
-        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "types", response_type, "incoming", incoming)).await.unwrap();
+        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}&{}={}", base_url, "types", response_type, "incoming", incoming, "limit", limit)).await.unwrap();
         let response_array = response.as_array().unwrap();
         
         // there is a chance that this concrete message type was never sent, this is a legit case, so we do not panic
-        assert!(response_array.len() <= DEFAULT_LIMIT);
+        assert!(response_array.len() <= limit);
 
         for elem in response_array {
             assert_eq!(elem["source_type"], "local");
@@ -299,14 +300,15 @@ async fn test_p2p_rpc_one_way_types() {
     ];
 
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
+    let limit = 1000;
 
     for t in types {
-        let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "types", t)).await.unwrap();
+        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "types", t, "limit", limit)).await.unwrap();
         let response_array = response.as_array().unwrap();
 
         println!("Checking type: {}", t);
 
-        assert!(response_array.len() <= DEFAULT_LIMIT);
+        assert!(response_array.len() <= limit);
 
         for elem in response_array {
             assert_eq!(elem["type"], t);
