@@ -200,9 +200,7 @@ async fn test_p2p_rpc_remote_requested() {
     assert!(response_array.len() <= DEFAULT_LIMIT);
 
     for elem in response_array {
-        // println!("rr: {:?}", elem["remote_requested"]);
-        // println!("response: {:?}", elem);
-        assert!(elem["remote_requested"] == false || elem["remote_requested"] == serde_json::Value::Null);
+        assert!(elem["remote_requested"] == false);
     }
 
     let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "remote_requested", true)).await.unwrap();
