@@ -28,12 +28,16 @@ pub enum StoreMessage {
         timestamp: u128,
         incoming: bool,
         remote_addr: SocketAddr,
+        // Internally stored as boolean, in mapped message changed to enum.
+        source_type: Option<bool>,
         message: MetadataMessage,
     },
     /// Unencrypted message, which is part of tezos communication handshake
     ConnectionMessage {
         timestamp: u128,
         incoming: bool,
+        // Internally stored as boolean, in mapped message changed to enum.
+        source_type: Option<bool>,
         remote_addr: SocketAddr,
         payload: ConnectionMessage,
     },
@@ -43,7 +47,8 @@ pub enum StoreMessage {
         incoming: bool,
         remote_addr: SocketAddr,
         request_id: Option<u64>,
-        remote_requested: Option<bool>,
+        // Internally stored as boolean, in mapped message changed to enum.
+        source_type: Option<bool>,
         payload: Vec<PeerMessage>,
     },
     /// RPC Request/Response
@@ -77,6 +82,7 @@ impl StoreMessage {
             incoming,
             remote_addr,
             message,
+            source_type: None,
             timestamp: Self::make_ts(),
         }
     }
@@ -86,6 +92,7 @@ impl StoreMessage {
         StoreMessage::ConnectionMessage {
             incoming,
             remote_addr,
+            source_type: None,
             payload: msg.clone(),
             timestamp: Self::make_ts(),
         }
@@ -100,7 +107,7 @@ impl StoreMessage {
             incoming,
             payload,
             request_id: None,
-            remote_requested: None,
+            source_type: None,
             timestamp: Self::make_ts(),
         }
     }
@@ -130,6 +137,15 @@ impl StoreMessage {
             StoreMessage::RestMessage { incoming, .. } | StoreMessage::ConnectionMessage { incoming, .. } |
             StoreMessage::P2PMessage { incoming, .. } | StoreMessage::TcpMessage { incoming, .. } |
             StoreMessage::Metadata { incoming, .. } => incoming.clone()
+        }
+    }
+
+    pub fn bool_source_type(&self) -> Option<bool> {
+        match self {
+            StoreMessage::TcpMessage { .. } | StoreMessage::RestMessage { .. } => None,
+            StoreMessage::Metadata { source_type, .. }
+            | StoreMessage::ConnectionMessage { source_type, .. }
+            | StoreMessage::P2PMessage { source_type, .. } => source_type.clone(),
         }
     }
 }

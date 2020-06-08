@@ -72,7 +72,9 @@ impl EncryptedMessageDecoder {
                             let _ = self.db.p2p().put_message(index, &store_msg);
                         }
                         EncryptedMessage::Metadata(msg) => {
-                            let _ = self.db.p2p().store_message(&StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg));
+                            let mut store_msg = StoreMessage::new_metadata(enc.remote_addr(), enc.is_incoming(), msg);
+                            self.request_tracker.track_request(&mut store_msg, 0);
+                            let _ = self.db.p2p().store_message(&store_msg);
                         }
                     }
                 }

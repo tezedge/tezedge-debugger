@@ -16,12 +16,14 @@ pub struct P2PFilters {
     pub types: Option<u32>,
     pub request_id: Option<u64>,
     pub incoming: Option<bool>,
+    pub source_type: Option<bool>,
 }
 
 impl P2PFilters {
     pub fn empty(&self) -> bool {
         self.remote_addr.is_none() && self.types.is_none()
             && self.request_id.is_none() && self.incoming.is_none()
+            && self.source_type.is_none()
     }
 }
 
@@ -34,6 +36,7 @@ pub struct P2PStorage {
     type_index: TypeIndex,
     tracking_index: RequestTrackingIndex,
     incoming_index: IncomingIndex,
+    source_type_index: SourceTypeIndex,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
 }
@@ -46,6 +49,7 @@ impl P2PStorage {
             type_index: TypeIndex::new(kv.clone()),
             tracking_index: RequestTrackingIndex::new(kv.clone()),
             incoming_index: IncomingIndex::new(kv.clone()),
+            source_type_index: SourceTypeIndex::new(kv.clone()),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(0)),
         }
@@ -67,14 +71,16 @@ impl P2PStorage {
         self.remote_addr_index.store_index(&primary_index, value)?;
         self.type_index.store_index(&primary_index, value)?;
         self.tracking_index.store_index(&primary_index, value)?;
-        self.incoming_index.store_index(&primary_index, value)
+        self.incoming_index.store_index(&primary_index, value)?;
+        self.source_type_index.store_index(&primary_index, value)
     }
 
     pub fn delete_indexes(&self, primary_index: u64, value: &StoreMessage) -> Result<(), StorageError> {
         self.remote_addr_index.delete_index(&primary_index, value)?;
         self.type_index.delete_index(&primary_index, value)?;
         self.tracking_index.delete_index(&primary_index, value)?;
-        self.incoming_index.delete_index(&primary_index, value)
+        self.incoming_index.delete_index(&primary_index, value)?;
+        self.source_type_index.delete_index(&primary_index, value)
     }
 
     pub fn put_message(&self, index: u64, msg: &StoreMessage) -> Result<(), StorageError> {
@@ -116,6 +122,9 @@ impl P2PStorage {
             if let Some(incoming) = filters.incoming {
                 iters.push(self.incoming_iterator(cursor_index, incoming)?);
             }
+            if let Some(source_type) = filters.source_type {
+                iters.push(self.source_type_iterator(cursor_index, source_type)?);
+            }
             ret.extend(self.load_indexes(sorted_intersect(iters, limit).into_iter()));
         }
         Ok(ret)
@@ -156,6 +165,13 @@ impl P2PStorage {
 
     pub fn incoming_iterator<'a>(&'a self, cursor_index: Option<u64>, is_incoming: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(self.incoming_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), is_incoming)?
+            .filter_map(|(_, value)| {
+                value.ok()
+            })))
+    }
+
+    pub fn source_type_iterator<'a>(&'a self, cursor_index: Option<u64>, source_type: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(self.source_type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), source_type)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))
@@ -562,7 +578,7 @@ pub(crate) mod secondary_indexes {
                 "deactivate" => Ok(Self::Deactivate),
                 "get_current_head" => Ok(Self::GetCurrentHead),
                 "current_head" => Ok(Self::CurrentHead),
-                "get_block_header" => Ok(Self::GetBlockHeaders),
+                "get_block_headers" => Ok(Self::GetBlockHeaders),
                 "block_header" => Ok(Self::BlockHeader),
                 "get_operations" => Ok(Self::GetOperations),
                 "operation" => Ok(Self::Operation),
@@ -809,5 +825,121 @@ pub(crate) mod secondary_indexes {
             }
         }
     }
-}
 
+    // 5. SourceType Index
+    pub type SourceTypeIndexKV = dyn KeyValueStoreWithSchema<SourceTypeIndex> + Sync + Send;
+
+    #[derive(Clone)]
+    pub struct SourceTypeIndex {
+        kv: Arc<SourceTypeIndexKV>,
+    }
+
+    impl SourceTypeIndex {
+        pub fn new(kv: Arc<DB>) -> Self {
+            Self { kv }
+        }
+    }
+
+    impl AsRef<(dyn KeyValueStoreWithSchema<SourceTypeIndex> + 'static)> for SourceTypeIndex {
+        fn as_ref(&self) -> &(dyn KeyValueStoreWithSchema<SourceTypeIndex> + 'static) {
+            self.kv.as_ref()
+        }
+    }
+
+    impl KeyValueSchema for SourceTypeIndex {
+        type Key = SourceTypeKey;
+        type Value = <P2PStorage as KeyValueSchema>::Key;
+
+        fn descriptor() -> ColumnFamilyDescriptor {
+            let mut cf_opts = Options::default();
+            cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<bool>()));
+            cf_opts.set_memtable_prefix_bloom_ratio(0.2);
+            ColumnFamilyDescriptor::new(Self::name(), cf_opts)
+        }
+
+        fn name() -> &'static str {
+            "p2p_source_type_index"
+        }
+    }
+
+    impl SecondaryIndex<P2PStorage> for SourceTypeIndex {
+        type FieldType = bool;
+
+        fn accessor(value: &<P2PStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+            value.bool_source_type()
+        }
+
+        fn make_index(key: &<P2PStorage as KeyValueSchema>::Key, value: Self::FieldType) -> SourceTypeKey {
+            SourceTypeKey::new(value, key.clone())
+        }
+
+        fn make_prefix_index(value: Self::FieldType) -> SourceTypeKey {
+            SourceTypeKey::prefix(value)
+        }
+    }
+
+    #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+    pub struct SourceTypeKey {
+        pub source_type: bool,
+        pub index: u64,
+    }
+
+    impl SourceTypeKey {
+        pub fn new(source_type: bool, index: u64) -> Self {
+            Self { source_type, index: std::u64::MAX.saturating_sub(index) }
+        }
+
+        pub fn prefix(source_type: bool) -> Self {
+            Self { source_type, index: 0 }
+        }
+    }
+
+    /// * bytes layout: `[is_remote_requested(1)][padding(7)][index(8)]`
+    impl Decoder for SourceTypeKey {
+        #[inline]
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+            if bytes.len() != 16 {
+                return Err(SchemaError::DecodeError);
+            }
+            let source_type_value = &bytes[0..1];
+            let _padding_value = &bytes[1..1 + 7];
+            let index_value = &bytes[1 + 7..];
+            // source_type
+            let source_type = if source_type_value == &[true as u8] {
+                true
+            } else if source_type_value == &[false as u8] {
+                true
+            } else {
+                return Err(SchemaError::DecodeError);
+            };
+            // index
+            let mut index = [0u8; 8];
+            for (x, y) in index.iter_mut().zip(index_value) {
+                *x = *y;
+            }
+            let index = u64::from_be_bytes(index);
+            Ok(Self {
+                source_type,
+                index,
+            })
+        }
+    }
+
+    /// * bytes layout: `[is_remote_requested(1)][padding(7)][index(8)]`
+    impl Encoder for SourceTypeKey {
+        #[inline]
+        fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+            let mut buf = Vec::with_capacity(16);
+            buf.extend_from_slice(&[self.source_type as u8]); // is_remote_requested
+            buf.extend_from_slice(&[0u8; 7]); // padding
+            buf.extend_from_slice(&self.index.to_be_bytes()); // index
+
+            if buf.len() != 16 {
+                println!("{:?} - {:?}", self, buf);
+                Err(SchemaError::EncodeError)
+            } else {
+                Ok(buf)
+            }
+        }
+    }
+}

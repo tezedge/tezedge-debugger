@@ -14,6 +14,33 @@ use tezos_messages::p2p::encoding::operation_hashes_for_blocks::OperationHashesF
 use storage::persistent::BincodeEncoded;
 use crate::storage::RESTMessage;
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub enum SourceType {
+    #[serde(rename = "local")]
+    Local,
+    #[serde(rename = "remote")]
+    Remote,
+}
+
+impl From<bool> for SourceType {
+    fn from(source_type: bool) -> Self {
+        if source_type {
+            Self::Remote
+        } else {
+            Self::Local
+        }
+    }
+}
+
+impl Into<bool> for SourceType {
+    fn into(self) -> bool {
+        match self {
+            SourceType::Local => false,
+            SourceType::Remote => true,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RpcMessage {
@@ -28,6 +55,7 @@ pub enum RpcMessage {
         incoming: bool,
         timestamp: u128,
         id: u64,
+        source_type: SourceType,
         remote_addr: SocketAddr,
         message: MetadataMessage,
     },
@@ -35,6 +63,7 @@ pub enum RpcMessage {
         incoming: bool,
         timestamp: u128,
         id: u64,
+        source_type: SourceType,
         remote_addr: SocketAddr,
         message: MappedConnectionMessage,
     },
@@ -42,9 +71,8 @@ pub enum RpcMessage {
         incoming: bool,
         timestamp: u128,
         id: u64,
+        source_type: SourceType,
         remote_addr: SocketAddr,
-        request_id: Option<u64>,
-        remote_requested: Option<bool>,
         message: Vec<MappedPeerMessage>,
     },
     RestMessage {
@@ -70,20 +98,20 @@ impl RpcMessage {
                     packet: hex::encode(packet),
                 }
             }
-            StoreMessage::ConnectionMessage { remote_addr, incoming, payload, timestamp } => {
+            StoreMessage::ConnectionMessage { remote_addr, incoming, payload, timestamp, source_type } => {
                 RpcMessage::ConnectionMessage {
                     id,
+                    source_type: source_type.unwrap_or(false).into(),
                     timestamp: timestamp.clone(),
                     remote_addr: remote_addr.clone(),
                     incoming: incoming.clone(),
                     message: payload.clone().into(),
                 }
             }
-            StoreMessage::P2PMessage { remote_addr, incoming, payload, request_id, remote_requested, timestamp } => {
+            StoreMessage::P2PMessage { remote_addr, incoming, payload, timestamp, source_type, .. } => {
                 RpcMessage::P2pMessage {
                     id,
-                    request_id: request_id.clone(),
-                    remote_requested: remote_requested.clone(),
+                    source_type: source_type.unwrap_or(false).into(),
                     timestamp: timestamp.clone(),
                     remote_addr: remote_addr.clone(),
                     incoming: incoming.clone(),
@@ -99,9 +127,10 @@ impl RpcMessage {
                     message: payload.clone().into(),
                 }
             }
-            StoreMessage::Metadata { remote_addr, incoming, message, timestamp } => {
+            StoreMessage::Metadata { remote_addr, incoming, message, timestamp, source_type } => {
                 RpcMessage::Metadata {
                     id,
+                    source_type: source_type.unwrap_or(false).into(),
                     timestamp: timestamp.clone(),
                     remote_addr: remote_addr.clone(),
                     incoming: incoming.clone(),
@@ -501,7 +530,7 @@ pub struct MappedBlockHeader {
     timestamp: i64,
     validation_pass: u8,
     operations_hash: String,
-    fitness: Vec<Vec<u8>>,
+    fitness: Vec<String>,
     context: String,
     protocol_data: String,
 }
@@ -513,7 +542,7 @@ impl From<BlockHeader> for MappedBlockHeader {
             proto: value.proto().clone(),
             timestamp: value.timestamp().clone(),
             validation_pass: value.validation_pass().clone(),
-            fitness: value.fitness().clone(),
+            fitness: value.fitness().iter().map(|fitness| hex::encode(fitness)).collect(),
             context: HashType::ContextHash.bytes_to_string(value.context()),
             operations_hash: HashType::OperationListListHash.bytes_to_string(value.operations_hash()),
             predecessor: HashType::BlockHash.bytes_to_string(value.predecessor()),

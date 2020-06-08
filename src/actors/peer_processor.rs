@@ -92,7 +92,12 @@ impl PeerProcessor {
         let chunk = BinaryChunk::try_from(msg.payload().to_vec())?;
         let conn_msg = ConnectionMessage::try_from(chunk)?;
 
-        self.db.p2p().store_message(&StoreMessage::new_connection(msg.remote_addr(), msg.is_incoming(), &conn_msg))?;
+        let mut des_conn_msg = StoreMessage::new_connection(msg.remote_addr(), msg.is_incoming(), &conn_msg);
+        if let StoreMessage::ConnectionMessage { incoming, source_type, .. } = &mut des_conn_msg {
+            *source_type = Some(*incoming);
+        }
+
+        self.db.p2p().store_message(&des_conn_msg)?;
 
         if let Some((_, addr)) = self.conn_msgs.get(0) {
             if addr == &msg.source_addr() {
