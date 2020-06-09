@@ -295,6 +295,9 @@ async fn test_p2p_rpc_one_way_types() {
         "swap_request",
         "swap_ack",
         "deactivate",
+    ];
+
+    let nested_types = vec![
         "advertise",
         "bootstrap",
     ];
@@ -312,14 +315,31 @@ async fn test_p2p_rpc_one_way_types() {
 
         for elem in response_array {
             assert_eq!(elem["type"], t);
-
-            if elem["incoming"].as_bool().unwrap() {
-                // the message is incoming, so the source_type is the remote
-                assert_eq!(elem["source_type"], "remote");
-            } else {
-                // the message is NOT incoming (outgoing), so the source_type is the local
-                assert_eq!(elem["source_type"], "local");
-            }
+            check_source_type(elem);
         }
+    }
+
+    for t in nested_types {
+        let response = get_rpc_as_json(&format!("{}?{}={}&{}={}", base_url, "types", t, "limit", limit)).await.unwrap();
+        let response_array = response.as_array().unwrap();
+
+        println!("Checking type: {}", t);
+
+        assert!(response_array.len() <= limit);
+
+        for elem in response_array {
+            assert_eq!(elem["message"][0]["type"], t);
+            check_source_type(elem);
+        }
+    }
+}
+
+fn check_source_type(val: &serde_json::value::Value) {
+    if val["incoming"].as_bool().unwrap() {
+        // the message is incoming, so the source_type is the remote
+        assert_eq!(val["source_type"], "remote");
+    } else {
+        // the message is NOT incoming (outgoing), so the source_type is the local
+        assert_eq!(val["source_type"], "local");
     }
 }
