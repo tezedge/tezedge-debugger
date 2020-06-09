@@ -8,7 +8,7 @@ If you wish to run the tests locally, make sure you have a tezedge-debugger inst
 
 ### Example run
 ```
-NODE_TYPE=RUST DEBUGGER_URL=http://116.202.128.230:17732 NODE_URL=http://116.202.128.230:48732  cargo test -- --ignored
+DEBUGGER_URL=http://116.202.128.230:17732 NODE_URL=http://116.202.128.230:18732 WEBSOCKET_PORT=4972 cargo test -- --ignored ocaml
 ```
 
-Note that the integration test are marked as ignored so they won't run without the `--ignored` flag.
+Note that the integration test are marked as ignored so they won't run without the `--ignored` flag. After the flag, the node type is given (either `ocaml` or `rust`)

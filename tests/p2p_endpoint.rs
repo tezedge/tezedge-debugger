@@ -10,7 +10,7 @@ const V2_ENDPOINT: &str = "v2/p2p";
 
 #[ignore]
 #[tokio::test]
-async fn test_p2p_rpc_limit() {
+async fn test_ocaml_rust_p2p_rpc_limit() {
 
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
@@ -29,7 +29,7 @@ async fn test_p2p_rpc_limit() {
 
 #[ignore]
 #[tokio::test]
-async fn test_p2p_rpc_cursor_id() {
+async fn test_ocaml_rust_p2p_rpc_cursor_id() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
     let cursor_id: usize = 15000;
@@ -47,7 +47,7 @@ async fn test_p2p_rpc_cursor_id() {
 
 #[ignore]
 #[tokio::test]
-async fn test_p2p_rpc_types() {
+async fn test_ocaml_rust_p2p_rpc_types() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
     let message_type = "connection_message";
@@ -73,7 +73,7 @@ async fn test_p2p_rpc_types() {
 
 #[ignore]
 #[tokio::test]
-async fn test_p2p_rpc_all_types() {
+async fn test_ocaml_rust_p2p_rpc_all_types() {
 
     let types = vec![
         "tcp",
@@ -134,7 +134,7 @@ async fn test_p2p_rpc_all_types() {
 
 #[ignore]
 #[tokio::test]
-async fn test_p2p_rpc_incoming() {
+async fn test_ocaml_rust_p2p_rpc_incoming() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
     let limit = 1000;
@@ -157,7 +157,7 @@ async fn test_p2p_rpc_incoming() {
 
 #[ignore]
 #[tokio::test]
-async fn test_p2p_rpc_combinations() {
+async fn test_ocaml_rust_p2p_rpc_combinations() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
     let message_type_1 = "connection_message";
@@ -185,7 +185,7 @@ async fn test_p2p_rpc_combinations() {
 
 #[ignore]
 #[tokio::test]
-async fn test_p2p_rpc_source_type_combinations() {
+async fn test_ocaml_rust_p2p_rpc_source_type_combinations() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
     // get implying these are requests
@@ -283,7 +283,7 @@ async fn test_p2p_rpc_source_type_combinations() {
 
 #[ignore]
 #[tokio::test]
-async fn test_p2p_rpc_one_way_types() {
+async fn test_ocaml_rust_p2p_rpc_one_way_types() {
     // no request-response pattern messages
     // incoming also indicates the source_type
     let types = vec![

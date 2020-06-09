@@ -40,7 +40,8 @@ pub fn node_url() -> String {
         .unwrap()
 }
 
-pub fn node_type() -> String {
-    env::var("NODE_TYPE")
+pub fn websocket_port() -> String {
+    env::var("WEBSOCKET_PORT")
+        //.unwrap_or("http://116.202.128.230:48732".to_string())
         .unwrap()
 }

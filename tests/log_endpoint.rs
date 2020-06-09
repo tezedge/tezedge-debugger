@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 pub mod common;
-use common::{get_rpc_as_json, debugger_url, node_type};
+use common::{get_rpc_as_json, debugger_url};
 
 /// Running these tests requires a running instance of the tezedge debugger with a tezos node
 
@@ -21,7 +21,7 @@ const V2_ENDPOINT: &str = "v2/log";
 // }
 
 #[tokio::test]
-async fn test_rpc_log_limit() {
+async fn test_ocaml_rust_rpc_log_limit() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
     let limit: usize = 10;
@@ -33,7 +33,7 @@ async fn test_rpc_log_limit() {
 
 #[ignore]
 #[tokio::test]
-async fn test_rpc_log_cursor_id() {
+async fn test_ocaml_rust_rpc_log_cursor_id() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
     let cursor_id: usize = 10;
@@ -49,7 +49,7 @@ async fn test_rpc_log_cursor_id() {
 
 #[ignore]
 #[tokio::test]
-async fn test_rpc_log_combination() {
+async fn test_ocaml_rust_rpc_log_combination() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
     let cursor_id: usize = 100;
@@ -66,15 +66,27 @@ async fn test_rpc_log_combination() {
 
 #[ignore]
 #[tokio::test]
-async fn test_rpc_log_level() {
-    let node_type = node_type();
+async fn test_rust_rpc_log_level() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
-    let level = match node_type.as_str() {
-        "OCAML" => "notice",
-        "RUST" => "info",
-        _ => panic!("Unknown node type, Set NODE_TYPE environment variable")
-    };
+    let level = "info";
+    let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "level", level)).await.unwrap();
+    let response_array = response.as_array().unwrap();
+
+    // there allways should be notice/info logs
+    assert_ne!(response_array.len(), 0);
+
+    for elem in response_array {
+        assert_eq!(elem["level"], level);
+    }
+}
+
+#[ignore]
+#[tokio::test]
+async fn test_ocaml_rpc_log_level() {
+    let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
+
+    let level = "notice";
     let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "level", level)).await.unwrap();
     let response_array = response.as_array().unwrap();
 

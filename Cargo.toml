@@ -38,3 +38,7 @@ networking = { version="*", git = "https://github.com/simplestaking/tezedge" }
 tezos_messages = { version="*", git = "https://github.com/simplestaking/tezedge" }
 tezos_encoding = { version="*", git = "https://github.com/simplestaking/tezedge" }
 storage = { version = "*", git = "htps://github.com/simplestaking/tezedge" }
+
+[dev-dependencies]
+ws = "*"
+url = "2.0.0"

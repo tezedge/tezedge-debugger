@@ -40,7 +40,7 @@ const V2_ENDPOINT: &str = "v2/rpc";
 
 #[ignore]
 #[tokio::test]
-async fn test_rpc_rpc_limit() {
+async fn test_ocaml_rust_rpc_rpc_limit() {
     // make 50 rpc calls to ensure we have enough data to test the limit argument
     make_rpc_calls(50).await;
 
@@ -54,7 +54,7 @@ async fn test_rpc_rpc_limit() {
 
 #[ignore]
 #[tokio::test]
-async fn test_rpc_rpc_cursor_id() {
+async fn test_ocaml_rust_rpc_rpc_cursor_id() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
     // make sure we have at least 200 messages
@@ -76,7 +76,7 @@ async fn test_rpc_rpc_cursor_id() {
 
 #[ignore]
 #[tokio::test]
-async fn test_rpc_rpc_combination() {
+async fn test_ocaml_rust_rpc_rpc_combination() {
     let base_url = format!("{}/{}", debugger_url(), V2_ENDPOINT);
 
     // make sure we have at least 200 messages
