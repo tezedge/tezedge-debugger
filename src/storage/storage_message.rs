@@ -139,6 +139,15 @@ impl StoreMessage {
             StoreMessage::Metadata { incoming, .. } => incoming.clone()
         }
     }
+
+    pub fn bool_source_type(&self) -> Option<bool> {
+        match self {
+            StoreMessage::TcpMessage { .. } | StoreMessage::RestMessage { .. } => None,
+            StoreMessage::Metadata { source_type, .. }
+            | StoreMessage::ConnectionMessage { source_type, .. }
+            | StoreMessage::P2PMessage { source_type, .. } => source_type.clone(),
+        }
+    }
 }
 
 impl BincodeEncoded for StoreMessage {}

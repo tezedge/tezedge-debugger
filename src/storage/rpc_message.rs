@@ -14,7 +14,7 @@ use tezos_messages::p2p::encoding::operation_hashes_for_blocks::OperationHashesF
 use storage::persistent::BincodeEncoded;
 use crate::storage::RESTMessage;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum SourceType {
     #[serde(rename = "local")]
     Local,
@@ -28,6 +28,15 @@ impl From<bool> for SourceType {
             Self::Remote
         } else {
             Self::Local
+        }
+    }
+}
+
+impl Into<bool> for SourceType {
+    fn into(self) -> bool {
+        match self {
+            SourceType::Local => false,
+            SourceType::Remote => true,
         }
     }
 }
@@ -521,7 +530,7 @@ pub struct MappedBlockHeader {
     timestamp: i64,
     validation_pass: u8,
     operations_hash: String,
-    fitness: Vec<Vec<u8>>,
+    fitness: Vec<String>,
     context: String,
     protocol_data: String,
 }
@@ -533,7 +542,7 @@ impl From<BlockHeader> for MappedBlockHeader {
             proto: value.proto().clone(),
             timestamp: value.timestamp().clone(),
             validation_pass: value.validation_pass().clone(),
-            fitness: value.fitness().clone(),
+            fitness: value.fitness().iter().map(|fitness| hex::encode(fitness)).collect(),
             context: HashType::ContextHash.bytes_to_string(value.context()),
             operations_hash: HashType::OperationListListHash.bytes_to_string(value.operations_hash()),
             predecessor: HashType::BlockHash.bytes_to_string(value.predecessor()),

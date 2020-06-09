@@ -12,6 +12,7 @@ use warp::reply::{WithStatus, Json};
 use std::net::SocketAddr;
 use std::convert::TryInto;
 use itertools::Itertools;
+use crate::storage::rpc_message::SourceType;
 // use storage::StorageError;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +23,7 @@ pub struct P2PCursor {
     types: Option<String>,
     request_id: Option<u64>,
     incoming: Option<bool>,
+    source_type: Option<SourceType>,
 }
 
 impl P2PCursor {
@@ -48,6 +50,7 @@ impl TryInto<crate::storage::P2PFilters> for P2PCursor {
 
     fn try_into(self) -> Result<P2PFilters, Self::Error> {
         Ok(P2PFilters {
+            source_type: self.source_type.map(|st| st.into()),
             remote_addr: self.remote_addr,
             types: self.get_types()?,
             request_id: self.request_id,
