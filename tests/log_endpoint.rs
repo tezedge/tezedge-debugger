@@ -78,6 +78,9 @@ async fn test_rpc_log_level() {
     let response = get_rpc_as_json(&format!("{}?{}={}", base_url, "level", level)).await.unwrap();
     let response_array = response.as_array().unwrap();
 
+    // there allways should be notice/info logs
+    assert_ne!(response_array.len(), 0);
+
     for elem in response_array {
         assert_eq!(elem["level"], level);
     }
