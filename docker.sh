@@ -1,12 +1,32 @@
 #!/bin/bash
-VOLUME="$PWD/identity"
+
+if [ -z "${NODE_TYPE+x}" ]; then
+  NODE_TYPE="OCAML"
+fi
+
+if [ "$NODE_TYPE" = "OCAML" ] || [ "$NODE_TYPE" = "RUST" ]; then
+  echo "Running debugger with $NODE_TYPE node"
+else
+  err "NODE_TYPE set to invalid value: $NODE_TYPE. Valid are OCAML or RUST"
+fi
+
+if [ "$NODE_TYPE" = "OCAML" ]; then
+  VOLUME="$PWD/ocaml"
+  DEBUGGER_RPC_PORT=11000
+  NODE_RPC_PORT=11100
+  NODE_P2P_PORT=11200
+  NODE_WS_PORT=11300
+fi
+
+if [ "$NODE_TYPE" = "RUST" ]; then
+  VOLUME="$PWD/rust"
+  DEBUGGER_RPC_PORT=10000
+  NODE_RPC_PORT=10100
+  NODE_P2P_PORT=10200
+  NODE_WS_PORT=10300
+fi
+
 IDENTITY_FILE="$VOLUME/identity.json"
-# RPC endpoints for debugger / node
-DEBUGGER_RPC_PORT=17732
-NODE_RPC_PORT=18732
-# Node specific ports
-NODE_P2P_PORT=19732
-NODE_WS_PORT=4972
 TAG=latest
 
 trap clean EXIT
@@ -42,6 +62,7 @@ function unmount_ns() {
 
 # == CHECK THAT REQUIRED FILES EXISTS ==
 
+mkdir -p "$VOLUME"
 if [ ! -d "$VOLUME" ]; then
   err "Required director \"$VOLUME\" does not exists"
 fi
@@ -51,21 +72,16 @@ if [ ! -d "/var/run/netns" ]; then
   sudo ip netns del make_ns
 fi
 
-if [ -z "${NODE_TYPE+x}" ]; then
-  NODE_TYPE="OCAML"
-fi
-
-if [ "$NODE_TYPE" = "OCAML" ] || [ "$NODE_TYPE" = "RUST" ]; then
-  echo "Running debugger with $NODE_TYPE node"
-else
-  err "NODE_TYPE set to invalid value: $NODE_TYPE. Valid are OCAML or RUST"
-fi
-
 docker pull simplestakingcom/tezedge-debuger:"$TAG"
 
 # Check identity
 if [ ! -f "$IDENTITY_FILE" ]; then
   docker run --volume "$VOLUME:/root/identity" -i simplestakingcom/tezedge-tezos:"$TAG" /bin/bash -c "./tezos-node identity generate && cp /root/.tezos-node/identity.json /root/identity"
+fi
+
+if [ ! -f "$VOLUME/tezos.log" ]; then
+  mkfifo "$VOLUME/tezos.log"
+  echo "Created logging pipe"
 fi
 
 # == START PROXY IN DETACHED MODE ==
@@ -87,7 +103,6 @@ fi
 
 docker exec "$NODE_ID" cp /root/identity/identity.json /root/.tezos-node/
 
-docker exec "$NODE_ID" mkfifo /root/identity/tezos.log
 echo "Spawned tezos container $NODE_ID"
 mount_ns "$NODE_ID"
 mount_ns "$PROXY_ID"
