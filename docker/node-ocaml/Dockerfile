@@ -10,7 +10,7 @@ RUN chown appuser:appuser /home/appuser
 USER appuser
 RUN git clone "https://gitlab.com/tezos/tezos.git"
 WORKDIR /home/appuser/tezos
-RUN git checkout mainnet
+RUN git checkout carthagenet
 RUN opam init --bare --disable-sandbox && make build-deps && eval $(opam config env) && make
 USER root
 RUN mkdir "/root/.tezos-node"
