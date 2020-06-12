@@ -40,6 +40,7 @@ impl Parser {
     async fn parse_next(&mut self) -> bool {
         match self.receiver.recv().await {
             Some(packet) => {
+                trace!(process_length = packet.ip_buffer().len(), "processing packet");
                 self.parse(packet).await
             }
             None => {

@@ -12,10 +12,15 @@ hex = "0.4"
 pnet = "0.26"
 bytes = "0.5"
 smoltcp = "0.6"
-tracing = "0.1"
 failure = "0.1"
 serde_json = "1.0"
-tracing-subscriber = "0.2"
+
+tracing = "0.1.15"
+tracing-subscriber = "0.2.5"
+tracing-opentelemetry = "0.5.0"
+opentelemetry = "0.6.0"
+opentelemetry-jaeger = "0.5.0"
+
 tokio = { version="0.2", features=["full"] }
 serde = { version="1.0", features=["derive"] }
 crypto = { version="*", git = "https://github.com/simplestaking/tezedge" }

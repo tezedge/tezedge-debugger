@@ -4,39 +4,27 @@ use std::{io};
 use crate::system::orchestrator::spawn_packet_orchestrator;
 use std::process::exit;
 
-pub fn raw_socket_producer() -> io::Result<()> {
-    use pnet::packet::ip::IpNextHeaderProtocols;
-    use pnet::packet::{
-        Packet as _,
-    };
-    use pnet::transport::{
-        transport_channel, tcp_packet_iter,
-        TransportChannelType,
-    };
+pub fn nfqueue_producer() -> io::Result<()> {
+    use nfq::{Queue, Verdict};
 
-    let (_, mut recv) = transport_channel(
-        // 64KB == Largest possible TCP packet, this *CAN* and *SHOULD* be lower, as the packet size
-        // is limited by lower layers protocols *NOT* by TCP packet limit.
-        64 * 1024,
-        // We want only valid TCP headers with including IP headers
-        TransportChannelType::Layer3(IpNextHeaderProtocols::Tcp),
-    )?;
+    let mut queue = Queue::open()?;
+    queue.bind(0)?;
 
     let orchestrator = spawn_packet_orchestrator();
     std::thread::spawn(move || {
-        let mut packet_iter = tcp_packet_iter(&mut recv);
         loop {
-            let capture = packet_iter.next();
+            let capture = queue.recv();
             match capture {
-                Ok((packet, _)) => {
-                    let packet = if let Some(packet) = Packet::new(packet.packet()) {
+                Ok(mut msg) => {
+                    msg.set_verdict(Verdict::Accept);
+                    let packet = if let Some(packet) = Packet::new(msg.get_payload()) {
                         trace!(captured_length = packet.ip_buffer().len(), "captured packet");
                         super::update_capture(packet.ip_buffer().len());
                         packet
                     } else {
-                        warn!(packet = debug(packet), "received invalid tcp packet");
                         continue;
                     };
+                    queue.verdict(msg);
 
                     loop {
                         match orchestrator.send(packet) {
@@ -57,6 +45,5 @@ pub fn raw_socket_producer() -> io::Result<()> {
             }
         }
     });
-
     Ok(())
 }
