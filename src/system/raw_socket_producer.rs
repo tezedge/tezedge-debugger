@@ -1,30 +1,41 @@
 use crate::messages::tcp_packet::Packet;
-use tracing::{trace, warn, error, span, Level};
+use tracing::{trace, warn, error};
 use std::{io};
 use crate::system::orchestrator::spawn_packet_orchestrator;
 use std::process::exit;
 
-pub fn nfqueue_producer() -> io::Result<()> {
-    use nfq::{Queue, Verdict};
+pub fn raw_socket_producer() -> io::Result<()> {
+    use pnet::packet::ip::IpNextHeaderProtocols;
+    use pnet::packet::{
+        Packet as _,
+    };
+    use pnet::transport::{
+        transport_channel, tcp_packet_iter,
+        TransportChannelType,
+    };
 
-    let mut queue = Queue::open()?;
-    queue.bind(0)?;
+    let (_, mut recv) = transport_channel(
+        // 64KB == Largest possible TCP packet, this *CAN* and *SHOULD* be lower, as the packet size
+        // is limited by lower layers protocols *NOT* by TCP packet limit.
+        64 * 1024,
+        // We want only valid TCP headers with including IP headers
+        TransportChannelType::Layer3(IpNextHeaderProtocols::Tcp),
+    )?;
 
     let orchestrator = spawn_packet_orchestrator();
     std::thread::spawn(move || {
+        let mut packet_iter = tcp_packet_iter(&mut recv);
         loop {
-            let capture = queue.recv();
+            let capture = packet_iter.next();
             match capture {
-                Ok(mut msg) => {
-                    msg.set_verdict(Verdict::Accept);
-                    let packet = if let Some(packet) = Packet::new(msg.get_payload()) {
+                Ok((packet, _)) => {
+                    let packet = if let Some(packet) = Packet::new(packet.packet()) {
                         trace!(captured_length = packet.ip_buffer().len(), "captured packet");
-                        super::update_capture(packet.ip_buffer().len());
                         packet
                     } else {
+                        warn!(packet = debug(packet), "received invalid tcp packet");
                         continue;
                     };
-                    queue.verdict(msg);
 
                     loop {
                         match orchestrator.send(packet) {
@@ -45,5 +56,6 @@ pub fn nfqueue_producer() -> io::Result<()> {
             }
         }
     });
+
     Ok(())
 }
