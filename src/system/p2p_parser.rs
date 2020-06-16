@@ -17,22 +17,24 @@ use crate::{
     utility::prelude::*,
     messages::prelude::*,
 };
+use crate::system::SystemSettings;
+use crate::storage::StoreMessage;
 
 struct Parser {
     pub initializer: SocketAddr,
     receiver: UnboundedReceiver<Packet>,
-    processor_sender: Option<UnboundedSender<P2pMessage>>,
+    processor_sender: UnboundedSender<StoreMessage>,
     encryption: ParserEncryption,
     state: ParserState,
 }
 
 impl Parser {
-    fn new(initializer: SocketAddr, receiver: UnboundedReceiver<Packet>) -> Self {
+    fn new(initializer: SocketAddr, receiver: UnboundedReceiver<Packet>, processor_sender: UnboundedSender<StoreMessage>, settings: SystemSettings) -> Self {
         Self {
             initializer,
             receiver,
-            encryption: ParserEncryption::new(initializer),
-            processor_sender: None,
+            processor_sender,
+            encryption: ParserEncryption::new(initializer, settings.local_address, settings.identity),
             state: ParserState::Unencrypted,
         }
     }
@@ -61,10 +63,8 @@ impl Parser {
                     _ => { return true; }
                 };
                 if let Some(p2p_msg) = p2p_msg {
-                    if self.processor_sender.as_ref().unwrap().send(p2p_msg).is_err() {
-                        error!("processor channel closed abruptly");
-                        return false;
-                    }
+                    info!(message = debug(&p2p_msg), "parsed new message");
+                    // TODO: Send to processor task
                 }
             }
             true
@@ -103,10 +103,10 @@ impl Parser {
     }
 }
 
-pub fn spawn_p2p_parser(initializer: SocketAddr) -> UnboundedSender<Packet> {
+pub fn spawn_p2p_parser(initializer: SocketAddr, processor_sender: UnboundedSender<StoreMessage>, settings: SystemSettings) -> UnboundedSender<Packet> {
     let (sender, receiver) = unbounded_channel::<Packet>();
     tokio::spawn(async move {
-        let mut parser = Parser::new(initializer, receiver);
+        let mut parser = Parser::new(initializer, receiver, processor_sender, settings.clone());
         while parser.parse_next().await {
             trace!(addr = display(initializer), "parsed new message");
         }
@@ -127,7 +127,7 @@ enum ParserState {
 pub struct ParserEncryption {
     initializer: SocketAddr,
     local_address: IpAddr,
-    local_identity: Identity,
+    identity: Identity,
     first_connection_message: Option<(ConnectionMessage, SocketAddr)>,
     second_connection_message: Option<(ConnectionMessage, SocketAddr)>,
     incoming_decrypter: Option<P2pDecrypter>,
@@ -135,11 +135,11 @@ pub struct ParserEncryption {
 }
 
 impl ParserEncryption {
-    pub fn new(initializer: SocketAddr) -> Self {
+    pub fn new(initializer: SocketAddr, local_address: IpAddr, identity: Identity) -> Self {
         Self {
             initializer,
-            local_address: "0.0.0.0".parse().unwrap(),
-            local_identity: Default::default(),
+            local_address,
+            identity,
             first_connection_message: None,
             second_connection_message: None,
             incoming_decrypter: None,
@@ -162,7 +162,7 @@ impl ParserEncryption {
         } else {
             let chunk = BinaryChunk::try_from(packet.payload().to_vec())?;
             let conn_msg = ConnectionMessage::try_from(chunk)?;
-            trace!(message_length = packet.payload().len(), "processed unencrypted message");
+            info!(message_length = packet.payload().len(), "received connection message");
             let mut upgrade = false;
             let (remote, incoming) = self.extract_remote(&packet);
 
@@ -216,7 +216,7 @@ impl ParserEncryption {
 
             let precomputed_key = precompute(
                 &hex::encode(&received.public_key),
-                &self.local_identity.secret_key,
+                &self.identity.secret_key,
             )?;
 
             self.incoming_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), remote));

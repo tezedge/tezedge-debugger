@@ -3,20 +3,23 @@ use tokio::sync::mpsc::{
 };
 use tracing::{trace, info, error};
 use std::{
-    process::exit,
     collections::{HashMap, hash_map::Entry},
 };
 use crate::{
     system::prelude::*,
     messages::tcp_packet::Packet,
 };
+use crate::system::processor::spawn_processor;
 
-pub fn spawn_packet_orchestrator() -> UnboundedSender<Packet> {
+pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Packet> {
     let (sender, mut receiver) = unbounded_channel::<Packet>();
 
     tokio::spawn(async move {
         let mut packet_processors = HashMap::new();
+        let message_processor = spawn_processor(settings.clone());
+        let settings = settings;
         loop {
+            let message_processor = message_processor.clone();
             if let Some(packet) = receiver.recv().await {
                 let entry = packet_processors.entry(packet.identification_pair());
                 let mut occupied_entry;
@@ -35,10 +38,11 @@ pub fn spawn_packet_orchestrator() -> UnboundedSender<Packet> {
                 } else {
                     // Is packet for processing
                     let addr = packet.source_addr();
+                    let settings = settings.clone();
                     processor = entry.or_insert_with(move || {
                         // If processor does not exists, create new one
                         info!(addr = display(addr), "spawning p2p parser");
-                        spawn_p2p_parser(addr)
+                        spawn_p2p_parser(addr, message_processor.clone(), settings)
                     });
                 };
 
@@ -52,7 +56,7 @@ pub fn spawn_packet_orchestrator() -> UnboundedSender<Packet> {
                 }
             } else {
                 error!("packet consuming channel closed unexpectedly");
-                exit(-1);
+                break;
             }
         }
     });

@@ -3,8 +3,9 @@ use tracing::{trace, warn, error};
 use std::{io};
 use crate::system::orchestrator::spawn_packet_orchestrator;
 use std::process::exit;
+use crate::system::SystemSettings;
 
-pub fn raw_socket_producer() -> io::Result<()> {
+pub fn raw_socket_producer(settings: SystemSettings) -> io::Result<()> {
     use pnet::packet::ip::IpNextHeaderProtocols;
     use pnet::packet::{
         Packet as _,
@@ -22,7 +23,7 @@ pub fn raw_socket_producer() -> io::Result<()> {
         TransportChannelType::Layer3(IpNextHeaderProtocols::Tcp),
     )?;
 
-    let orchestrator = spawn_packet_orchestrator();
+    let orchestrator = spawn_packet_orchestrator(settings.clone());
     std::thread::spawn(move || {
         let mut packet_iter = tcp_packet_iter(&mut recv);
         loop {

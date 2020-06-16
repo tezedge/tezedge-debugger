@@ -1,0 +1,25 @@
+version: "3"
+
+services:
+  debugger:
+    image: debugger
+    build: .
+    network_mode: "service:node"
+    volumes:
+      - "shared-data:/tmp/volume"
+  node:
+    image: simplestakingcom/tezedge
+    hostname: node
+    ports:
+      - "4927:4927"
+      - "19732:9732"
+      - "18732:18732"
+    entrypoint: /home/appuser/tezedge/docker/compose/tezedge.sh
+    logging:
+      driver: "none"
+    volumes:
+      - "shared-data:/tmp/tezedge"
+
+volumes:
+  shared-data:
+    external: false
