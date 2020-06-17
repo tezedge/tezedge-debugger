@@ -70,7 +70,7 @@ async fn main() -> Result<(), failure::Error> {
         }
     };
 
-    match build_raw_socket_system(SystemSettings { identity, local_address, storage }) {
+    match build_raw_socket_system(SystemSettings { identity, local_address, storage: storage.clone() }) {
         Ok(_) => {
             info!("system built");
         }
@@ -79,6 +79,14 @@ async fn main() -> Result<(), failure::Error> {
             exit(1);
         }
     }
+
+    tokio::spawn(async move {
+        use tezedge_debugger::server::endpoints::routes;
+        info!("started server on port 13030");
+        warp::serve(routes(storage))
+            .run(([127, 0, 0, 1], 13030))
+            .await;
+    });
 
     if let Err(err) = tokio::signal::ctrl_c().await {
         error!(error = display(err), "failed while listening for signal");

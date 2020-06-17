@@ -4,17 +4,18 @@ use tokio::sync::mpsc::{
 };
 use async_trait::async_trait;
 use crate::system::SystemSettings;
-use crate::storage::{MessageStore, StoreMessage};
+use crate::messages::p2p_message::P2pMessage;
+use crate::storage::MessageStore;
 
 type ProcessorTrait = dyn Processor + Sync + Send + 'static;
 
 #[async_trait]
 pub trait Processor {
-    async fn process(&mut self, msg: StoreMessage);
+    async fn process(&mut self, msg: P2pMessage);
 }
 
-pub fn spawn_processor(settings: SystemSettings) -> UnboundedSender<StoreMessage> {
-    let (sender, mut receiver) = unbounded_channel::<StoreMessage>();
+pub fn spawn_processor(settings: SystemSettings) -> UnboundedSender<P2pMessage> {
+    let (sender, mut receiver) = unbounded_channel::<P2pMessage>();
 
     tokio::spawn(async move {
         let mut processors: Vec<Box<ProcessorTrait>> = Default::default();
@@ -36,7 +37,7 @@ pub fn spawn_processor(settings: SystemSettings) -> UnboundedSender<StoreMessage
 
 struct DatabaseProcessor {
     store: MessageStore,
-    sender: UnboundedSender<StoreMessage>,
+    sender: UnboundedSender<P2pMessage>,
 }
 
 impl DatabaseProcessor {
@@ -49,8 +50,8 @@ impl DatabaseProcessor {
         ret
     }
 
-    fn start_database_task(store: MessageStore) -> UnboundedSender<StoreMessage> {
-        let (sender, mut receiver) = unbounded_channel::<StoreMessage>();
+    fn start_database_task(store: MessageStore) -> UnboundedSender<P2pMessage> {
+        let (sender, mut receiver) = unbounded_channel::<P2pMessage>();
         tokio::spawn(async move {
             loop {
                 if let Some(msg) = receiver.recv().await {
@@ -66,7 +67,7 @@ impl DatabaseProcessor {
 
 #[async_trait]
 impl Processor for DatabaseProcessor {
-    async fn process(&mut self, mut msg: StoreMessage) {
+    async fn process(&mut self, mut msg: P2pMessage) {
         loop {
             if let Err(err) = self.sender.send(msg) {
                 error!(error = display(&err), "database channel closed abruptly");

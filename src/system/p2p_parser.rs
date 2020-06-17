@@ -18,18 +18,17 @@ use crate::{
     messages::prelude::*,
 };
 use crate::system::SystemSettings;
-use crate::storage::StoreMessage;
 
 struct Parser {
     pub initializer: SocketAddr,
     receiver: UnboundedReceiver<Packet>,
-    processor_sender: UnboundedSender<StoreMessage>,
+    processor_sender: UnboundedSender<P2pMessage>,
     encryption: ParserEncryption,
     state: ParserState,
 }
 
 impl Parser {
-    fn new(initializer: SocketAddr, receiver: UnboundedReceiver<Packet>, processor_sender: UnboundedSender<StoreMessage>, settings: SystemSettings) -> Self {
+    fn new(initializer: SocketAddr, receiver: UnboundedReceiver<Packet>, processor_sender: UnboundedSender<P2pMessage>, settings: SystemSettings) -> Self {
         Self {
             initializer,
             receiver,
@@ -63,8 +62,10 @@ impl Parser {
                     _ => { return true; }
                 };
                 if let Some(p2p_msg) = p2p_msg {
-                    info!(message = debug(&p2p_msg), "parsed new message");
-                    // TODO: Send to processor task
+                    info!(addr = display(self.initializer), message = debug(&p2p_msg), "parsed new message");
+                    if let Err(err) = self.processor_sender.send(p2p_msg) {
+                        error!(error = display(&err), "processor channel closed abruptly");
+                    }
                 }
             }
             true
@@ -103,7 +104,7 @@ impl Parser {
     }
 }
 
-pub fn spawn_p2p_parser(initializer: SocketAddr, processor_sender: UnboundedSender<StoreMessage>, settings: SystemSettings) -> UnboundedSender<Packet> {
+pub fn spawn_p2p_parser(initializer: SocketAddr, processor_sender: UnboundedSender<P2pMessage>, settings: SystemSettings) -> UnboundedSender<Packet> {
     let (sender, receiver) = unbounded_channel::<Packet>();
     tokio::spawn(async move {
         let mut parser = Parser::new(initializer, receiver, processor_sender, settings.clone());
@@ -158,11 +159,10 @@ impl ParserEncryption {
 
     pub fn process_unencrypted(&mut self, packet: Packet) -> Result<Option<P2pMessage>, Error> {
         if self.is_initialized() {
-            Ok(None)
+            self.process_encrypted(packet)
         } else {
             let chunk = BinaryChunk::try_from(packet.payload().to_vec())?;
             let conn_msg = ConnectionMessage::try_from(chunk)?;
-            info!(message_length = packet.payload().len(), "received connection message");
             let mut upgrade = false;
             let (remote, incoming) = self.extract_remote(&packet);
 

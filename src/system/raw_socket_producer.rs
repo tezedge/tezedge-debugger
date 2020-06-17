@@ -1,43 +1,33 @@
 use crate::messages::tcp_packet::Packet;
-use tracing::{trace, warn, error};
-use std::{io};
+use tracing::{trace, error};
+use std::{io, env, os::unix::io::AsRawFd};
 use crate::system::orchestrator::spawn_packet_orchestrator;
-use std::process::exit;
 use crate::system::SystemSettings;
+use smoltcp::{
+    time::Instant,
+    wire::{EthernetFrame},
+    phy::{
+        wait, RawSocket, Device, RxToken,
+    },
+};
 
 pub fn raw_socket_producer(settings: SystemSettings) -> io::Result<()> {
-    use pnet::packet::ip::IpNextHeaderProtocols;
-    use pnet::packet::{
-        Packet as _,
-    };
-    use pnet::transport::{
-        transport_channel, tcp_packet_iter,
-        TransportChannelType,
-    };
-
-    let (_, mut recv) = transport_channel(
-        // 64KB == Largest possible TCP packet, this *CAN* and *SHOULD* be lower, as the packet size
-        // is limited by lower layers protocols *NOT* by TCP packet limit.
-        64 * 1024,
-        // We want only valid TCP headers with including IP headers
-        TransportChannelType::Layer3(IpNextHeaderProtocols::Tcp),
-    )?;
-
     let orchestrator = spawn_packet_orchestrator(settings.clone());
+    let ifname = env::args().nth(1)
+        .unwrap_or("eth0".to_string());
     std::thread::spawn(move || {
-        let mut packet_iter = tcp_packet_iter(&mut recv);
+        let mut packet_buf = [0u8; 64 * 1024];
+        let mut socket = RawSocket::new(&ifname)
+            .unwrap();
         loop {
-            let capture = packet_iter.next();
-            match capture {
-                Ok((packet, _)) => {
-                    let packet = if let Some(packet) = Packet::new(packet.packet()) {
-                        trace!(captured_length = packet.ip_buffer().len(), "captured packet");
-                        packet
-                    } else {
-                        warn!(packet = debug(packet), "received invalid tcp packet");
-                        continue;
-                    };
-
+            let _ = wait(socket.as_raw_fd(), None);
+            if let Some((rx_token, _)) = socket.receive() {
+                if let Some(packet) = Packet::new(rx_token.consume(Instant::now(), |buffer| {
+                    (packet_buf[..buffer.len()]).clone_from_slice(buffer);
+                    let data = &packet_buf[..buffer.len()];
+                    let frame = EthernetFrame::new_unchecked(data);
+                    Ok(frame.payload())
+                }).unwrap()) {
                     loop {
                         match orchestrator.send(packet) {
                             Ok(()) => {
@@ -46,13 +36,10 @@ pub fn raw_socket_producer(settings: SystemSettings) -> io::Result<()> {
                             }
                             Err(_) => {
                                 error!("orchestrator channel closed abruptly");
-                                exit(-1);
+                                break;
                             }
                         }
                     }
-                }
-                Err(err) => {
-                    warn!(error = display(err), "failed capture packet from socket");
                 }
             }
         }

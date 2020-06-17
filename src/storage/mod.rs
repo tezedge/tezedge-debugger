@@ -1,18 +1,8 @@
-
-pub mod storage_message;
-pub mod rpc_message;
 mod p2p_storage;
-// mod rpc_storage;
-// mod log_storage;
 mod secondary_index;
 
-pub use storage_message::*;
 pub use p2p_storage::*;
-// pub use rpc_storage::*;
-// pub use log_storage::*;
 pub(crate) use p2p_storage::secondary_indexes as p2p_indexes;
-// pub(crate) use rpc_storage::secondary_indexes as rpc_indexes;
-// pub(crate) use log_storage::secondary_indexes as log_indexes;
 
 use rocksdb::{DB, ColumnFamilyDescriptor};
 use std::{
@@ -21,13 +11,10 @@ use std::{
     net::IpAddr,
 };
 use storage::persistent::KeyValueSchema;
-// use std::fs::remove_dir_all;
 
 #[derive(Clone)]
 pub struct MessageStore {
-    p2p_db: P2PStorage,
-    // rpc_db: RpcStorage,
-    // log_db: LogStorage,
+    p2p_db: P2pStore,
     raw_db: Arc<DB>,
     max_db_size: Option<u64>,
 }
@@ -35,40 +22,24 @@ pub struct MessageStore {
 impl MessageStore {
     pub fn new(db: Arc<DB>) -> Self {
         Self {
-            p2p_db: P2PStorage::new(db.clone()),
-            // rpc_db: RpcStorage::new(db.clone()),
-            // log_db: LogStorage::new(db.clone()),
+            p2p_db: P2pStore::new(db.clone()),
             raw_db: db,
             max_db_size: None,
         }
     }
 
-    // pub fn rpc(&self) -> &RpcStorage {
-    //     &self.rpc_db
-    // }
-
-    pub fn p2p(&self) -> &P2PStorage {
+    pub fn p2p(&self) -> &P2pStore {
         &self.p2p_db
     }
-
-    // pub fn log(&self) -> &LogStorage {
-    //     &self.log_db
-    // }
 }
 
 pub fn cfs() -> Vec<ColumnFamilyDescriptor> {
     vec![
-        // RpcStorage::descriptor(),
-        P2PStorage::descriptor(),
-        // LogStorage::descriptor(),
+        P2pStore::descriptor(),
         p2p_indexes::RemoteAddrIndex::descriptor(),
         p2p_indexes::TypeIndex::descriptor(),
-        p2p_indexes::RequestTrackingIndex::descriptor(),
         p2p_indexes::IncomingIndex::descriptor(),
         p2p_indexes::SourceTypeIndex::descriptor(),
-        // rpc_indexes::RemoteAddrIndex::descriptor(),
-        // log_indexes::LevelIndex::descriptor(),
-        // log_indexes::TimestampIndex::descriptor(),
     ]
 }
 

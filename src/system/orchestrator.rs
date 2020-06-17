@@ -21,7 +21,13 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
         loop {
             let message_processor = message_processor.clone();
             if let Some(packet) = receiver.recv().await {
-                let entry = packet_processors.entry(packet.identification_pair());
+                let packet: Packet = packet;
+                let remote_addr = if packet.source_addr().ip() == settings.local_address {
+                    packet.destination_address()
+                } else {
+                    packet.source_addr()
+                };
+                let entry = packet_processors.entry(remote_addr);
                 let mut occupied_entry;
                 let processor;
 
@@ -42,7 +48,7 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
                     processor = entry.or_insert_with(move || {
                         // If processor does not exists, create new one
                         info!(addr = display(addr), "spawning p2p parser");
-                        spawn_p2p_parser(addr, message_processor.clone(), settings)
+                        spawn_p2p_parser(remote_addr, message_processor.clone(), settings)
                     });
                 };
 

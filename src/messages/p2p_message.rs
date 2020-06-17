@@ -10,13 +10,54 @@ use std::net::SocketAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::persistent::BincodeEncoded;
 
+#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
+pub enum SourceType {
+    #[serde(rename = "local")]
+    Local,
+    #[serde(rename = "remote")]
+    Remote,
+}
+
+impl SourceType {
+    pub fn from_p2p_msg(msg: &PeerMessage, incoming: bool) -> Self {
+        match msg {
+            PeerMessage::Disconnect | PeerMessage::ConnectionMessage(_) | PeerMessage::MetadataMessage(_)
+            | PeerMessage::Advertise(_) | PeerMessage::Bootstrap | PeerMessage::SwapRequest(_)
+            | PeerMessage::GetCurrentBranch(_) | PeerMessage::Deactivate(_) | PeerMessage::GetCurrentHead(_)
+            | PeerMessage::GetBlockHeaders(_) | PeerMessage::GetOperations(_) | PeerMessage::GetProtocols(_)
+            | PeerMessage::GetOperationHashesForBlocks(_) | PeerMessage::GetOperationsForBlocks(_) => Self::from_incoming(incoming),
+            PeerMessage::SwapAck(_) | PeerMessage::CurrentBranch(_) | PeerMessage::CurrentHead(_)
+            | PeerMessage::BlockHeader(_) | PeerMessage::Operation(_) | PeerMessage::Protocol(_)
+            | PeerMessage::OperationHashesForBlock(_) | PeerMessage::OperationsForBlocks(_) => Self::from_incoming(!incoming),
+            PeerMessage::_Reserved => Self::from_incoming(incoming),
+        }
+    }
+
+    pub fn from_incoming(incoming: bool) -> Self {
+        if incoming {
+            Self::Remote
+        } else {
+            Self::Local
+        }
+    }
+
+    pub fn as_bool(self) -> bool {
+        if Self::Local == self {
+            false
+        } else {
+            true
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct P2pMessage {
     pub id: Option<u64>,
-    timestamp: u128,
-    remote_addr: SocketAddr,
-    incoming: bool,
-    payload: Vec<PeerMessage>,
+    pub timestamp: u128,
+    pub remote_addr: SocketAddr,
+    pub incoming: bool,
+    pub source_type: SourceType,
+    pub payload: Vec<PeerMessage>,
 }
 
 impl BincodeEncoded for P2pMessage {}
@@ -27,14 +68,29 @@ impl P2pMessage {
     }
 
     pub fn new<T: Into<PeerMessage>>(remote_addr: SocketAddr, incoming: bool, values: Vec<T>) -> Self {
-        let payload = values.into_iter().map(|x| x.into()).collect();
+        let payload = values.into_iter().map(|x| x.into()).collect::<Vec<PeerMessage>>();
+        let source_type = payload.first().map(|msg| SourceType::from_p2p_msg(msg, incoming))
+            .unwrap_or(SourceType::from_incoming(incoming));
         Self {
             id: None,
             timestamp: Self::make_ts(),
+            source_type,
             remote_addr,
             incoming,
             payload,
         }
+    }
+
+    pub fn source_type(&self) -> SourceType {
+        self.source_type
+    }
+
+    pub fn is_incoming(&self) -> bool {
+        self.incoming
+    }
+
+    pub fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
     }
 }
 
