@@ -1,3 +1,4 @@
+pub mod stream;
 pub mod decrypter;
 pub mod identity;
 pub mod ip_settings;
