@@ -8,7 +8,7 @@ use tezos_messages::p2p::encoding::{
 };
 use std::net::SocketAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
-use storage::persistent::BincodeEncoded;
+use storage::persistent::{Decoder, SchemaError, Encoder};
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
 pub enum SourceType {
@@ -60,7 +60,19 @@ pub struct P2pMessage {
     pub payload: Vec<PeerMessage>,
 }
 
-impl BincodeEncoded for P2pMessage {}
+impl Decoder for P2pMessage {
+    fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
+        serde_cbor::from_slice(bytes)
+            .map_err(|_| SchemaError::DecodeError)
+    }
+}
+
+impl Encoder for P2pMessage {
+    fn encode(&self) -> Result<Vec<u8>, SchemaError> {
+        serde_cbor::to_vec(self)
+            .map_err(|_| SchemaError::EncodeError)
+    }
+}
 
 impl P2pMessage {
     fn make_ts() -> u128 {

@@ -27,7 +27,7 @@ async fn handle_stream(mut stream: TcpStream, peer_addr: SocketAddr) {
         let read = stream.read(&mut buffer).await
             .expect("failed to read from stream");
         if read == 0 {
-            println!("[{}] Got zero read bytes, terminating", peer_addr);
+            println!("[{}] Client finished successfully, closing handler.", peer_addr);
             return;
         }
         let data = &buffer[..read];

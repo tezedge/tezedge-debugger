@@ -1,4 +1,4 @@
-use tracing::{error, info};
+use tracing::error;
 use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
@@ -22,10 +22,6 @@ pub fn spawn_processor(settings: SystemSettings) -> UnboundedSender<P2pMessage> 
         processors.push(Box::new(DatabaseProcessor::new(settings.storage.clone())));
         loop {
             if let Some(message) = receiver.recv().await {
-                info!(
-                    msg = debug(&message),
-                    "received parsed message"
-                );
                 for processor in processors.iter_mut() {
                     processor.process(message.clone()).await;
                 }

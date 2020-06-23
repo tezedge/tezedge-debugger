@@ -83,7 +83,7 @@ async fn main() -> Result<(), failure::Error> {
     tokio::spawn(async move {
         use tezedge_debugger::server::endpoints::routes;
         warp::serve(routes(storage))
-            .run(([127, 0, 0, 1], 13031))
+            .run(([0, 0, 0, 0], 13031))
             .await;
     });
 

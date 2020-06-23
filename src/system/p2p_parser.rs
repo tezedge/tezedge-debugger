@@ -107,7 +107,6 @@ pub fn spawn_p2p_parser(initializer: SocketAddr, processor_sender: UnboundedSend
         while parser.parse_next().await {
             trace!(addr = display(initializer), "parsed new message");
         }
-        info!(addr = display(initializer), "parser received closing packet");
     });
     sender
 }
@@ -177,21 +176,9 @@ impl ParserEncryption {
                     return Ok(None);
                 } else {
                     upgrade = true;
-                    info!(
-                        initializer = display(self.initializer.clone()),
-                        src = display(packet.source_address()),
-                        dst = display(packet.destination_address()),
-                        "received second connection message"
-                    );
                     &mut self.second_connection_message
                 }
             } else {
-                info!(
-                    initializer = display(self.initializer.clone()),
-                    src = display(packet.source_address()),
-                    dst = display(packet.destination_address()),
-                    "received first connection message"
-                );
                 &mut self.first_connection_message
             };
             *place = Some(conn_msg.clone());
