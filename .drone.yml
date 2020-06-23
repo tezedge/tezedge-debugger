@@ -3,11 +3,42 @@ type: docker
 name: default
 
 steps:
-  - name: drone-p2p
+  - name: build
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
     environment:
       RUST_BACKTRACE: 1
-      SODIUM_USE_PKG_CONFIG: 1
+    volumes:
+      - name: binaries
+        path: /tmp/binaries
     commands:
-      - cargo run --bin ./drone-client
+      - cargo install --bins --path . --root .
+      - cp ./bin/* /tmp/binaries
+  - name: server
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    detach: true
+    volumes:
+      - name: binaries
+        path: /etc/bin
+      - name: identity
+        path: /tmp/volume
+    commands:
+      - /etc/bin/drone-server &
+      - /etc/bin/tezedge-debugger
+  - name: client
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    volumes:
+      - name: binaries
+        path: /etc/bin
+    commands:
+      - sleep 5
+      - /etc/bin/drone-client --server server:13030
+
+volumes:
+  - name: binaries
+    temp: {}
+  - name: identity
+    host:
+      path: /tmp/volume

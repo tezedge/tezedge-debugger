@@ -32,11 +32,13 @@ struct Opt {
     pub clients: u32,
     #[structopt(short, long, default_value = "1")]
     pub messages: u32,
+    #[structopt(short, long, default_value = "0.0.0.0:13030")]
+    pub server: String,
 }
 
-async fn test_client(id: u32, messages: u32) {
-    println!("[{}] Running test client", id);
-    let stream = TcpStream::connect("0.0.0.0:13030").await
+async fn test_client(id: u32, messages: u32, server: String) {
+    println!("[{}] Running test client against \"{}\"", id, server);
+    let stream = TcpStream::connect(server).await
         .expect("failed to connect to test server");
     println!("[{}] Connected to server", id);
 
@@ -85,7 +87,7 @@ pub async fn main() -> std::io::Result<()> {
     let opts: Opt = Opt::from_args();
     let mut handles = Vec::with_capacity(opts.clients as usize);
     for id in 0..opts.clients {
-        handles.push(tokio::spawn(test_client(id, opts.messages)));
+        handles.push(tokio::spawn(test_client(id, opts.messages, opts.server.clone())));
     }
 
     for handle in handles {

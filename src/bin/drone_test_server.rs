@@ -40,7 +40,9 @@ async fn handle_stream(mut stream: TcpStream, peer_addr: SocketAddr) {
 #[tokio::main]
 /// Build trivial TCP server with ping handler
 pub async fn main() -> std::io::Result<()> {
-    let mut listener = TcpListener::bind("127.0.0.1:13030").await?;
+    let server = "0.0.0.0:13030";
+    let mut listener = TcpListener::bind(server).await?;
+    println!("Started to listening on \"{}\"", server);
 
     loop {
         let (stream, peer_addr) = listener.accept().await?;
