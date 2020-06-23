@@ -64,7 +64,7 @@ impl Packet {
 
     #[inline]
     /// Get Socket address (IP address + TCP port number) of source generating this packet
-    pub fn source_addr(&self) -> SocketAddr {
+    pub fn source_address(&self) -> SocketAddr {
         let port = self.tcp_packet().src_port();
         match self {
             Self::V4(ref packet) => SocketAddr::new(packet.src_addr().0.into(), port),
@@ -75,7 +75,7 @@ impl Packet {
     #[inline]
     /// Get Socket address (IP address + TCP port number) of source generating this packet
     pub fn destination_address(&self) -> SocketAddr {
-        let port = self.tcp_packet().src_port();
+        let port = self.tcp_packet().dst_port();
         match self {
             Self::V4(ref packet) => SocketAddr::new(packet.dst_addr().0.into(), port),
             Self::V6(ref packet) => SocketAddr::new(packet.dst_addr().0.into(), port),
@@ -86,15 +86,15 @@ impl Packet {
     /// Socket Address identifying specific packet chain
     pub fn identification_pair(&self) -> IdAddrs {
         let mut hasher = DefaultHasher::new();
-        self.source_addr().hash(&mut hasher);
+        self.source_address().hash(&mut hasher);
         let sh = hasher.finish();
         let mut hasher = DefaultHasher::new();
         self.destination_address().hash(&mut hasher);
         let dh = hasher.finish();
         if sh < dh {
-            (self.source_addr(), self.destination_address())
+            (self.source_address(), self.destination_address())
         } else {
-            (self.destination_address(), self.source_addr())
+            (self.destination_address(), self.source_address())
         }
     }
 
@@ -126,6 +126,18 @@ impl Packet {
     /// Check if is finish (FIN) flag set in TCP header
     pub fn is_finish(&self) -> bool {
         self.tcp_packet().fin()
+    }
+
+    #[inline]
+    /// Check if is synchronize (SYN) flag set in TCP header
+    pub fn is_synchronize(&self) -> bool {
+        self.tcp_packet().syn()
+    }
+
+    #[inline]
+    /// Check if this packet opens connection
+    pub fn is_opening(&self) -> bool {
+        self.is_synchronize()
     }
 
     #[inline]

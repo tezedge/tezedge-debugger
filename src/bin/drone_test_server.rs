@@ -1,9 +1,10 @@
 use tezedge_debugger::utility::identity::Identity;
 use tokio::{
     prelude::*,
-    net::{TcpListener, TcpStream}, stream::StreamExt,
+    net::{TcpListener, TcpStream},
 };
 use lazy_static::lazy_static;
+use std::net::SocketAddr;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
@@ -18,15 +19,21 @@ lazy_static! {
 /// Simple and naive ping server, everything will be sent back without any processing.
 /// This way, it should ensure correct Tezos Handshake and correct encodings. Which means, only
 /// client should be responsible for correct encryption (of his side, as server will just mirror it).
-async fn handle_stream(mut stream: TcpStream) {
+async fn handle_stream(mut stream: TcpStream, peer_addr: SocketAddr) {
+    println!("[{}] Spawned peer handler", peer_addr);
     let buffer_size = stream.recv_buffer_size().unwrap_or(64 * 1024);
-    let mut buffer = Vec::<u8>::with_capacity(buffer_size);
+    let mut buffer = vec![0u8; buffer_size];
     loop {
         let read = stream.read(&mut buffer).await
             .expect("failed to read from stream");
+        if read == 0 {
+            println!("[{}] Got zero read bytes, terminating", peer_addr);
+            return;
+        }
         let data = &buffer[..read];
         stream.write_all(data).await
             .expect("failed to write to steam");
+        println!("[{}] Pinged message back ({} bytes)", peer_addr, data.len());
     }
 }
 
@@ -35,9 +42,8 @@ async fn handle_stream(mut stream: TcpStream) {
 pub async fn main() -> std::io::Result<()> {
     let mut listener = TcpListener::bind("127.0.0.1:13030").await?;
 
-    while let Some(stream) = listener.next().await {
-        tokio::spawn(handle_stream(stream?));
+    loop {
+        let (stream, peer_addr) = listener.accept().await?;
+        tokio::spawn(handle_stream(stream, peer_addr));
     }
-
-    Ok(())
 }

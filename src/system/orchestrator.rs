@@ -19,38 +19,59 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
         let message_processor = spawn_processor(settings.clone());
         let settings = settings;
         loop {
-            let message_processor = message_processor.clone();
             if let Some(packet) = receiver.recv().await {
                 let packet: Packet = packet;
-                let remote_addr = if packet.source_addr().ip() == settings.local_address {
-                    packet.destination_address()
+                let entry = if packet_processors.contains_key(&packet.destination_address()) {
+                    packet_processors.entry(packet.destination_address())
                 } else {
-                    packet.source_addr()
+                    packet_processors.entry(packet.source_address())
                 };
-                let entry = packet_processors.entry(remote_addr);
+
+                let mut prev_value;
                 let mut occupied_entry;
                 let processor;
+
+                let src = packet.source_address();
+                let dst = packet.destination_address();
+                let settings = settings.clone();
 
                 // Packet is closing connection
                 if packet.is_closing() {
                     if let Entry::Occupied(entry) = entry {
                         // There is still running processor, this packet will notify it to shut down
-                        occupied_entry = entry.remove();
-                        processor = &mut occupied_entry;
+                        prev_value = entry.remove();
+                        processor = &mut prev_value;
                     } else {
                         // Processor is already shut down, ignore the packet
                         continue;
                     }
-                } else {
-                    // Is packet for processing
-                    let addr = packet.source_addr();
-                    let settings = settings.clone();
+                } else if packet.is_opening() {
+                    // Is packet is opening new connection
+                    let message_processor = message_processor.clone();
                     processor = entry.or_insert_with(move || {
                         // If processor does not exists, create new one
-                        info!(addr = display(addr), "spawning p2p parser");
-                        spawn_p2p_parser(remote_addr, message_processor.clone(), settings)
+                        info!(
+                            source = display(src),
+                            destination = display(dst),
+                            "spawning p2p parser"
+                        );
+                        spawn_p2p_parser(src, message_processor, settings)
                     });
+                } else {
+                    if let Entry::Occupied(entry) = entry {
+                        occupied_entry = entry;
+                        processor = occupied_entry.get_mut();
+                    } else {
+                        trace!(
+                            source = display(src),
+                            destination = display(dst),
+                            "processor does not exists"
+                        );
+                        continue;
+                    }
                 };
+
+
 
                 match processor.send(packet) {
                     Ok(()) => {

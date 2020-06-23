@@ -9,7 +9,7 @@ use crypto::nonce::Nonce;
 use tezos_messages::p2p::encoding::connection::ConnectionMessage;
 use tezos_messages::p2p::binary_message::{BinaryChunk, BinaryMessage};
 use crypto::crypto_box::precompute;
-use tezedge_debugger::utility::stream::EncryptedMessageWriter;
+use tezedge_debugger::utility::stream::{EncryptedMessageWriter, EncryptedMessageReader};
 use tezos_messages::p2p::encoding::peer::{PeerMessageResponse, PeerMessage};
 use tezos_messages::p2p::encoding::advertise::AdvertiseMessage;
 use std::net::{SocketAddr, IpAddr};
@@ -26,18 +26,21 @@ lazy_static! {
 }
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "basic")]
+#[structopt(name = "drone testing client")]
 struct Opt {
-    #[structopt(short, long, default_value = "3")]
+    #[structopt(short, long, default_value = "1")]
     pub clients: u32,
-    #[structopt(short, long, default_value = "3")]
+    #[structopt(short, long, default_value = "1")]
     pub messages: u32,
 }
 
-async fn test_client(messages: u32) {
-    let stream = TcpStream::connect("127.0.0.1:13030").await
+async fn test_client(id: u32, messages: u32) {
+    println!("[{}] Running test client", id);
+    let stream = TcpStream::connect("0.0.0.0:13030").await
         .expect("failed to connect to test server");
-    let (_, mut writer) = MessageStream::from(stream).split();
+    println!("[{}] Connected to server", id);
+
+    let (mut reader, mut writer) = MessageStream::from(stream).split();
     let connection_message = ConnectionMessage::new(
         0,
         &IDENTITY.public_key,
@@ -49,28 +52,45 @@ async fn test_client(messages: u32) {
 
     writer.write_message(&chunk).await
         .unwrap();
+    println!("[{}] Sent connection message", id);
+    let recv_chunk = reader.read_message().await
+        .unwrap();
+    println!("[{}] Got connection message back", id);
+    assert_eq!(recv_chunk.raw(), chunk.raw(), "Received different message");
 
     let precompouted_key = precompute(
         &IDENTITY.public_key,
         &IDENTITY.secret_key,
     ).unwrap();
-    let mut writer = EncryptedMessageWriter::new(writer, precompouted_key, NONCE.clone(), IDENTITY.peer_id.clone());
+    let mut writer = EncryptedMessageWriter::new(writer, precompouted_key.clone(), NONCE.clone(), IDENTITY.peer_id.clone());
+    let mut reader = EncryptedMessageReader::new(reader, precompouted_key.clone(), NONCE.clone(), IDENTITY.peer_id.clone());
 
-    for _ in 0..messages {
+    for msg_id in 0..messages {
         let message = PeerMessage::Advertise(AdvertiseMessage::new(&[
             SocketAddr::new(IpAddr::from([0, 0, 0, 0]), 0)
         ]));
         let message = PeerMessageResponse::from(message);
         writer.write_message(&message).await
             .unwrap();
+        println!("[{}] Sent message {}", id, msg_id);
+        let recv_message = reader.read_message::<PeerMessageResponse>().await
+            .unwrap();
+        println!("[{}] Got message {} back", id, msg_id);
+        assert_eq!(message.as_bytes(), recv_message.as_bytes(), "Received different message")
     }
 }
 
 #[tokio::main]
 pub async fn main() -> std::io::Result<()> {
     let opts: Opt = Opt::from_args();
-    for _ in 0..opts.clients {
-        tokio::spawn(test_client(opts.messages));
+    let mut handles = Vec::with_capacity(opts.clients as usize);
+    for id in 0..opts.clients {
+        handles.push(tokio::spawn(test_client(id, opts.messages)));
     }
+
+    for handle in handles {
+        handle.await?;
+    }
+
     Ok(())
 }

@@ -1,0 +1,13 @@
+kind: pipeline
+type: docker
+name: default
+
+steps:
+  - name: drone-p2p
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    environment:
+      RUST_BACKTRACE: 1
+      SODIUM_USE_PKG_CONFIG: 1
+    commands:
+      - cargo run --bin ./drone-client

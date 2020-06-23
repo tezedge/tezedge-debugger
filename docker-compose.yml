@@ -14,6 +14,8 @@ services:
       - "4927:4927"
       - "19732:9732"
       - "18732:18732"
+      - "13030:13030"
+      - "13031:13031"
     entrypoint: /home/appuser/tezedge/docker/compose/tezedge.sh
     logging:
       driver: "none"
