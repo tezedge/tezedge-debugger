@@ -6,6 +6,7 @@ pub mod orchestrator;
 pub mod p2p_parser;
 pub mod raw_socket_producer;
 pub mod processor;
+pub mod syslog_producer;
 
 pub mod prelude {
     pub use super::p2p_parser::spawn_p2p_parser;
@@ -23,4 +24,6 @@ pub struct SystemSettings {
     pub identity: Identity,
     pub local_address: IpAddr,
     pub storage: MessageStore,
+    pub syslog_port: u16,
+    pub rpc_port: u16,
 }

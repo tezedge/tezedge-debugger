@@ -7,6 +7,7 @@ services:
     network_mode: "service:node"
     volumes:
       - "shared-data:/tmp/volume"
+    entrypoint: ./tezedge-debugger
   node:
     image: simplestakingcom/tezedge
     hostname: node
@@ -16,9 +17,13 @@ services:
       - "18732:18732"
       - "13030:13030"
       - "13031:13031"
+      - "13131:13131/udp"  # Syslog port
     entrypoint: /home/appuser/tezedge/docker/compose/tezedge.sh
     logging:
-      driver: "none"
+      driver: "syslog"
+      options:
+        syslog-address: "udp://0.0.0.0:13131"  # Port must match syslog opened in 'ports' section
+        syslog-format: "rfc5424micro"
     volumes:
       - "shared-data:/tmp/tezedge"
 

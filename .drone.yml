@@ -42,7 +42,7 @@ steps:
       - name: binaries
         path: /etc/bin
     commands:
-      - /etc/bin/endpoint_tester http://server:13031/v2/p2p 2
+      - /etc/bin/enpoint-tester http://server:13031/v2/p2p 2
 
 volumes:
   - name: binaries

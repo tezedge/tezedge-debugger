@@ -13,6 +13,7 @@ use tezedge_debugger::storage::{MessageStore, get_ts, cfs};
 use std::path::Path;
 use std::sync::Arc;
 use storage::persistent::open_kv;
+use tezedge_debugger::system::syslog_producer::syslog_producer;
 
 fn open_database() -> Result<MessageStore, failure::Error> {
     let storage_path = format!("/tmp/volume/{}", get_ts());
@@ -70,7 +71,20 @@ async fn main() -> Result<(), failure::Error> {
         }
     };
 
-    match build_raw_socket_system(SystemSettings { identity, local_address, storage: storage.clone() }) {
+    let settings = SystemSettings {
+        identity,
+        local_address,
+        storage: storage.clone(),
+        syslog_port: 13131,
+        rpc_port: 13031,
+    };
+
+    if let Err(err) = syslog_producer(settings.clone()).await {
+        error!(error = display(err), "failed to build syslog server");
+        exit(1);
+    }
+
+    match build_raw_socket_system(settings.clone()) {
         Ok(_) => {
             info!("system built");
         }
@@ -83,7 +97,7 @@ async fn main() -> Result<(), failure::Error> {
     tokio::spawn(async move {
         use tezedge_debugger::server::endpoints::routes;
         warp::serve(routes(storage))
-            .run(([0, 0, 0, 0], 13031))
+            .run(([0, 0, 0, 0], settings.rpc_port))
             .await;
     });
 
