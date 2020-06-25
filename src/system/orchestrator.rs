@@ -1,7 +1,7 @@
 use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
-use tracing::{trace, info, error};
+use tracing::{trace, info, warn, error};
 use std::{
     collections::{HashMap, hash_map::Entry},
 };
@@ -62,7 +62,7 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
                         occupied_entry = entry;
                         processor = occupied_entry.get_mut();
                     } else {
-                        trace!(
+                        warn!(
                             source = display(src),
                             destination = display(dst),
                             "processor does not exists"
@@ -70,8 +70,6 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
                         continue;
                     }
                 };
-
-
 
                 match processor.send(packet) {
                     Ok(()) => {

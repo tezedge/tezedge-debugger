@@ -18,6 +18,7 @@ use crate::{
     messages::prelude::*,
 };
 use crate::system::SystemSettings;
+use tezos_messages::p2p::binary_message::BinaryMessage;
 
 struct Parser {
     pub initializer: SocketAddr,
@@ -59,6 +60,7 @@ impl Parser {
                 ParserState::Encrypted => self.parse_encrypted(packet).await,
                 _ => { return true; }
             };
+
             if let Some(p2p_msg) = p2p_msg {
                 if let Err(err) = self.processor_sender.send(p2p_msg) {
                     error!(error = display(&err), "processor channel closed abruptly");
@@ -77,7 +79,7 @@ impl Parser {
                 result
             }
             Err(err) => {
-                info!(addr = display(self.initializer), error = display(err), "is not valid tezos p2p connection");
+                trace!(addr = display(self.initializer), error = display(err), "is not valid tezos p2p connection");
                 self.state = ParserState::Irrelevant;
                 None
             }
@@ -91,7 +93,7 @@ impl Parser {
             match self.encryption.process_encrypted(packet) {
                 Ok(result) => result,
                 Err(err) => {
-                    trace!(addr = display(self.initializer), error = display(err), "received invalid message");
+                    info!(addr = display(self.initializer), error = display(err), "received invalid message");
                     self.state = ParserState::Irrelevant;
                     None
                 }
@@ -160,6 +162,7 @@ impl ParserEncryption {
         if self.is_initialized() {
             self.process_encrypted(packet)
         } else {
+            info!(data = debug(packet.payload()), "processing unencrypted message");
             let chunk = BinaryChunk::try_from(packet.payload().to_vec())?;
             let conn_msg = ConnectionMessage::try_from(chunk)?;
             let mut upgrade = false;
@@ -199,6 +202,7 @@ impl ParserEncryption {
             &mut self.outgoing_decrypter
         };
 
+        info!(data = debug(packet.payload()), "parsing encrypted message");
         Ok(decrypter.as_mut()
             .map(|decrypter| decrypter.recv_msg(&packet)).flatten()
             .map(|msgs| {
@@ -208,14 +212,21 @@ impl ParserEncryption {
     }
 
     pub fn upgrade(&mut self) -> Result<(), Error> {
-        if let (Some(sent), Some(received)) = (&self.first_connection_message, &self.second_connection_message) {
-            let sent_data = BinaryChunk::from_content(&sent.cache_reader().get().unwrap())?;
-            let recv_data = BinaryChunk::from_content(&received.cache_reader().get().unwrap())?;
+        if let (Some(first), Some(second)) = (&self.first_connection_message, &self.second_connection_message) {
+            let incoming = hex::encode(&first.public_key) != self.identity.public_key;
+            let (sent, received) = if incoming {
+                (first, second)
+            } else {
+                (second, first)
+            };
+
+            let sent_data = BinaryChunk::from_content(&sent.as_bytes()?)?;
+            let recv_data = BinaryChunk::from_content(&received.as_bytes()?)?;
 
             let NoncePair { remote, local } = generate_nonces(
                 &sent_data.raw(),
                 &recv_data.raw(),
-                true,
+                incoming,
             );
 
             let precomputed_key = precompute(
@@ -223,8 +234,8 @@ impl ParserEncryption {
                 &self.identity.secret_key,
             )?;
 
-            self.incoming_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), remote));
-            self.outgoing_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), local));
+            self.incoming_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), local));
+            self.outgoing_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), remote));
 
             info!(initializer = display(self.initializer), "connection upgraded to encrypted");
             Ok(())

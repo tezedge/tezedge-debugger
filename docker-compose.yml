@@ -4,7 +4,7 @@ services:
   debugger:
     image: debugger
     build: .
-    network_mode: "service:node"
+    network_mode: "service:tester"
     volumes:
       - "shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger
@@ -15,7 +15,6 @@ services:
       - "4927:4927"
       - "19732:9732"
       - "18732:18732"
-      - "13030:13030"
       - "13031:13031"
       - "13131:13131/udp"  # Syslog port
     entrypoint: /home/appuser/tezedge/docker/compose/tezedge.sh

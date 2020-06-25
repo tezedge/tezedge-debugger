@@ -1,10 +1,19 @@
-use tezedge_debugger::utility::identity::Identity;
+use tezedge_debugger::utility::{
+    identity::Identity,
+    stream::MessageStream,
+};
 use tokio::{
-    prelude::*,
     net::{TcpListener, TcpStream},
 };
 use lazy_static::lazy_static;
-use std::net::SocketAddr;
+use crypto::nonce::{Nonce, NoncePair, generate_nonces};
+use tezos_messages::p2p::encoding::connection::ConnectionMessage;
+use tezos_messages::p2p::binary_message::{BinaryChunk, BinaryMessage};
+use crypto::crypto_box::precompute;
+use tezedge_debugger::utility::stream::{EncryptedMessageWriter, EncryptedMessageReader};
+use tezos_messages::p2p::encoding::peer::{PeerMessageResponse};
+use std::net::{SocketAddr};
+use std::convert::TryFrom;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
@@ -13,27 +22,62 @@ lazy_static! {
         secret_key: "dc9640dbd8cf50a5475b6a6d65c96af943380a627cea198906a2a8d4fd37decc".to_string(),
         proof_of_work_stamp: "d0e1945cb693c743e82b3e29750ebbc746c14dbc280c6ee6".to_string(),
     };
+
+    static ref NONCE: Nonce = Nonce::random();
 }
 
 /// This is server handler, all connection will *ALWAYS* be incoming, from some running drone-client
 /// Simple and naive ping server, everything will be sent back without any processing.
 /// This way, it should ensure correct Tezos Handshake and correct encodings. Which means, only
 /// client should be responsible for correct encryption (of his side, as server will just mirror it).
-async fn handle_stream(mut stream: TcpStream, peer_addr: SocketAddr) {
+async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
     println!("[{}] Spawned peer handler", peer_addr);
-    let buffer_size = stream.recv_buffer_size().unwrap_or(64 * 1024);
-    let mut buffer = vec![0u8; buffer_size];
+
+    let (mut reader, mut writer) = MessageStream::from(stream).split();
+
+    let recv_chunk = reader.read_message().await.unwrap();
+    let recv_conn_msg = ConnectionMessage::try_from(recv_chunk).unwrap();
+
+    println!("[{}] Received connection message", peer_addr);
+
+    let sent_conn_msg = ConnectionMessage::new(
+        0,
+        &IDENTITY.public_key,
+        &IDENTITY.proof_of_work_stamp,
+        &NONCE.get_bytes(),
+        Default::default(),
+    );
+    let sent_chunk = BinaryChunk::from_content(&sent_conn_msg.as_bytes().unwrap()).unwrap();
+    writer.write_message(&sent_chunk)
+        .await.unwrap();
+
+    let sent_data = BinaryChunk::from_content(&sent_conn_msg.as_bytes().unwrap()).unwrap();
+    let recv_data = BinaryChunk::from_content(&recv_conn_msg.as_bytes().unwrap()).unwrap();
+
+    let precomputed_key = precompute(
+        &hex::encode(recv_conn_msg.public_key),
+        &IDENTITY.secret_key,
+    ).unwrap();
+
+    let NoncePair { remote, local } = generate_nonces(
+        sent_data.raw(),
+        recv_data.raw(),
+        true,
+    );
+
+    let mut enc_writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
+    let mut enc_reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
+
+    println!("[{}] Encrypted connection", peer_addr);
+
     loop {
-        let read = stream.read(&mut buffer).await
-            .expect("failed to read from stream");
-        if read == 0 {
-            println!("[{}] Client finished successfully, closing handler.", peer_addr);
-            return;
+        if let Ok(message) = enc_reader.read_message::<PeerMessageResponse>().await {
+            println!("[{}] Decrypted message", peer_addr);
+            enc_writer.write_message(&message).await.unwrap();
+        } else {
+            println!("[{}] Closing peer handler", peer_addr);
+            break;
         }
-        let data = &buffer[..read];
-        stream.write_all(data).await
-            .expect("failed to write to steam");
-        println!("[{}] Pinged message back ({} bytes)", peer_addr, data.len());
     }
 }
 

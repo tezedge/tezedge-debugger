@@ -5,7 +5,7 @@ use tezedge_debugger::{
 use lazy_static::lazy_static;
 use structopt::StructOpt;
 use tokio::net::TcpStream;
-use crypto::nonce::Nonce;
+use crypto::nonce::{Nonce, NoncePair, generate_nonces};
 use tezos_messages::p2p::encoding::connection::ConnectionMessage;
 use tezos_messages::p2p::binary_message::{BinaryChunk, BinaryMessage};
 use crypto::crypto_box::precompute;
@@ -13,13 +13,15 @@ use tezedge_debugger::utility::stream::{EncryptedMessageWriter, EncryptedMessage
 use tezos_messages::p2p::encoding::peer::{PeerMessageResponse, PeerMessage};
 use tezos_messages::p2p::encoding::advertise::AdvertiseMessage;
 use std::net::{SocketAddr, IpAddr};
+use std::convert::TryFrom;
+use tezos_messages::p2p::binary_message::cache::CachedData;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
-        peer_id: "idsscFHxXoeJjxQsQBeEveayLyvymA".to_string(),
-        public_key: "b41df26473332e7225fdad07045112b5ba6bf295a384785c535cf738575ee245".to_string(),
-        secret_key: "dc9640dbd8cf50a5475b6a6d65c96af943380a627cea198906a2a8d4fd37decc".to_string(),
-        proof_of_work_stamp: "d0e1945cb693c743e82b3e29750ebbc746c14dbc280c6ee6".to_string(),
+        peer_id: "idrj5eYTN6BgrzCT1YQh3mCVuWciVr".to_string(),
+        public_key: "df06423ed30c9777b0089a8de406ffa10988bb0655b4a9e4c814fe326ee0f33b".to_string(),
+        secret_key: "c60b4be2c6a1d25f58e6abd70847a94cc922c16c689b7a2ba9d567af2ccdec06".to_string(),
+        proof_of_work_stamp: "74ed18aa2c733e0cbde54e2e7fb9dab28665a3a4d3a9cb08".to_string(),
     };
 
     static ref NONCE: Nonce = Nonce::random();
@@ -43,29 +45,41 @@ async fn test_client(id: u32, messages: u32, server: String) {
     println!("[{}] Connected to server", id);
 
     let (mut reader, mut writer) = MessageStream::from(stream).split();
-    let connection_message = ConnectionMessage::new(
+    let sent_conn_msg = ConnectionMessage::new(
         0,
         &IDENTITY.public_key,
         &IDENTITY.proof_of_work_stamp,
         &NONCE.get_bytes(),
         Default::default(),
     );
-    let chunk = BinaryChunk::from_content(&connection_message.as_bytes().unwrap()).unwrap();
+    let chunk = BinaryChunk::from_content(&sent_conn_msg.as_bytes().unwrap()).unwrap();
 
     writer.write_message(&chunk).await
         .unwrap();
-    println!("[{}] Sent connection message", id);
     let recv_chunk = reader.read_message().await
         .unwrap();
-    println!("[{}] Got connection message back", id);
-    assert_eq!(recv_chunk.raw(), chunk.raw(), "Received different message");
+    println!("[{}] Received connection message", id);
+    let recv_conn_msg = ConnectionMessage::try_from(recv_chunk)
+        .expect("got invalid connection message from server");
 
-    let precompouted_key = precompute(
-        &IDENTITY.public_key,
+    let sent_data = chunk;
+    let recv_data = BinaryChunk::from_content(&recv_conn_msg.cache_reader().get().unwrap()).unwrap();
+
+    let precomputed_key = precompute(
+        &hex::encode(recv_conn_msg.public_key),
         &IDENTITY.secret_key,
     ).unwrap();
-    let mut writer = EncryptedMessageWriter::new(writer, precompouted_key.clone(), NONCE.clone(), IDENTITY.peer_id.clone());
-    let mut reader = EncryptedMessageReader::new(reader, precompouted_key.clone(), NONCE.clone(), IDENTITY.peer_id.clone());
+
+    let NoncePair { remote, local } = generate_nonces(
+        sent_data.raw(),
+        recv_data.raw(),
+        false,
+    );
+
+    let mut writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
+    let mut reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
+
+    println!("[{}] Encrypted connection", id);
 
     for msg_id in 0..messages {
         let message = PeerMessage::Advertise(AdvertiseMessage::new(&[
@@ -74,11 +88,11 @@ async fn test_client(id: u32, messages: u32, server: String) {
         let message = PeerMessageResponse::from(message);
         writer.write_message(&message).await
             .unwrap();
-        println!("[{}] Sent message {}", id, msg_id);
+        println!("[{}] Sent encrypted message {}", id, msg_id);
         let recv_message = reader.read_message::<PeerMessageResponse>().await
             .unwrap();
-        println!("[{}] Got message {} back", id, msg_id);
-        assert_eq!(message.as_bytes(), recv_message.as_bytes(), "Received different message")
+        assert_eq!(message.as_bytes(), recv_message.as_bytes(), "Received different message");
+        println!("[{}] Got re-encrypted message {} back", id, msg_id);
     }
 }
 
