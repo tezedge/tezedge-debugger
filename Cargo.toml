@@ -18,10 +18,9 @@ path = "src/bin/drone_test_server.rs"
 name = "drone-client"
 path = "src/bin/drone_test_client.rs"
 
-[[bin]]
-name = "endpoint-tester"
-path = "src/bin/endpoint_tester.rs"
-
+[dev-dependencies]
+ws = "0.9"
+url = "2.1"
 
 [dependencies]
 hex = "0.4"

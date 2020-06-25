@@ -54,8 +54,8 @@ impl DatabaseProcessor {
         let (sender, mut receiver) = unbounded_channel::<P2pMessage>();
         tokio::spawn(async move {
             loop {
-                if let Some(msg) = receiver.recv().await {
-                    if let Err(err) = store.p2p().store_message(&msg) {
+                if let Some(mut msg) = receiver.recv().await {
+                    if let Err(err) = store.p2p().store_message(&mut msg) {
                         error!(error = display(err), "failed to store message");
                     }
                 }

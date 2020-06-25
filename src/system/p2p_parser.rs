@@ -10,7 +10,7 @@ use std::{
     net::{SocketAddr, IpAddr},
 };
 use tezos_messages::p2p::{
-    binary_message::{BinaryChunk, cache::CachedData},
+    binary_message::{BinaryChunk},
     encoding::prelude::*,
 };
 use crate::{

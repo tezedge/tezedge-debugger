@@ -29,13 +29,15 @@ steps:
   - name: client
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
+    environment:
+      DEBUGGER_SERVER: "http://server:13031"
     volumes:
       - name: binaries
         path: /etc/bin
     commands:
       - sleep 1
       - /etc/bin/drone-client --server server:13030
-      - sleep 1
+      - cargo test
 #  - name: test
 #    image: simplestakingcom/tezedge-ci-builder:latest
 #    pull: if-not-exists

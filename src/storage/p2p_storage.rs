@@ -93,8 +93,9 @@ impl P2pStore {
         Ok(())
     }
 
-    pub fn store_message(&self, msg: &P2pMessage) -> Result<u64, StorageError> {
+    pub fn store_message(&self, msg: &mut P2pMessage) -> Result<u64, StorageError> {
         let index = self.reserve_index();
+        msg.id = Some(index);
         self.kv.put(&index, &msg)?;
         self.make_indexes(index, &msg)?;
         self.inc_count();
