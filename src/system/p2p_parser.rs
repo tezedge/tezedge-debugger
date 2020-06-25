@@ -162,7 +162,6 @@ impl ParserEncryption {
         if self.is_initialized() {
             self.process_encrypted(packet)
         } else {
-            info!(data = debug(packet.payload()), "processing unencrypted message");
             let chunk = BinaryChunk::try_from(packet.payload().to_vec())?;
             let conn_msg = ConnectionMessage::try_from(chunk)?;
             let mut upgrade = false;
@@ -196,24 +195,22 @@ impl ParserEncryption {
 
     pub fn process_encrypted(&mut self, packet: Packet) -> Result<Option<P2pMessage>, Error> {
         let (remote, incoming) = self.extract_remote(&packet);
-        let decrypter = if packet.destination_address() == self.initializer {
+        let decrypter = if incoming {
             &mut self.incoming_decrypter
         } else {
             &mut self.outgoing_decrypter
         };
 
-        info!(data = debug(packet.payload()), "parsing encrypted message");
         Ok(decrypter.as_mut()
             .map(|decrypter| decrypter.recv_msg(&packet)).flatten()
             .map(|msgs| {
-                info!(message_len = packet.payload().len(), "processed encrypted message");
                 P2pMessage::new(remote, incoming, msgs)
             }))
     }
 
     pub fn upgrade(&mut self) -> Result<(), Error> {
         if let (Some(first), Some(second)) = (&self.first_connection_message, &self.second_connection_message) {
-            let incoming = hex::encode(&first.public_key) != self.identity.public_key;
+            let incoming = hex::encode(&first.public_key) == self.identity.public_key;
             let (sent, received) = if incoming {
                 (first, second)
             } else {
@@ -226,7 +223,7 @@ impl ParserEncryption {
             let NoncePair { remote, local } = generate_nonces(
                 &sent_data.raw(),
                 &recv_data.raw(),
-                incoming,
+                !incoming,
             );
 
             let precomputed_key = precompute(

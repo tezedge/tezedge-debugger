@@ -42,8 +42,6 @@ impl P2pDecrypter {
 
             if self.inc_buf.len() > 2 {
                 if let Some(decrypted) = self.try_decrypt() {
-                    use tracing::info;
-                    info!(data_len = decrypted.len(), "decrypted message");
                     return self.try_deserialize(decrypted);
                 }
             }
@@ -55,7 +53,6 @@ impl P2pDecrypter {
         let len = (&self.inc_buf[0..2]).get_u16() as usize;
         if self.inc_buf[2..].len() >= len {
             use tracing::info;
-            info!("got full message, decrypting");
             let chunk = match BinaryChunk::try_from(self.inc_buf[0..len + 2].to_vec()) {
                 Ok(chunk) => chunk,
                 Err(e) => {
