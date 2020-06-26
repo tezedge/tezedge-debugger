@@ -15,6 +15,7 @@ use tezos_messages::p2p::encoding::advertise::AdvertiseMessage;
 use std::net::{SocketAddr, IpAddr};
 use std::convert::TryFrom;
 use tezos_messages::p2p::binary_message::cache::CachedData;
+use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
@@ -80,6 +81,14 @@ async fn test_client(id: u32, messages: u32, server: String) {
     let mut reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
 
     println!("[{}] Encrypted connection", id);
+
+    let sent_metadata = MetadataMessage::new(true, true);
+    writer.write_message(&sent_metadata).await.unwrap();
+    println!("[{}] Sent metadata message", id);
+    let recv_metadata = reader.read_message::<MetadataMessage>()
+        .await.unwrap();
+    assert_eq!(sent_metadata.as_bytes(), recv_metadata.as_bytes(), "received different metadata");
+    println!("[{}] Got metadata message", id);
 
     for msg_id in 0..messages {
         let message = PeerMessage::Advertise(AdvertiseMessage::new(&[

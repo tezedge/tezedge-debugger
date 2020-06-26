@@ -14,6 +14,7 @@ use tezedge_debugger::utility::stream::{EncryptedMessageWriter, EncryptedMessage
 use tezos_messages::p2p::encoding::peer::{PeerMessageResponse};
 use std::net::{SocketAddr};
 use std::convert::TryFrom;
+use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
@@ -69,6 +70,10 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
     let mut enc_reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
 
     println!("[{}] Encrypted connection", peer_addr);
+
+    let metadata = enc_reader.read_message::<MetadataMessage>().await.unwrap();
+    println!("[{}] Decrypted metadata message", peer_addr);
+    enc_writer.write_message(&metadata).await.unwrap();
 
     loop {
         if let Ok(message) = enc_reader.read_message::<PeerMessageResponse>().await {

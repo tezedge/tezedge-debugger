@@ -8,6 +8,7 @@ use smoltcp::{
     wire::{EthernetFrame},
     phy::{RawSocket, Device, RxToken, wait},
 };
+use std::net::SocketAddr;
 
 pub fn raw_socket_producer(settings: SystemSettings) -> io::Result<()> {
     let orchestrator = spawn_packet_orchestrator(settings.clone());
@@ -28,6 +29,15 @@ pub fn raw_socket_producer(settings: SystemSettings) -> io::Result<()> {
                 }).unwrap();
 
                 if let Some(packet) = Packet::new(packet_frame) {
+                    let local_rpc_addr = SocketAddr::new(settings.local_address, settings.rpc_port);
+                    let local_syslog_addr = SocketAddr::new(settings.local_address, settings.syslog_port);
+
+                    if packet.source_address() == local_rpc_addr || packet.destination_address() == local_rpc_addr ||
+                        packet.source_address() == local_syslog_addr || packet.destination_address() == local_syslog_addr {
+                        // this is for local server, ignore
+                        continue;
+                    }
+
                     match orchestrator.send(packet) {
                         Ok(_) => {
                             trace!("sent packet for processing");
