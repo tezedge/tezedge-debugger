@@ -7,6 +7,7 @@ pub mod p2p_parser;
 pub mod raw_socket_producer;
 pub mod processor;
 pub mod syslog_producer;
+pub mod rpc_parser;
 
 pub mod prelude {
     pub use super::p2p_parser::spawn_p2p_parser;
@@ -26,4 +27,5 @@ pub struct SystemSettings {
     pub storage: MessageStore,
     pub syslog_port: u16,
     pub rpc_port: u16,
+    pub node_rpc_port: u16,
 }

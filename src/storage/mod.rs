@@ -1,11 +1,14 @@
 mod p2p_storage;
 mod log_storage;
+mod rpc_storage;
 mod secondary_index;
 
 pub use p2p_storage::{P2pStore, P2pFilters};
 pub use log_storage::{LogStore, LogFilters};
+pub use rpc_storage::{RpcStore, RpcFilters};
 pub(crate) use p2p_storage::secondary_indexes as p2p_indexes;
 pub(crate) use log_storage::secondary_indexes as log_indexes;
+pub(crate) use rpc_storage::secondary_indexes as rpc_indexes;
 
 use rocksdb::{DB, ColumnFamilyDescriptor};
 use std::{
@@ -19,6 +22,7 @@ use storage::persistent::KeyValueSchema;
 pub struct MessageStore {
     p2p_db: P2pStore,
     log_db: LogStore,
+    rpc_db: RpcStore,
     raw_db: Arc<DB>,
     max_db_size: Option<u64>,
 }
@@ -28,6 +32,7 @@ impl MessageStore {
         Self {
             p2p_db: P2pStore::new(db.clone()),
             log_db: LogStore::new(db.clone()),
+            rpc_db: RpcStore::new(db.clone()),
             raw_db: db,
             max_db_size: None,
         }
@@ -40,18 +45,24 @@ impl MessageStore {
     pub fn log(&self) -> &LogStore {
         &self.log_db
     }
+
+    pub fn rpc(&self) -> &RpcStore {
+        &self.rpc_db
+    }
 }
 
 pub fn cfs() -> Vec<ColumnFamilyDescriptor> {
     vec![
         P2pStore::descriptor(),
         LogStore::descriptor(),
+        RpcStore::descriptor(),
         p2p_indexes::RemoteAddrIndex::descriptor(),
         p2p_indexes::TypeIndex::descriptor(),
         p2p_indexes::IncomingIndex::descriptor(),
         p2p_indexes::SourceTypeIndex::descriptor(),
         log_indexes::LevelIndex::descriptor(),
         log_indexes::TimestampIndex::descriptor(),
+        rpc_indexes::RemoteAddrIndex::descriptor(),
     ]
 }
 

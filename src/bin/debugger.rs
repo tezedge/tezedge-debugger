@@ -77,6 +77,7 @@ async fn main() -> Result<(), failure::Error> {
         storage: storage.clone(),
         syslog_port: 13131,
         rpc_port: 13031,
+        node_rpc_port: 18732,
     };
 
     if let Err(err) = syslog_producer(settings.clone()).await {

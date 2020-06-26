@@ -5,13 +5,11 @@ use std::{
         Arc, atomic::{AtomicU64, Ordering},
     }, net::{SocketAddr},
 };
-use crate::storage::{
-    StoreMessage,
-    rpc_message::RpcMessage,
-};
+use tracing::{info, warn};
 use secondary_indexes::RemoteAddrIndex;
 use crate::storage::secondary_index::SecondaryIndex;
 use crate::storage::sorted_intersect::sorted_intersect;
+use crate::messages::rpc_message::RpcMessage;
 
 #[derive(Debug, Default, Clone)]
 pub struct RpcFilters {
@@ -24,17 +22,18 @@ impl RpcFilters {
     }
 }
 
-pub type RpcMessageStorageKV = dyn KeyValueStoreWithSchema<RpcStorage> + Sync + Send;
+pub type RpcMessageStorageKV = dyn KeyValueStoreWithSchema<RpcStore> + Sync + Send;
 
 #[derive(Clone)]
-pub struct RpcStorage {
+pub struct RpcStore {
     kv: Arc<RpcMessageStorageKV>,
     remote_addr_index: RemoteAddrIndex,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
 }
 
-impl RpcStorage {
+#[allow(dead_code)]
+impl RpcStore {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
             kv: kv.clone(),
@@ -56,15 +55,16 @@ impl RpcStorage {
         self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
-    pub fn make_indexes(&self, primary_index: u64, value: &StoreMessage) -> Result<(), StorageError> {
+    pub fn make_indexes(&self, primary_index: u64, value: &RpcMessage) -> Result<(), StorageError> {
         self.remote_addr_index.store_index(&primary_index, value)
     }
 
-    pub fn delete_indexes(&self, primary_index: u64, value: &StoreMessage) -> Result<(), StorageError> {
+    pub fn delete_indexes(&self, primary_index: u64, value: &RpcMessage) -> Result<(), StorageError> {
         self.remote_addr_index.delete_index(&primary_index, value)
     }
 
-    pub fn put_message(&self, index: u64, msg: &StoreMessage) -> Result<(), StorageError> {
+    pub fn put_message(&self, index: u64, msg: &mut RpcMessage) -> Result<(), StorageError> {
+        msg.id = index;
         if self.kv.contains(&index)? {
             self.kv.merge(&index, &msg)?;
         } else {
@@ -75,8 +75,9 @@ impl RpcStorage {
         Ok(())
     }
 
-    pub fn store_message(&self, msg: &StoreMessage) -> Result<u64, StorageError> {
+    pub fn store_message(&self, msg: &mut RpcMessage) -> Result<u64, StorageError> {
         let index = self.reserve_index();
+        msg.id = index;
         self.kv.put(&index, &msg)?;
         self.make_indexes(index, &msg)?;
         self.inc_count();
@@ -86,7 +87,7 @@ impl RpcStorage {
     pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filters: RpcFilters) -> Result<Vec<RpcMessage>, StorageError> {
         let mut ret = Vec::with_capacity(limit);
         if filters.empty() {
-            ret.extend(self.cursor_iterator(cursor_index)?.take(limit).map(|(key, value)| RpcMessage::from_store(&value, key)));
+            ret.extend(self.cursor_iterator(cursor_index)?.take(limit).map(|(_key, value)| value));
         } else {
             let mut iters: Vec<Box<dyn Iterator<Item=u64>>> = Default::default();
             if let Some(remote_addr) = filters.remote_addr {
@@ -97,7 +98,7 @@ impl RpcStorage {
         Ok(ret)
     }
 
-    fn cursor_iterator<'a>(&'a self, cursor_index: Option<u64>) -> Result<Box<dyn 'a + Iterator<Item=(u64, StoreMessage)>>, StorageError> {
+    fn cursor_iterator<'a>(&'a self, cursor_index: Option<u64>) -> Result<Box<dyn 'a + Iterator<Item=(u64, RpcMessage)>>, StorageError> {
         Ok(Box::new(self.kv.iterator(IteratorMode::From(&cursor_index.unwrap_or(std::u64::MAX), Direction::Reverse))?
             .filter_map(|(k, v)| {
                 k.ok().and_then(|key| Some((key, v.ok()?)))
@@ -113,19 +114,17 @@ impl RpcStorage {
 
     fn load_indexes<Iter: 'static + Iterator<Item=u64>>(&self, indexes: Iter) -> impl Iterator<Item=RpcMessage> + 'static {
         let kv = self.kv.clone();
-        let mut count = 0;
         indexes.filter_map(move |index| {
             match kv.get(&index) {
                 Ok(Some(value)) => {
-                    count += 1;
-                    Some(RpcMessage::from_store(&value, index.clone()))
+                    Some(value)
                 }
                 Ok(None) => {
-                    log::info!("No value at index: {}", index);
+                    info!("No value at index: {}", index);
                     None
                 }
                 Err(err) => {
-                    log::warn!("Failed to load value at index {}: {}",index, err);
+                    warn!("Failed to load value at index {}: {}", index, err);
                     None
                 }
             }
@@ -133,9 +132,9 @@ impl RpcStorage {
     }
 }
 
-impl KeyValueSchema for RpcStorage {
+impl KeyValueSchema for RpcStore {
     type Key = u64;
-    type Value = StoreMessage;
+    type Value = RpcMessage;
 
     fn name() -> &'static str { "rpc_message_storage" }
 }
@@ -144,7 +143,7 @@ pub(crate) mod secondary_indexes {
     use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, Decoder, SchemaError, Encoder};
     use std::sync::Arc;
     use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
-    use crate::storage::{RpcStorage, P2PStorage, encode_address};
+    use crate::storage::{RpcStore, encode_address};
     use crate::storage::secondary_index::SecondaryIndex;
     use std::net::SocketAddr;
 
@@ -171,7 +170,7 @@ pub(crate) mod secondary_indexes {
 
     impl KeyValueSchema for RemoteAddrIndex {
         type Key = RemoteKey;
-        type Value = <RpcStorage as KeyValueSchema>::Key;
+        type Value = <RpcStore as KeyValueSchema>::Key;
 
         fn descriptor() -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
@@ -185,14 +184,14 @@ pub(crate) mod secondary_indexes {
         }
     }
 
-    impl SecondaryIndex<RpcStorage> for RemoteAddrIndex {
+    impl SecondaryIndex<RpcStore> for RemoteAddrIndex {
         type FieldType = SocketAddr;
 
-        fn accessor(value: &<P2PStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
-            Some(value.remote_addr())
+        fn accessor(value: &<RpcStore as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+            Some(value.remote_addr)
         }
 
-        fn make_index(key: &<P2PStorage as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
+        fn make_index(key: &<RpcStore as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
             RemoteKey::new(value, key.clone())
         }
 

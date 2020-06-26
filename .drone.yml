@@ -38,14 +38,6 @@ steps:
       - sleep 1
       - /etc/bin/drone-client --server server:13030
       - cargo test
-#  - name: test
-#    image: simplestakingcom/tezedge-ci-builder:latest
-#    pull: if-not-exists
-#    volumes:
-#      - name: binaries
-#        path: /etc/bin
-#    commands:
-#      - /etc/bin/enpoint-tester http://server:13031/v2/p2p 2
 
 volumes:
   - name: binaries
@@ -53,3 +45,8 @@ volumes:
   - name: identity
     host:
       path: /tmp/volume
+
+trigger:
+  branch:
+    - master
+    - dev

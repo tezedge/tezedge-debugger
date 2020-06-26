@@ -50,18 +50,70 @@ async fn tests_p2p_correct_test_output() {
     }
     let conn_count = types.get("connection_message")
         .expect("expected two connection messages");
+    let metadata_count = types.get("metadata_message")
+        .expect("expected two metadata messages");
     let advertise_count = types.get("advertise")
         .expect("expected two advertise messages");
     assert_eq!(2, *conn_count, "expected two connection messages");
+    assert_eq!(2, *metadata_count, "expected two metadata messages");
     assert_eq!(2, *advertise_count, "expected two advertise messages");
-    // [
-    //  Object({
-    //      "id": Null,
-    //      "incoming": Bool(false),
-    //      "payload": Array([Object({"disable_mempool": Bool(false), "private_node": Bool(false), "type": String("metadata_message")})]),
-    //      "remote_addr": String("192.168.112.3:53748"),
-    //      "source_type": String("local"),
-    //      "timestamp": Number(1593081235997286519)}
-    // ),
-    // Object({"id": Null, "incoming": Bool(true), "payload": Array([Object({"disable_mempool": Bool(false), "private_node": Bool(false), "type": String("metadata_message")})]), "remote_addr": String("192.168.112.3:53748"), "source_type": String("remote"), "timestamp": Number(1593081235996941682)}), Object({"id": Null, "incoming": Bool(false), "payload": Array([Object({"message_nonce": String("0a6cbc90a77a9042457c7fec839faab0c43f687311c4ab42"), "port": Number(0), "proof_of_work_stamp": String("d0e1945cb693c743e82b3e29750ebbc746c14dbc280c6ee6"), "public_key": String("idsscFHxXoeJjxQsQBeEveayLyvymA"), "type": String("connection_message"), "versions": Array([])})]), "remote_addr": String("192.168.112.3:53748"), "source_type": String("local"), "timestamp": Number(1593081235996523233)}), Object({"id": Null, "incoming": Bool(true), "payload": Array([Object({"message_nonce": String("d0910f48326294ad6fc7592833e375ad49c18d15d63dd251"), "port": Number(0), "proof_of_work_stamp": String("74ed18aa2c733e0cbde54e2e7fb9dab28665a3a4d3a9cb08"), "public_key": String("idrj5eYTN6BgrzCT1YQh3mCVuWciVr"), "type": String("connection_message"), "versions": Array([])})]), "remote_addr": String("192.168.112.3:53748"), "source_type": String("remote"), "timestamp": Number(1593081235996182253)})]
+}
+
+#[tokio::test]
+async fn test_p2p_limit() {
+    let debugger_url = debugger_url();
+    let base_endpoint = format!("{}/{}", debugger_url, V2_ENDPOINT);
+    for limit in 0..=EXPECTED_MESSAGES {
+        let response = get_rpc_as_json(&format!("{}?limit={}", base_endpoint, limit))
+            .await.unwrap();
+        assert_eq!(response.as_array().unwrap().len(), limit);
+    }
+}
+
+#[ignore]
+#[tokio::test]
+async fn test_p2p_cursor() {
+    let debugger_url = debugger_url();
+    let base_endpoint = format!("{}/{}", debugger_url, V2_ENDPOINT);
+    for cursor_id in 0..=EXPECTED_MESSAGES {
+        let response = get_rpc_as_json(&format!("{}?cursor_id={}", base_endpoint, cursor_id))
+            .await.unwrap();
+        assert_eq!(response[0]["id"], cursor_id, "{}", cursor_id);
+    }
+}
+
+#[tokio::test]
+async fn test_p2p_types() {
+    let debugger_url = debugger_url();
+    let base_endpoint = format!("{}/{}", debugger_url, V2_ENDPOINT);
+    let values: &[(&str, usize)] = &[
+        ("metadata", 2),
+        ("advertise", 0),
+        ("connection_message", 2),
+    ];
+    for (r#type, count) in values {
+        let response = get_rpc_as_json(&format!("{}?types={}", base_endpoint, r#type))
+            .await.unwrap();
+        assert_eq!(response.as_array().unwrap().len(), *count, "{}", r#type);
+    }
+}
+
+#[tokio::test]
+async fn test_p2p_combination_types() {
+    let debugger_url = debugger_url();
+    let base_endpoint = format!("{}/{}", debugger_url, V2_ENDPOINT);
+    let values: &[(&str, usize)] = &[
+        ("metadata,connection_message", 4),
+        ("metadata,advertise", 2),
+        ("connection_message,advertise", 2),
+        ("connection_message,metadata", 4),
+        ("advertise,connection_message", 2),
+        ("advertise,metadata", 2),
+        ("advertise,metadata,connection_message", 4),
+    ];
+    for (r#type, number) in values {
+        let response = get_rpc_as_json(&format!("{}?types={}", base_endpoint, *r#type))
+            .await.unwrap();
+        assert_eq!(response.as_array().unwrap().len(), *number, "{}", r#type);
+    }
 }
