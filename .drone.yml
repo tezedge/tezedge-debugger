@@ -3,6 +3,14 @@ type: docker
 name: default
 
 steps:
+  - name: set_identity
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    volumes:
+      - name: identity
+        path: /tmp/volume
+    commands:
+      - cp ./tests/test_identity.json /tmp/volume/identity.json
   - name: build
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
@@ -43,8 +51,7 @@ volumes:
   - name: binaries
     temp: {}
   - name: identity
-    host:
-      path: /tmp/volume
+    temp: {}
 
 trigger:
   branch:
