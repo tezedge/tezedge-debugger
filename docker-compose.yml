@@ -1,0 +1,37 @@
+version: "3"
+
+services:
+  debugger:
+    image: debugger
+    build: .
+    network_mode: "service:node"
+    volumes:
+      - "shared-data:/tmp/volume"
+    entrypoint: ./tezedge-debugger
+  node:
+    image: simplestakingcom/tezedge
+    hostname: node
+    ports:
+      # Node specific ports
+      - "4927:4927"        # node WS port (required only for tezedge)
+      - "19732:9732"       # node P2P port
+      - "18732:18732"      # node RPC port
+      # Debugger Ports must be specified on node service, because of debugger network_mode attaches
+      # debugger's container to the node container, allowing it to analyze node's traffic
+      - "13031:13031"      # debugger RPC port
+      - "13131:13131/udp"  # debugger syslog port
+    entrypoint: /home/appuser/tezedge/docker/compose/tezedge.sh
+    logging:
+      # Produce syslogs instead of terminal logs
+      driver: "syslog"
+      options:
+        # Send the logs to syslog (UDP only) server (running on debugger)
+        syslog-address: "udp://0.0.0.0:13131"  # Port must match debugger syslog port in 'ports' section
+        # Always in same RFC 5424 format (with microseconds precision)
+        syslog-format: "rfc5424micro"
+    volumes:
+      - "shared-data:/tmp/tezedge"
+
+volumes:
+  shared-data:
+    external: false

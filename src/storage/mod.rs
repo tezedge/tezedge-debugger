@@ -1,36 +1,28 @@
-// Copyright (c) SimpleStaking and Tezedge Contributors
-// SPDX-License-Identifier: MIT
-
-pub mod storage_message;
-pub mod rpc_message;
 mod p2p_storage;
-mod rpc_storage;
 mod log_storage;
+mod rpc_storage;
 mod secondary_index;
 
-pub use storage_message::*;
-pub use p2p_storage::*;
-pub use rpc_storage::*;
-pub use log_storage::*;
+pub use p2p_storage::{P2pStore, P2pFilters};
+pub use log_storage::{LogStore, LogFilters};
+pub use rpc_storage::{RpcStore, RpcFilters};
 pub(crate) use p2p_storage::secondary_indexes as p2p_indexes;
-pub(crate) use rpc_storage::secondary_indexes as rpc_indexes;
 pub(crate) use log_storage::secondary_indexes as log_indexes;
+pub(crate) use rpc_storage::secondary_indexes as rpc_indexes;
 
-use rocksdb::{DB, WriteOptions, ColumnFamilyDescriptor};
+use rocksdb::{DB, ColumnFamilyDescriptor};
 use std::{
-    path::Path,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
     net::IpAddr,
 };
 use storage::persistent::KeyValueSchema;
-// use std::fs::remove_dir_all;
 
 #[derive(Clone)]
 pub struct MessageStore {
-    p2p_db: P2PStorage,
-    rpc_db: RpcStorage,
-    log_db: LogStorage,
+    p2p_db: P2pStore,
+    log_db: LogStore,
+    rpc_db: RpcStore,
     raw_db: Arc<DB>,
     max_db_size: Option<u64>,
 }
@@ -38,70 +30,40 @@ pub struct MessageStore {
 impl MessageStore {
     pub fn new(db: Arc<DB>) -> Self {
         Self {
-            p2p_db: P2PStorage::new(db.clone()),
-            rpc_db: RpcStorage::new(db.clone()),
-            log_db: LogStorage::new(db.clone()),
+            p2p_db: P2pStore::new(db.clone()),
+            log_db: LogStore::new(db.clone()),
+            rpc_db: RpcStore::new(db.clone()),
             raw_db: db,
             max_db_size: None,
         }
     }
 
-    pub fn rpc(&self) -> &RpcStorage {
-        &self.rpc_db
-    }
-
-    pub fn p2p(&self) -> &P2PStorage {
+    pub fn p2p(&self) -> &P2pStore {
         &self.p2p_db
     }
 
-    pub fn log(&self) -> &LogStorage {
+    pub fn log(&self) -> &LogStore {
         &self.log_db
     }
 
-    pub(crate) fn database_path(&self) -> &Path {
-        self.raw_db.path()
-    }
-
-    pub(crate) fn database_size(&self) -> std::io::Result<u64> {
-        dir_size(self.database_path())
+    pub fn rpc(&self) -> &RpcStore {
+        &self.rpc_db
     }
 }
 
-pub(crate) fn cfs() -> Vec<ColumnFamilyDescriptor> {
+pub fn cfs() -> Vec<ColumnFamilyDescriptor> {
     vec![
-        RpcStorage::descriptor(),
-        P2PStorage::descriptor(),
-        LogStorage::descriptor(),
+        P2pStore::descriptor(),
+        LogStore::descriptor(),
+        RpcStore::descriptor(),
         p2p_indexes::RemoteAddrIndex::descriptor(),
         p2p_indexes::TypeIndex::descriptor(),
-        p2p_indexes::RequestTrackingIndex::descriptor(),
         p2p_indexes::IncomingIndex::descriptor(),
         p2p_indexes::SourceTypeIndex::descriptor(),
-        rpc_indexes::RemoteAddrIndex::descriptor(),
         log_indexes::LevelIndex::descriptor(),
         log_indexes::TimestampIndex::descriptor(),
+        rpc_indexes::RemoteAddrIndex::descriptor(),
     ]
-}
-
-pub(crate) fn default_write_options() -> WriteOptions {
-    let mut opts = WriteOptions::default();
-    opts.set_sync(false);
-    opts
-}
-
-pub(crate) fn dir_size<P: AsRef<Path>>(path: P) -> std::io::Result<u64> {
-    fn dir_size(mut dir: std::fs::ReadDir) -> std::io::Result<u64> {
-        dir.try_fold(0, |acc, file| {
-            let file = file?;
-            let size = match file.metadata()? {
-                data if data.is_dir() => dir_size(std::fs::read_dir(file.path())?)?,
-                data => data.len(),
-            };
-            Ok(acc + size)
-        })
-    }
-
-    dir_size(std::fs::read_dir(path)?)
 }
 
 pub fn get_ts() -> u128 {
