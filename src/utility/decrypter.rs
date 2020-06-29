@@ -1,5 +1,5 @@
 use bytes::Buf;
-use tracing::{warn, error};
+use tracing::{warn, trace, error};
 use crypto::{
     crypto_box::{PrecomputedKey, decrypt},
     nonce::Nonce,
@@ -22,6 +22,7 @@ pub struct P2pDecrypter {
     inc_buf: Vec<u8>,
     dec_buf: Vec<u8>,
     input_remaining: usize,
+
 }
 
 impl P2pDecrypter {
@@ -52,9 +53,10 @@ impl P2pDecrypter {
     fn try_decrypt(&mut self) -> Option<Vec<u8>> {
         let len = (&self.inc_buf[0..2]).get_u16() as usize;
         if self.inc_buf[2..].len() >= len {
-            use tracing::info;
             let chunk = match BinaryChunk::try_from(self.inc_buf[0..len + 2].to_vec()) {
-                Ok(chunk) => chunk,
+                Ok(chunk) => {
+                    chunk
+                }
                 Err(e) => {
                     error!(error = display(e), "failed to load binary chunk");
                     return None;
@@ -62,12 +64,14 @@ impl P2pDecrypter {
             };
 
             self.inc_buf.drain(0..len + 2);
-            match decrypt(chunk.content(), &self.nonce_fetch_increment(), &self.precomputed_key) {
+            let content = chunk.content();
+            match decrypt(content, &self.nonce_fetch(), &self.precomputed_key) {
                 Ok(msg) => {
+                    self.nonce_increment();
                     Some(msg)
                 }
                 Err(err) => {
-                    info!(error = display(err), "failed to decrypt message");
+                    tracing::info!(data = debug(content), error = display(err), "failed to decrypt message");
                     None
                 }
             }
@@ -104,7 +108,7 @@ impl P2pDecrypter {
                         self.dec_buf.drain(self.dec_buf.len() - bytes..);
                     }
                     Err(e) => {
-                        warn!(error = display(e), "failed to deserialize message");
+                        warn!(data = debug(&self.dec_buf), error = display(e), "failed to deserialize message");
                         return None;
                     }
                 }
@@ -145,8 +149,18 @@ impl P2pDecrypter {
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn nonce_fetch_increment(&mut self) -> Nonce {
         let incremented = self.nonce.increment();
         std::mem::replace(&mut self.nonce, incremented)
+    }
+
+    #[inline]
+    fn nonce_fetch(&self) -> Nonce {
+        self.nonce.clone()
+    }
+
+    fn nonce_increment(&mut self) {
+        self.nonce = self.nonce.increment();
     }
 }

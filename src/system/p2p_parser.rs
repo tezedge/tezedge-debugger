@@ -124,6 +124,7 @@ enum ParserState {
 
 pub struct ParserEncryption {
     initializer: SocketAddr,
+    incoming: bool,
     local_address: IpAddr,
     identity: Identity,
     first_connection_message: Option<ConnectionMessage>,
@@ -138,6 +139,7 @@ impl ParserEncryption {
             initializer,
             local_address,
             identity,
+            incoming: false,
             first_connection_message: None,
             second_connection_message: None,
             incoming_decrypter: None,
@@ -150,12 +152,8 @@ impl ParserEncryption {
     }
 
     pub fn extract_remote(&self, packet: &Packet) -> (SocketAddr, bool) {
-        if packet.destination_address().ip() == packet.source_address().ip() {
-            (packet.destination_address(), true)
-        } else {
-            let incoming = self.local_address == packet.destination_address().ip();
-            (if incoming { packet.source_address() } else { packet.destination_address() }, incoming)
-        }
+        let incoming = self.local_address == packet.destination_address().ip();
+        (if incoming { packet.source_address() } else { packet.destination_address() }, incoming)
     }
 
     pub fn process_unencrypted(&mut self, packet: Packet) -> Result<Option<P2pMessage>, Error> {
@@ -195,7 +193,7 @@ impl ParserEncryption {
 
     pub fn process_encrypted(&mut self, packet: Packet) -> Result<Option<P2pMessage>, Error> {
         let (remote, incoming) = self.extract_remote(&packet);
-        let decrypter = if incoming {
+        let decrypter = if !incoming {
             &mut self.incoming_decrypter
         } else {
             &mut self.outgoing_decrypter
@@ -234,7 +232,10 @@ impl ParserEncryption {
             self.incoming_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), local));
             self.outgoing_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), remote));
 
-            info!(initializer = display(self.initializer), "connection upgraded to encrypted");
+            info!(
+                initializer = display(self.initializer),
+                "connection upgraded to encrypted"
+            );
             Ok(())
         } else {
             unreachable!()
