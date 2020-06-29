@@ -1,0 +1,37 @@
+version: "3"
+
+services:
+  ocaml-debugger:
+    image: debugger
+    build: .
+    network_mode: "service:ocaml-node"
+    environment:
+      - RUST_BACKTRACE=1
+    volumes:
+      - "ocaml-shared-data:/tmp/volume"
+    entrypoint: ./tezedge-debugger
+  ocaml-node:
+    image: tezos/tezos:carthagenet
+    hostname: node
+    ports:
+      # Node specific ports
+      - "11200:9732"       # node P2P port
+      - "11100:8732"      # node RPC port
+      # Debugger Ports must be specified on node service, because of debugger network_mode attaches
+      # debugger's container to the node container, allowing it to analyze node's traffic
+      - "11000:13031"      # debugger RPC port
+      - "11001:13131/udp"  # debugger syslog port
+    command: tezos-node --cors-header='content-type' --cors-origin='*'
+    logging:
+      # Produce syslogs instead of terminal logs
+      driver: "syslog"
+      options:
+        # Send the logs to syslog (UDP only) server (running on debugger)
+        syslog-address: "udp://0.0.0.0:11001"  # Port must match debugger syslog port in 'ports' section
+        # Always in same RFC 5424 format (with microseconds precision)
+        syslog-format: "rfc5424micro"
+    volumes:
+      - "ocaml-shared-data:/var/run/tezos/node"
+
+volumes:
+  ocaml-shared-data:

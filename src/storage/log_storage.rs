@@ -1,14 +1,18 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema};
 use std::sync::Arc;
 use rocksdb::{DB};
+use tracing::{info, error};
 use std::sync::atomic::{AtomicU64, Ordering};
-use crate::actors::logs_message::LogMessage;
+use crate::messages::log_message::LogMessage;
 use storage::{StorageError, IteratorMode, Direction};
 use crate::storage::log_storage::secondary_indexes::{LevelIndex, LogLevel, TimestampIndex};
 use crate::storage::secondary_index::SecondaryIndex;
 use crate::storage::sorted_intersect::sorted_intersect;
 
-pub type LogStorageKV = dyn KeyValueStoreWithSchema<LogStorage> + Sync + Send;
+pub type LogStorageKV = dyn KeyValueStoreWithSchema<LogStore> + Sync + Send;
 
 #[derive(Debug, Default, Clone)]
 pub struct LogFilters {
@@ -23,7 +27,7 @@ impl LogFilters {
 }
 
 #[derive(Clone)]
-pub struct LogStorage {
+pub struct LogStore {
     kv: Arc<LogStorageKV>,
     level_index: LevelIndex,
     timestamp_index: TimestampIndex,
@@ -31,7 +35,8 @@ pub struct LogStorage {
     seq: Arc<AtomicU64>,
 }
 
-impl LogStorage {
+#[allow(dead_code)]
+impl LogStore {
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
             kv: kv.clone(),
@@ -126,19 +131,17 @@ impl LogStorage {
 
     fn load_indexes<Iter: 'static + Iterator<Item=u64>>(&self, indexes: Iter) -> impl Iterator<Item=LogMessage> + 'static {
         let kv = self.kv.clone();
-        let mut count = 0;
         indexes.filter_map(move |index| {
             match kv.get(&index) {
                 Ok(Some(value)) => {
-                    count += 1;
                     Some(value)
                 }
                 Ok(None) => {
-                    log::info!("No value at index: {}", index);
+                    info!(index = index, "no value found");
                     None
                 }
                 Err(err) => {
-                    log::warn!("Failed to load value at index {}: {}",index, err);
+                    error!(index = index, error = display(err), "failed to load value");
                     None
                 }
             }
@@ -146,7 +149,7 @@ impl LogStorage {
     }
 }
 
-impl KeyValueSchema for LogStorage {
+impl KeyValueSchema for LogStore {
     type Key = u64;
     type Value = LogMessage;
 
@@ -159,8 +162,9 @@ pub(crate) mod secondary_indexes {
         sync::Arc,
         str::FromStr,
     };
+    use tracing::warn;
     use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
-    use crate::storage::LogStorage;
+    use crate::storage::LogStore;
     use serde::{Serialize, Deserialize};
     use failure::{Fail};
     use crate::storage::secondary_index::SecondaryIndex;
@@ -187,7 +191,7 @@ pub(crate) mod secondary_indexes {
 
     impl KeyValueSchema for LevelIndex {
         type Key = LogLevelKey;
-        type Value = <LogStorage as KeyValueSchema>::Key;
+        type Value = <LogStore as KeyValueSchema>::Key;
 
         fn descriptor() -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
@@ -201,20 +205,20 @@ pub(crate) mod secondary_indexes {
         }
     }
 
-    impl SecondaryIndex<LogStorage> for LevelIndex {
+    impl SecondaryIndex<LogStore> for LevelIndex {
         type FieldType = LogLevel;
 
-        fn accessor(value: &<LogStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+        fn accessor(value: &<LogStore as KeyValueSchema>::Value) -> Option<Self::FieldType> {
             match value.level.parse() {
                 Ok(level) => Some(level),
                 Err(_) => {
-                    log::warn!("Got invalid log level {}", value.level);
+                    warn!(level = display(&value.level), "got invalid log level");
                     None
                 }
             }
         }
 
-        fn make_index(key: &<LogStorage as KeyValueSchema>::Key, value: Self::FieldType) -> LogLevelKey {
+        fn make_index(key: &<LogStore as KeyValueSchema>::Key, value: Self::FieldType) -> LogLevelKey {
             LogLevelKey::new(value, key.clone())
         }
 
@@ -358,7 +362,7 @@ pub(crate) mod secondary_indexes {
 
     impl KeyValueSchema for TimestampIndex {
         type Key = TimestampKey;
-        type Value = <LogStorage as KeyValueSchema>::Key;
+        type Value = <LogStore as KeyValueSchema>::Key;
 
         fn name() -> &'static str {
             "log_timestamp_index"
@@ -371,14 +375,14 @@ pub(crate) mod secondary_indexes {
         }
     }
 
-    impl SecondaryIndex<LogStorage> for TimestampIndex {
+    impl SecondaryIndex<LogStore> for TimestampIndex {
         type FieldType = u128;
 
-        fn accessor(value: &<LogStorage as KeyValueSchema>::Value) -> Option<Self::FieldType> {
+        fn accessor(value: &<LogStore as KeyValueSchema>::Value) -> Option<Self::FieldType> {
             Some(value.date)
         }
 
-        fn make_index(key: &<LogStorage as KeyValueSchema>::Key, value: Self::FieldType) -> TimestampKey {
+        fn make_index(key: &<LogStore as KeyValueSchema>::Key, value: Self::FieldType) -> TimestampKey {
             TimestampKey::new(value, key.clone())
         }
 

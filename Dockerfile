@@ -1,13 +1,9 @@
-FROM kyras/tezedge_base:latest AS builder
-WORKDIR /home/appuser/tezedge_proxy
+FROM kyras/tezedge_base:latest as builder
+WORKDIR /home/appuser/
 COPY . .
-RUN cargo build --release
+RUN cargo install --bins --path . --root .
 
-FROM kyras/tezedge_base:latest
-WORKDIR /home/appuser/proxy
-COPY ./docker/run/ ./
-COPY --from=builder /home/appuser/tezedge_proxy/target/release/tezedge_debugger /home/appuser/proxy/tezedge_proxy
-#COPY --from=builder /home/appuser/tezedge_proxy/docker/run/identity/ /home/appuser/proxy/identity
-#COPY --from=builder /home/appuser/tezedge_proxy/docker/run /home/appuser/proxy/
-ENV RUST_BACKTRACE=1
-CMD ["./run.sh"]
+FROM ubuntu:latest
+WORKDIR /home/appuser/
+COPY --from=builder /home/appuser/bin ./
+#CMD ["./tezedge-debugger"]

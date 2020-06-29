@@ -1,0 +1,61 @@
+kind: pipeline
+type: docker
+name: default
+
+steps:
+  - name: set_identity
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    volumes:
+      - name: identity
+        path: /tmp/volume
+    commands:
+      - cp ./tests/test_identity.json /tmp/volume/identity.json
+  - name: build
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    environment:
+      RUST_BACKTRACE: 1
+    volumes:
+      - name: binaries
+        path: /tmp/binaries
+    commands:
+      - cargo install --bins --path . --root .
+      - cp ./bin/* /tmp/binaries
+  - name: server
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    detach: true
+    volumes:
+      - name: binaries
+        path: /etc/bin
+      - name: identity
+        path: /tmp/volume
+    commands:
+      - /etc/bin/drone-server
+  - name: client
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    environment:
+      DEBUGGER_SERVER: "http://client:13031"
+    volumes:
+      - name: binaries
+        path: /etc/bin
+      - name: identity
+        path: /tmp/volume
+    commands:
+      - /etc/bin/tezedge-debugger &
+      - sleep 1
+      - /etc/bin/drone-client --server server:13030
+      - cargo test
+
+volumes:
+  - name: binaries
+    temp: {}
+  - name: identity
+    temp: {}
+
+trigger:
+  branch:
+    - master
+    - dev

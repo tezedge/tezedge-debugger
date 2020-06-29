@@ -1,5 +1,8 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use crate::storage::{
-    {MessageStore, P2PFilters},
+    {MessageStore, P2pFilters},
     p2p_indexes::{ParseTypeError, Type},
 };
 use warp::{
@@ -12,11 +15,11 @@ use warp::reply::{WithStatus, Json};
 use std::net::SocketAddr;
 use std::convert::TryInto;
 use itertools::Itertools;
-use crate::storage::rpc_message::SourceType;
-// use storage::StorageError;
+use crate::messages::p2p_message::{SourceType};
+use crate::messages::endpoint_message::EndpointMessage;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct P2PCursor {
+pub struct P2pCursor {
     cursor_id: Option<u64>,
     limit: Option<usize>,
     remote_addr: Option<SocketAddr>,
@@ -26,7 +29,7 @@ pub struct P2PCursor {
     source_type: Option<SourceType>,
 }
 
-impl P2PCursor {
+impl P2pCursor {
     fn get_types(&self) -> Result<Option<u32>, ParseTypeError> {
         if let Some(ref values) = self.types {
             let mut ret = 0u32;
@@ -45,12 +48,15 @@ impl P2PCursor {
     }
 }
 
-impl TryInto<crate::storage::P2PFilters> for P2PCursor {
+impl TryInto<P2pFilters> for P2pCursor {
     type Error = ParseTypeError;
 
-    fn try_into(self) -> Result<P2PFilters, Self::Error> {
-        Ok(P2PFilters {
-            source_type: self.source_type.map(|st| st.into()),
+    fn try_into(self) -> Result<P2pFilters, Self::Error> {
+        Ok(P2pFilters {
+            source_type: self.source_type.map(|st| match st {
+                SourceType::Local => true,
+                SourceType::Remote => false,
+            }),
             remote_addr: self.remote_addr,
             types: self.get_types()?,
             request_id: self.request_id,
@@ -62,12 +68,12 @@ impl TryInto<crate::storage::P2PFilters> for P2PCursor {
 pub fn p2p(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "p2p")
         .and(warp::query::query())
-        .map(move |cursor: P2PCursor| -> WithStatus<Json> {
+        .map(move |cursor: P2pCursor| -> WithStatus<Json> {
             let limit = cursor.limit.unwrap_or(100);
             let cursor_id = cursor.cursor_id.clone();
             match cursor.try_into() {
                 Ok(filters) => match storage.p2p().get_cursor(cursor_id, limit, filters) {
-                    Ok(msgs) => with_status(json(&msgs), StatusCode::OK),
+                    Ok(msgs) => with_status(json(&msgs.into_iter().map(|msg| EndpointMessage::from(msg)).collect_vec()), StatusCode::OK),
                     Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
                 },
                 Err(type_err) => with_status(json(&format!("invalid type-name: {}", type_err)), StatusCode::BAD_REQUEST),
