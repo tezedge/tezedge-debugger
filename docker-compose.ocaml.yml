@@ -1,17 +1,17 @@
 version: "3"
 
 services:
-  debugger:
+  ocaml-debugger:
     image: debugger
     build: .
-    network_mode: "service:node"
+    network_mode: "service:ocaml-node"
     environment:
       - RUST_BACKTRACE=1
     volumes:
       - "ocaml-shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger
-  node:
-    image: tezos/tezos:mainnet
+  ocaml-node:
+    image: tezos/tezos:carthagenet
     hostname: node
     ports:
       # Node specific ports

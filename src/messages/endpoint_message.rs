@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 pub enum EndpointMessage {
     P2pMessage {
         #[serde(flatten)]
-        message: P2pMessage,
+        payload: P2pMessage,
     },
     Metadata {
         incoming: bool,
@@ -57,7 +57,7 @@ impl From<P2pMessage> for EndpointMessage {
                     remote_addr: message.remote_addr,
                 }
             }
-            _ => Self::P2pMessage { message }
+            _ => Self::P2pMessage { payload: message }
         }
     }
 }

@@ -1,27 +1,27 @@
 version: "3"
 
 services:
-  debugger:
+  rust-debugger:
     image: debugger
     build: .
-    network_mode: "service:node"
+    network_mode: "service:rust-node"
     environment:
       - RUST_BACKTRACE=1
     volumes:
       - "rust-shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger
-  node:
+  rust-node:
     image: simplestakingcom/tezedge:v0.1.0
     hostname: node
     ports:
       # Node specific ports
-      - "10301:4927"        # node WS port (required only for tezedge)
-      - "10201:9732"       # node P2P port
-      - "10101:18732"      # node RPC port
+      - "10300:4927"        # node WS port (required only for tezedge)
+      - "10200:9732"       # node P2P port
+      - "10100:18732"      # node RPC port
       # Debugger Ports must be specified on node service, because of debugger network_mode attaches
       # debugger's container to the node container, allowing it to analyze node's traffic
-      - "10001:13031"      # debugger RPC port
-      - "10002:13131/udp"  # debugger syslog port
+      - "10000:13031"      # debugger RPC port
+      - "10001:13131/udp"  # debugger syslog port
     entrypoint: /home/appuser/tezedge/docker/compose/tezedge.sh
     logging:
       # Produce syslogs instead of terminal logs
