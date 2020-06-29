@@ -1,7 +1,7 @@
 use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
-use tracing::{trace, info, warn, error};
+use tracing::{trace, info, error};
 use std::{
     collections::{HashMap, hash_map::Entry},
 };

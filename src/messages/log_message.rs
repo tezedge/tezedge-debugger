@@ -33,6 +33,24 @@ impl LogMessage {
         let msg = &level_msg[level.len() + 1..];
         Some((level, msg))
     }
+
+    fn ocaml_log_line(line: &str) -> Option<(&str, &str)> {
+        let mut parts = line.split("-");
+        let _ = parts.next();
+        let msg = parts.next();
+        if let Some(value) = msg {
+            let mut parts = value.split(":");
+            let _ = parts.next();
+            let msg = parts.next();
+            if let Some(msg) = msg {
+                Some(("info", &msg[1..]))
+            } else {
+                Some(("info", &value[1..]))
+            }
+        } else {
+            Some(("info", line))
+        }
+    }
 }
 
 impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for LogMessage {
@@ -43,21 +61,42 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
             .unwrap_or_else(get_ts);
         let line = msg.msg.as_ref();
 
-        if let Some((level, message)) = Self::rust_log_line(line) {
-            Self {
-                date,
-                level: level.to_string(),
-                message: message.to_string(),
-                section: "".to_string(),
-                id: None,
+        let pos = line.find('.').unwrap_or_default();
+        if pos == 15 {
+            if let Some((level, message)) = Self::rust_log_line(line) {
+                Self {
+                    date,
+                    level: level.to_string(),
+                    message: message.to_string(),
+                    section: "".to_string(),
+                    id: None,
+                }
+            } else {
+                Self {
+                    date,
+                    level: "fatal".to_string(),
+                    section: "".to_string(),
+                    id: None,
+                    message: line.to_string(),
+                }
             }
         } else {
-            Self {
-                date,
-                level: "fatal".to_string(),
-                section: "".to_string(),
-                id: None,
-                message: line.to_string(),
+            if let Some((level, message)) = Self::ocaml_log_line(line) {
+                Self {
+                    date,
+                    level: level.to_string(),
+                    message: message.to_string(),
+                    section: "".to_string(),
+                    id: None,
+                }
+            } else {
+                Self {
+                    date,
+                    level: "fatal".to_string(),
+                    section: "".to_string(),
+                    id: None,
+                    message: line.to_string(),
+                }
             }
         }
     }
