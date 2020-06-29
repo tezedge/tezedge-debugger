@@ -57,7 +57,7 @@ pub struct P2pMessage {
     pub remote_addr: SocketAddr,
     pub incoming: bool,
     pub source_type: SourceType,
-    pub payload: Vec<PeerMessage>,
+    pub message: Vec<PeerMessage>,
 }
 
 impl Decoder for P2pMessage {
@@ -89,7 +89,7 @@ impl P2pMessage {
             source_type,
             remote_addr,
             incoming,
-            payload,
+            message: payload,
         }
     }
 

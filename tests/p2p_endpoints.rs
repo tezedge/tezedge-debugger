@@ -16,7 +16,6 @@ async fn tests_p2p_correct_test_output() {
     let values = response.as_array()
         .expect("expected array of messages");
     assert_eq!(values.len(), EXPECTED_MESSAGES, "expected four parsed messages");
-    let mut types = HashMap::new();
     for value in values {
         use serde_json::Value;
         let value = value.as_object()
@@ -25,10 +24,11 @@ async fn tests_p2p_correct_test_output() {
         let values: &[(&'static str, &'static dyn Fn(&Value) -> bool, &str)] = &[
             ("id", &Value::is_number, "number"),
             ("incoming", &Value::is_boolean, "boolean"),
-            ("payload", &Value::is_array, "array"),
             ("remote_addr", &Value::is_string, "string"),
             ("source_type", &Value::is_string, "string"),
             ("timestamp", &Value::is_number, "number"),
+            ("type", &Value::is_string, "string"),
+
         ];
 
         for (field_name, type_check, type_name) in values {
@@ -37,26 +37,7 @@ async fn tests_p2p_correct_test_output() {
             assert!(!field.is_null(), "{} must be set", field_name);
             assert!(type_check(field), "{} should be {}", field_name, type_name);
         }
-
-        let payload = value.get("payload").unwrap().as_array().unwrap();
-        let value = payload.first().expect("messages should not be empty");
-        let message_type = value.get("type")
-            .expect("payload type should be set");
-        assert!(!message_type.is_null(), "payload type should be set");
-        assert!(message_type.is_string(), "payload type should be string");
-        let entry = types.entry(message_type.as_str().unwrap().to_string());
-        let count = entry.or_insert(0);
-        *count += 1;
     }
-    let conn_count = types.get("connection_message")
-        .expect("expected two connection messages");
-    let metadata_count = types.get("metadata_message")
-        .expect("expected two metadata messages");
-    let advertise_count = types.get("advertise")
-        .expect("expected two advertise messages");
-    assert_eq!(2, *conn_count, "expected two connection messages");
-    assert_eq!(2, *metadata_count, "expected two metadata messages");
-    assert_eq!(2, *advertise_count, "expected two advertise messages");
 }
 
 #[tokio::test]

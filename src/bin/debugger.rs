@@ -23,6 +23,43 @@ fn open_database() -> Result<MessageStore, failure::Error> {
     Ok(MessageStore::new(rocksdb))
 }
 
+async fn load_identity() -> Identity {
+    // Wait until identity appears
+    let mut last_try = Instant::now();
+
+    let identity_paths = [
+        "/tmp/volume/identity.json",
+        "/tmp/volume/data/identity.json",
+    ];
+
+    loop {
+        for (path, file) in identity_paths
+            .iter().map(|path| (path, tokio::fs::read_to_string(path)))
+        {
+            match file.await {
+                Ok(content) => {
+                    match serde_json::from_str::<Identity>(&content) {
+                        Ok(identity) => {
+                            info!(file_path = display(path), "loaded identity");
+                            return identity;
+                        }
+                        Err(err) => {
+                            error!(error = display(err), "identity file does not contains valid identity");
+                            exit(1);
+                        }
+                    }
+                }
+                Err(err) => {
+                    if last_try.elapsed().as_secs() >= 5 {
+                        last_try = Instant::now();
+                        info!(error = display(err), "waiting for identity");
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), failure::Error> {
     tracing_subscriber::fmt()
@@ -38,28 +75,7 @@ async fn main() -> Result<(), failure::Error> {
 
     info!(ip_address = display(&local_address), "detected local IP address");
 
-    // Wait until identity appears
-    let mut last_try = Instant::now();
-    let identity = loop {
-        let file = tokio::fs::read_to_string("/tmp/volume/identity.json").await;
-        match file {
-            Ok(content) => {
-                match serde_json::from_str::<Identity>(&content) {
-                    Ok(identity) => break identity,
-                    Err(err) => {
-                        error!(error = display(err), "identity file does not contains valid identity");
-                        exit(1);
-                    }
-                }
-            }
-            Err(err) => {
-                if last_try.elapsed().as_secs() >= 5 {
-                    last_try = Instant::now();
-                    info!(error = display(err), "waiting for identity");
-                }
-            }
-        }
-    };
+    let identity = load_identity().await;
 
     info!(peer_id = display(&identity.peer_id), "loaded identity");
 
@@ -96,7 +112,7 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     tokio::spawn(async move {
-        use tezedge_debugger::server::endpoints::routes;
+        use tezedge_debugger::endpoints::routes;
         warp::serve(routes(storage))
             .run(([0, 0, 0, 0], settings.rpc_port))
             .await;

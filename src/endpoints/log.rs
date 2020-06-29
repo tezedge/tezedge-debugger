@@ -7,7 +7,6 @@ use warp::{
 };
 use std::convert::TryInto;
 use serde::{Serialize, Deserialize};
-use itertools::Itertools;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct LogCursor {
@@ -54,9 +53,7 @@ pub fn log(storage: MessageStore) -> impl Filter<Extract=impl Reply, Error=Rejec
             let cursor_id = cursor.cursor_id.clone();
             match cursor.try_into() {
                 Ok(filters) => match storage.log().get_cursor(cursor_id, limit, filters) {
-                    Ok(msgs) => with_status(json(&msgs.into_iter().map(|log| {
-                        log.compress()
-                    }).collect_vec()), StatusCode::OK),
+                    Ok(msgs) => with_status(json(&msgs), StatusCode::OK),
                     Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
                 },
                 Err(level_error) => with_status(json(&format!("invalid type-name: {}", level_error)), StatusCode::BAD_REQUEST),

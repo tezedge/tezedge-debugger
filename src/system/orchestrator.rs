@@ -63,7 +63,7 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
                         processor = occupied_entry.get_mut();
                     } else {
                         if packet.payload().len() > 0 {
-                            warn!(
+                            trace!(
                                 source = display(src),
                                 destination = display(dst),
                                 "processor does not exists"

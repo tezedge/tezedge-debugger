@@ -124,7 +124,6 @@ enum ParserState {
 
 pub struct ParserEncryption {
     initializer: SocketAddr,
-    incoming: bool,
     local_address: IpAddr,
     identity: Identity,
     first_connection_message: Option<ConnectionMessage>,
@@ -139,7 +138,6 @@ impl ParserEncryption {
             initializer,
             local_address,
             identity,
-            incoming: false,
             first_connection_message: None,
             second_connection_message: None,
             incoming_decrypter: None,

@@ -71,7 +71,7 @@ impl P2pDecrypter {
                     Some(msg)
                 }
                 Err(err) => {
-                    tracing::info!(data = debug(content), error = display(err), "failed to decrypt message");
+                    trace!(data = debug(content), error = display(err), "failed to decrypt message");
                     None
                 }
             }
