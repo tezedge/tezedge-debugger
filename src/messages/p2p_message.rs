@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use crypto::hash::HashType;
 use serde::{Serialize, Deserialize};
 use tezos_messages::p2p::encoding::{

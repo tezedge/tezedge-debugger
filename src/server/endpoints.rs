@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use warp::{
     Filter, Reply,
     reply::{Json, WithStatus, json, with_status, with::header},

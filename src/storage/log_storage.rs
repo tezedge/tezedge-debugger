@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema};
 use std::sync::Arc;
 use rocksdb::{DB};

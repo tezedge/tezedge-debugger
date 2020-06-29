@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 pub mod common;
 
 use common::{debugger_url, get_rpc_as_json};

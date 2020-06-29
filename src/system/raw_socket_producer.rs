@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use crate::messages::tcp_packet::Packet;
 use tracing::{trace, error};
 use std::{io, env, os::unix::io::AsRawFd};

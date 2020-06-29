@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use crate::storage::{MessageStore, log_indexes::{LogLevel, ParseLogLevel}, LogFilters};
 use failure::Error;
 use warp::{

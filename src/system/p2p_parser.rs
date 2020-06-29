@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel, UnboundedReceiver};
 use tracing::{trace, info, error};
 use failure::Error;

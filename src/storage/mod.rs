@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 mod p2p_storage;
 mod log_storage;
 mod rpc_storage;

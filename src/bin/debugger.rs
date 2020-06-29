@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use tracing::{info, error, Level};
 use tezedge_debugger::{
     system::build_raw_socket_system,

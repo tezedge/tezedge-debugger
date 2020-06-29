@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use tezedge_debugger::{
     utility::stream::MessageStream,
     utility::identity::Identity,

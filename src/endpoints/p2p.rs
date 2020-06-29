@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use crate::storage::{
     {MessageStore, P2pFilters},
     p2p_indexes::{ParseTypeError, Type},

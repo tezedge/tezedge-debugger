@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use serde::{Serialize, Deserialize};
 use crate::messages::p2p_message::{P2pMessage, SourceType, PeerMessage};
 use std::net::SocketAddr;

@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use serde::{Serialize, Deserialize};
 use crate::storage::get_ts;
 use syslog_loose::Message;

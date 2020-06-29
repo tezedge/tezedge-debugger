@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use storage::{StorageError, persistent::{KeyValueStoreWithSchema, KeyValueSchema}, IteratorMode, Direction};
 use rocksdb::DB;
 use std::{

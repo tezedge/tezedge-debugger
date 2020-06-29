@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 pub mod p2p_message;
 pub mod tcp_packet;
 pub mod log_message;

@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use serde::{Serialize, Deserialize};
 use storage::persistent::{Encoder, SchemaError, Decoder};
 use std::net::SocketAddr;

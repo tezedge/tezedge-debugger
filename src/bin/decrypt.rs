@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use tezos_messages::p2p::binary_message::BinaryChunk;
 use std::convert::TryFrom;
 use crypto::nonce::{generate_nonces, NoncePair};
