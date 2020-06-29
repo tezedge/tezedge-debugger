@@ -21,7 +21,7 @@ services:
       # debugger's container to the node container, allowing it to analyze node's traffic
       - "11000:13031"      # debugger RPC port
       - "11001:13131/udp"  # debugger syslog port
-    command: tezos-node
+    command: tezos-node --cors-header='content-type' --cors-origin='*'
     logging:
       # Produce syslogs instead of terminal logs
       driver: "syslog"

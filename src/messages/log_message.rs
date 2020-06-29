@@ -46,12 +46,12 @@ impl LogMessage {
             let _ = parts.next();
             let msg = parts.next();
             if let Some(msg) = msg {
-                Some(("info", &msg[1..]))
+                Some(("info", msg.trim()))
             } else {
-                Some(("info", &value[1..]))
+                Some(("info", value.trim()))
             }
         } else {
-            Some(("info", line))
+            Some(("info", line.trim()))
         }
     }
 }
