@@ -69,10 +69,17 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
         true,
     );
 
+    println!(
+        "[{}] Encrypted connection\n\tsent={:?}\n\trecv={:?}\n\tlocal={:?}\n\tremote={:?}\n\tpk={}",
+        peer_addr,
+        sent_data.raw(),
+        recv_data.raw(),
+        &local, &remote,
+        hex::encode(precomputed_key.as_ref().as_ref())
+    );
+
     let mut enc_writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
     let mut enc_reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
-
-    println!("[{}] Encrypted connection", peer_addr);
 
     let metadata = enc_reader.read_message::<MetadataMessage>().await.unwrap();
     println!("[{}] Decrypted metadata message", peer_addr);

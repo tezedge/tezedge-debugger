@@ -196,6 +196,7 @@ impl ParserEncryption {
 
     pub fn process_encrypted(&mut self, packet: Packet) -> Result<Option<P2pMessage>, Error> {
         let (remote, incoming) = self.extract_remote(&packet);
+
         let decrypter = if incoming {
             &mut self.incoming_decrypter
         } else {
@@ -229,9 +230,18 @@ impl ParserEncryption {
             );
 
             let precomputed_key = precompute(
-                &hex::encode(if incoming { &received.public_key } else { &sent.public_key }),
+                &hex::encode(&received.public_key),
                 &self.identity.secret_key,
             )?;
+
+            // tracing::trace!(
+            //     sent=debug(sent_data.raw()),
+            //     recv=debug(recv_data.raw()),
+            //     local=debug(&local),
+            //     remote=debug(&remote),
+            //     pk=display(hex::encode(precomputed_key.as_ref().as_ref())),
+            //     "upgrade",
+            // );
 
             self.incoming_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), local));
             self.outgoing_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), remote));

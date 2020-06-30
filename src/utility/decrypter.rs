@@ -68,13 +68,21 @@ impl P2pDecrypter {
 
             self.inc_buf.drain(0..len + 2);
             let content = chunk.content();
-            match decrypt(content, &self.nonce_fetch(), &self.precomputed_key) {
+            let nonce = &self.nonce_fetch();
+            let pck = &self.precomputed_key;
+            match decrypt(content, nonce, pck) {
                 Ok(msg) => {
                     self.nonce_increment();
                     Some(msg)
                 }
                 Err(err) => {
-                    trace!(data = debug(content), error = display(err), "failed to decrypt message");
+                    trace!(
+                        err = debug(err),
+                        data = debug(content),
+                        nonce = debug(nonce),
+                        pck = display(hex::encode(pck.as_ref().as_ref())),
+                        "failed to decrypt message",
+                    );
                     None
                 }
             }

@@ -3,14 +3,22 @@ type: docker
 name: default
 
 steps:
-  - name: set_identity
+  - name: set_server_identity
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
     volumes:
-      - name: identity
+      - name: server-identity
         path: /tmp/volume
     commands:
-      - cp ./tests/test_identity.json /tmp/volume/identity.json
+      - cp ./tests/server_identity.json /tmp/volume/identity.json
+  - name: set_client_identity
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    volumes:
+      - name: client-identity
+        path: /tmp/volume
+    commands:
+      - cp ./tests/client_identity.json /tmp/volume/identity.json
   - name: build
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
@@ -29,22 +37,22 @@ steps:
     volumes:
       - name: binaries
         path: /etc/bin
-      - name: identity
+      - name: server-identity
         path: /tmp/volume
     commands:
-      - /etc/bin/drone-server &
-      - /etc/bin/tezedge-debugger
+      - /etc/bin/drone-server
   - name: client
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
     environment:
-      DEBUGGER_URL: "http://server:13031"
+      DEBUGGER_URL: "http://client:13031"
     volumes:
       - name: binaries
         path: /etc/bin
-      - name: identity
+      - name: client-identity
         path: /tmp/volume
     commands:
+      - /etc/bin/tezedge-debugger &
       - sleep 1
       - /etc/bin/drone-client --server server:13030
       - cargo test
@@ -52,7 +60,9 @@ steps:
 volumes:
   - name: binaries
     temp: {}
-  - name: identity
+  - name: server-identity
+    temp: {}
+  - name: client-identity
     temp: {}
 
 trigger:
