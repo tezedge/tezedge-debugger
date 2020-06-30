@@ -126,11 +126,12 @@ enum ParserState {
 }
 
 pub struct ParserEncryption {
+    incoming: bool,
     initializer: SocketAddr,
     local_address: IpAddr,
     identity: Identity,
-    first_connection_message: Option<ConnectionMessage>,
-    second_connection_message: Option<ConnectionMessage>,
+    first_connection_message: Option<(SocketAddr, ConnectionMessage)>,
+    second_connection_message: Option<(SocketAddr, ConnectionMessage)>,
     incoming_decrypter: Option<P2pDecrypter>,
     outgoing_decrypter: Option<P2pDecrypter>,
 }
@@ -141,6 +142,7 @@ impl ParserEncryption {
             initializer,
             local_address,
             identity,
+            incoming: false,
             first_connection_message: None,
             second_connection_message: None,
             incoming_decrypter: None,
@@ -182,7 +184,7 @@ impl ParserEncryption {
             } else {
                 &mut self.first_connection_message
             };
-            *place = Some(conn_msg.clone());
+            *place = Some((packet.source_address(), conn_msg.clone()));
 
             if upgrade {
                 self.upgrade()?;
@@ -194,7 +196,7 @@ impl ParserEncryption {
 
     pub fn process_encrypted(&mut self, packet: Packet) -> Result<Option<P2pMessage>, Error> {
         let (remote, incoming) = self.extract_remote(&packet);
-        let decrypter = if !incoming {
+        let decrypter = if incoming {
             &mut self.incoming_decrypter
         } else {
             &mut self.outgoing_decrypter
@@ -208,12 +210,13 @@ impl ParserEncryption {
     }
 
     pub fn upgrade(&mut self) -> Result<(), Error> {
-        if let (Some(first), Some(second)) = (&self.first_connection_message, &self.second_connection_message) {
-            let incoming = hex::encode(&first.public_key) == self.identity.public_key;
+        if let (Some((first_source, first)), Some((_, second))) = (&self.first_connection_message, &self.second_connection_message) {
+            let incoming = first_source.ip() != self.local_address;
+            self.incoming = incoming;
             let (sent, received) = if incoming {
-                (first, second)
-            } else {
                 (second, first)
+            } else {
+                (first, second)
             };
 
             let sent_data = BinaryChunk::from_content(&sent.as_bytes()?)?;
@@ -222,11 +225,11 @@ impl ParserEncryption {
             let NoncePair { remote, local } = generate_nonces(
                 &sent_data.raw(),
                 &recv_data.raw(),
-                !incoming,
+                incoming,
             );
 
             let precomputed_key = precompute(
-                &hex::encode(&received.public_key),
+                &hex::encode(if incoming { &received.public_key } else { &sent.public_key }),
                 &self.identity.secret_key,
             )?;
 
