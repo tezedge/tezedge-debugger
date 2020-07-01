@@ -22,6 +22,7 @@ use crate::{
 };
 use crate::system::SystemSettings;
 use tezos_messages::p2p::binary_message::BinaryMessage;
+use crate::storage::MessageStore;
 
 struct Parser {
     pub initializer: SocketAddr,
@@ -37,7 +38,7 @@ impl Parser {
             initializer,
             receiver,
             processor_sender,
-            encryption: ParserEncryption::new(initializer, settings.local_address, settings.identity),
+            encryption: ParserEncryption::new(initializer, settings.local_address, settings.identity, settings.storage),
             state: ParserState::Unencrypted,
         }
     }
@@ -130,6 +131,7 @@ pub struct ParserEncryption {
     initializer: SocketAddr,
     local_address: IpAddr,
     identity: Identity,
+    store: MessageStore,
     first_connection_message: Option<(SocketAddr, ConnectionMessage)>,
     second_connection_message: Option<(SocketAddr, ConnectionMessage)>,
     incoming_decrypter: Option<P2pDecrypter>,
@@ -137,11 +139,12 @@ pub struct ParserEncryption {
 }
 
 impl ParserEncryption {
-    pub fn new(initializer: SocketAddr, local_address: IpAddr, identity: Identity) -> Self {
+    pub fn new(initializer: SocketAddr, local_address: IpAddr, identity: Identity, store: MessageStore) -> Self {
         Self {
             initializer,
             local_address,
             identity,
+            store,
             incoming: false,
             first_connection_message: None,
             second_connection_message: None,
@@ -243,8 +246,8 @@ impl ParserEncryption {
             //     "upgrade",
             // );
 
-            self.incoming_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), local));
-            self.outgoing_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), remote));
+            self.incoming_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), local, self.store.clone()));
+            self.outgoing_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), remote, self.store.clone()));
 
             info!(
                 initializer = display(self.initializer),

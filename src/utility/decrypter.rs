@@ -17,6 +17,7 @@ use tezos_messages::p2p::{
 };
 use std::convert::TryFrom;
 use crate::messages::prelude::*;
+use crate::storage::MessageStore;
 
 pub struct P2pDecrypter {
     precomputed_key: PrecomputedKey,
@@ -25,14 +26,16 @@ pub struct P2pDecrypter {
     inc_buf: Vec<u8>,
     dec_buf: Vec<u8>,
     input_remaining: usize,
+    store: MessageStore,
 
 }
 
 impl P2pDecrypter {
-    pub fn new(precomputed_key: PrecomputedKey, nonce: Nonce) -> Self {
+    pub fn new(precomputed_key: PrecomputedKey, nonce: Nonce, store: MessageStore) -> Self {
         Self {
             precomputed_key,
             nonce,
+            store,
             metadata: false,
             inc_buf: Default::default(),
             dec_buf: Default::default(),
@@ -46,6 +49,7 @@ impl P2pDecrypter {
 
             if self.inc_buf.len() > 2 {
                 if let Some(decrypted) = self.try_decrypt() {
+                    self.store.stat().decipher_data(decrypted.len());
                     return self.try_deserialize(decrypted);
                 }
             }
