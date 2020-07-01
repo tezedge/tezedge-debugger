@@ -4,6 +4,7 @@
 pub mod p2p;
 pub mod rpc;
 pub mod log;
+pub mod stat;
 
 use warp::{
     Filter, Reply,
@@ -11,16 +12,17 @@ use warp::{
     reply::with::header,
 };
 use crate::storage::MessageStore;
-use crate::endpoints::p2p::{p2p, types};
+use crate::endpoints::p2p::p2p;
 use crate::endpoints::rpc::rpc;
 use crate::endpoints::log::log;
+use crate::endpoints::stat::stat;
 
 pub fn routes(storage: MessageStore) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone + Sync + Send + 'static {
     warp::get().and(
         p2p(storage.clone())
             .or(rpc(storage.clone()))
             .or(log(storage.clone()))
-            .or(types(storage.clone()))
+            .or(stat(storage.clone()))
     )
         .with(header("Content-Type", "application/json"))
         .with(header("Access-Control-Allow-Origin", "*"))

@@ -15,7 +15,7 @@ services:
     hostname: node
     ports:
       # Node specific ports
-      - "10300:4927"        # node WS port (required only for tezedge)
+      - "10300:4927"       # node WS port (required only for tezedge)
       - "10200:9732"       # node P2P port
       - "10100:18732"      # node RPC port
       # Debugger Ports must be specified on node service, because of debugger network_mode attaches

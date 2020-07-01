@@ -23,7 +23,7 @@ pub async fn make_rpc_calls(x: i32) {
 
 pub fn debugger_url() -> String {
     env::var("DEBUGGER_URL")
-        .unwrap_or("http://client:13031".to_string())
+        .unwrap()
 }
 
 pub fn node_url() -> String {

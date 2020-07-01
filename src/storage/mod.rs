@@ -4,6 +4,7 @@
 mod p2p_storage;
 mod log_storage;
 mod rpc_storage;
+mod stat_storage;
 mod secondary_index;
 
 pub use p2p_storage::{P2pStore, P2pFilters};
@@ -20,12 +21,14 @@ use std::{
     net::IpAddr,
 };
 use storage::persistent::KeyValueSchema;
+use crate::storage::stat_storage::StatStore;
 
 #[derive(Clone)]
 pub struct MessageStore {
     p2p_db: P2pStore,
     log_db: LogStore,
     rpc_db: RpcStore,
+    stat_db: Arc<StatStore>,
     raw_db: Arc<DB>,
     max_db_size: Option<u64>,
 }
@@ -36,6 +39,7 @@ impl MessageStore {
             p2p_db: P2pStore::new(db.clone()),
             log_db: LogStore::new(db.clone()),
             rpc_db: RpcStore::new(db.clone()),
+            stat_db: Arc::new(StatStore::new()),
             raw_db: db,
             max_db_size: None,
         }
@@ -51,6 +55,10 @@ impl MessageStore {
 
     pub fn rpc(&self) -> &RpcStore {
         &self.rpc_db
+    }
+
+    pub fn stat(&self) -> &StatStore {
+        &self.stat_db
     }
 }
 

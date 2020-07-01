@@ -4,7 +4,7 @@
 use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
-use tracing::{trace, info, error};
+use tracing::{trace, error};
 use std::{
     collections::{HashMap, hash_map::Entry},
 };
@@ -21,6 +21,7 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
         let mut packet_processors = HashMap::new();
         let message_processor = spawn_processor(settings.clone());
         let settings = settings;
+        let store = settings.storage.clone();
         loop {
             if let Some(packet) = receiver.recv().await {
                 let packet: Packet = packet;
@@ -53,7 +54,7 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
                     let message_processor = message_processor.clone();
                     processor = entry.or_insert_with(move || {
                         // If processor does not exists, create new one
-                        info!(
+                        trace!(
                             source = display(src),
                             destination = display(dst),
                             "spawning p2p parser"
@@ -76,6 +77,7 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
                     }
                 };
 
+                store.stat().capture_data(packet.payload().len());
                 match processor.send(packet) {
                     Ok(()) => {
                         trace!("sent packet to p2p");
