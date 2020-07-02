@@ -1,18 +1,9 @@
 version: "3"
 
 services:
-  rust-debugger:
+  rust-network:
     image: debugger
     build: .
-    network_mode: "service:rust-node"
-    environment:
-      - RUST_BACKTRACE=1
-    volumes:
-      - "rust-shared-data:/tmp/volume"
-    entrypoint: ./tezedge-debugger
-  rust-node:
-    image: simplestakingcom/tezedge:v0.1.0
-    hostname: node
     ports:
       # Node specific ports
       - "10300:4927"       # node WS port (required only for tezedge)
@@ -22,7 +13,22 @@ services:
       # debugger's container to the node container, allowing it to analyze node's traffic
       - "10000:13031"      # debugger RPC port
       - "10001:13131/udp"  # debugger syslog port
-    entrypoint: /home/appuser/tezedge/docker/compose/tezedge.sh
+    entrypoint: sleep inf
+  rust-debugger:
+    image: debugger
+    build: .
+    network_mode: "service:rust-network"
+    environment:
+      - RUST_BACKTRACE=1
+    volumes:
+      - "rust-shared-data:/tmp/volume"
+    entrypoint: ./tezedge-debugger
+  rust-node:
+    image: simplestakingcom/tezedge:v0.1.0
+    entrypoint: sh -c "sleep 5 && /home/appuser/tezedge/docker/compose/tezedge.sh"
+    network_mode: "service:rust-network"
+    depends_on:
+      - rust-debugger
     logging:
       # Produce syslogs instead of terminal logs
       driver: "syslog"
