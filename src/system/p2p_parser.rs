@@ -200,14 +200,17 @@ impl ParserEncryption {
     pub fn process_encrypted(&mut self, packet: Packet) -> Result<Option<P2pMessage>, Error> {
         let (remote, incoming) = self.extract_remote(&packet);
 
-        let decrypter = if incoming {
+        let decrypter = if !incoming {
             &mut self.incoming_decrypter
         } else {
             &mut self.outgoing_decrypter
         };
 
         Ok(decrypter.as_mut()
-            .map(|decrypter| decrypter.recv_msg(&packet)).flatten()
+            .map(|decrypter| {
+                tracing::info!(incoming, "trying to decrypt message");
+                decrypter.recv_msg(&packet, incoming)
+            }).flatten()
             .map(|msgs| {
                 P2pMessage::new(remote, incoming, msgs)
             }))
@@ -237,14 +240,14 @@ impl ParserEncryption {
                 &self.identity.secret_key,
             )?;
 
-            // tracing::trace!(
-            //     sent=debug(sent_data.raw()),
-            //     recv=debug(recv_data.raw()),
-            //     local=debug(&local),
-            //     remote=debug(&remote),
-            //     pk=display(hex::encode(precomputed_key.as_ref().as_ref())),
-            //     "upgrade",
-            // );
+            tracing::info!(
+                sent=debug(sent_data.raw()),
+                recv=debug(recv_data.raw()),
+                local=debug(&local),
+                remote=debug(&remote),
+                pk=display(hex::encode(precomputed_key.as_ref().as_ref())),
+                "upgrade",
+            );
 
             self.incoming_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), local, self.store.clone()));
             self.outgoing_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), remote, self.store.clone()));

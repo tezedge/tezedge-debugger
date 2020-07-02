@@ -43,12 +43,12 @@ impl P2pDecrypter {
         }
     }
 
-    pub fn recv_msg(&mut self, enc: &Packet) -> Option<Vec<PeerMessage>> {
+    pub fn recv_msg(&mut self, enc: &Packet, incoming: bool) -> Option<Vec<PeerMessage>> {
         if enc.has_payload() {
             self.inc_buf.extend_from_slice(&enc.payload());
 
             if self.inc_buf.len() > 2 {
-                if let Some(decrypted) = self.try_decrypt() {
+                if let Some(decrypted) = self.try_decrypt(incoming) {
                     self.store.stat().decipher_data(decrypted.len());
                     return self.try_deserialize(decrypted);
                 }
@@ -57,7 +57,7 @@ impl P2pDecrypter {
         None
     }
 
-    fn try_decrypt(&mut self) -> Option<Vec<u8>> {
+    fn try_decrypt(&mut self, incoming: bool) -> Option<Vec<u8>> {
         let len = (&self.inc_buf[0..2]).get_u16() as usize;
         if self.inc_buf[2..].len() >= len {
             let chunk = match BinaryChunk::try_from(self.inc_buf[0..len + 2].to_vec()) {
@@ -80,11 +80,12 @@ impl P2pDecrypter {
                     Some(msg)
                 }
                 Err(err) => {
-                    trace!(
+                    tracing::info!(
                         err = debug(err),
                         data = debug(content),
                         nonce = debug(nonce),
                         pck = display(hex::encode(pck.as_ref().as_ref())),
+                        incoming,
                         "failed to decrypt message",
                     );
                     None

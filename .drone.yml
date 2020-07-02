@@ -4,7 +4,7 @@ name: default
 
 steps:
   - name: set_server_identity
-    image: simplestakingcom/tezedge-ci-builder:latest
+    image: ubuntu
     pull: if-not-exists
     volumes:
       - name: server-identity
@@ -12,7 +12,7 @@ steps:
     commands:
       - cp ./tests/server_identity.json /tmp/volume/identity.json
   - name: set_client_identity
-    image: simplestakingcom/tezedge-ci-builder:latest
+    image: ubuntu
     pull: if-not-exists
     volumes:
       - name: client-identity
@@ -40,22 +40,22 @@ steps:
       - name: server-identity
         path: /tmp/volume
     commands:
-      - /etc/bin/drone-server
+      - /etc/bin/drone-server &
+      - /etc/bin/tezedge-debugger
   - name: client
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
     environment:
-      DEBUGGER_URL: "http://client:13031"
+      DEBUGGER_URL: "http://server:13031"
     volumes:
       - name: binaries
         path: /etc/bin
       - name: client-identity
         path: /tmp/volume
     commands:
-      - /etc/bin/tezedge-debugger &
       - sleep 1
       - /etc/bin/drone-client --server server:13030
-      - cargo test
+#      - cargo test
 
 volumes:
   - name: binaries
