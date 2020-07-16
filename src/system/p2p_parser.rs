@@ -19,10 +19,11 @@ use tezos_messages::p2p::{
 use crate::{
     utility::prelude::*,
     messages::prelude::*,
+    system::{SystemSettings, orchestrator::CONNECTIONS},
+    storage::MessageStore,
 };
-use crate::system::SystemSettings;
 use tezos_messages::p2p::binary_message::BinaryMessage;
-use crate::storage::MessageStore;
+use crate::system::orchestrator::ConnectionState;
 
 struct Parser {
     pub initializer: SocketAddr,
@@ -34,6 +35,9 @@ struct Parser {
 
 impl Parser {
     fn new(initializer: SocketAddr, receiver: UnboundedReceiver<Packet>, processor_sender: UnboundedSender<P2pMessage>, settings: SystemSettings) -> Self {
+        if let Ok(mut lock) = CONNECTIONS.write() {
+            lock.insert(initializer, None);
+        }
         Self {
             initializer,
             receiver,
@@ -106,6 +110,16 @@ impl Parser {
     }
 }
 
+impl Drop for Parser {
+    fn drop(&mut self) {
+        if let Ok(mut lock) = CONNECTIONS.write() {
+            if let None = lock.remove(&self.initializer) {
+                error!("connection state was not inserted");
+            }
+        }
+    }
+}
+
 pub fn spawn_p2p_parser(initializer: SocketAddr, processor_sender: UnboundedSender<P2pMessage>, settings: SystemSettings) -> UnboundedSender<Packet> {
     let (sender, receiver) = unbounded_channel::<Packet>();
     tokio::spawn(async move {
@@ -128,6 +142,7 @@ enum ParserState {
 
 pub struct ParserEncryption {
     incoming: bool,
+    debugger: bool,
     initializer: SocketAddr,
     local_address: IpAddr,
     identity: Identity,
@@ -140,8 +155,11 @@ pub struct ParserEncryption {
 
 impl ParserEncryption {
     pub fn new(initializer: SocketAddr, local_address: IpAddr, identity: Identity, store: MessageStore) -> Self {
+        let debugger = std::env::var("DEBUGGER").unwrap_or("FALSE".to_string());
+        let debugger = &debugger == "TRUE";
         Self {
             initializer,
+            debugger,
             local_address,
             identity,
             store,
@@ -200,7 +218,7 @@ impl ParserEncryption {
     pub fn process_encrypted(&mut self, packet: Packet) -> Result<Option<P2pMessage>, Error> {
         let (remote, incoming) = self.extract_remote(&packet);
 
-        let decrypter = if !incoming {
+        let decrypter = if self.debugger == incoming {
             &mut self.incoming_decrypter
         } else {
             &mut self.outgoing_decrypter
@@ -251,6 +269,13 @@ impl ParserEncryption {
 
             self.incoming_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), local, self.store.clone()));
             self.outgoing_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), remote, self.store.clone()));
+
+            if let Ok(mut lock) = CONNECTIONS.write() {
+                lock.insert(self.initializer, Some(ConnectionState {
+                    incoming,
+                    peer_id: hex::encode(&received.public_key),
+                }));
+            }
 
             info!(
                 initializer = display(self.initializer),

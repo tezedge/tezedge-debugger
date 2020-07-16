@@ -12,6 +12,7 @@ use tezos_messages::p2p::encoding::{
 use std::net::SocketAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::persistent::{Decoder, SchemaError, Encoder};
+use tezos_messages::p2p::encoding::ack::{NackMotive, NackInfo};
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
 pub enum SourceType {
@@ -117,22 +118,22 @@ pub enum PeerMessage {
     Advertise(AdvertiseMessage),
     SwapRequest(SwapMessage),
     SwapAck(SwapMessage),
-    GetCurrentBranch(MappedGetCurrentBranchMessage),
-    CurrentBranch(MappedCurrentBranchMessage),
-    Deactivate(MappedDeactivateMessage),
-    GetCurrentHead(MappedGetCurrentHeadMessage),
-    CurrentHead(MappedCurrentHeadMessage),
-    GetBlockHeaders(MappedGetBlockHeadersMessage),
-    BlockHeader(MappedBlockHeaderMessage),
-    GetOperations(MappedGetOperationsMessage),
-    Operation(MappedOperationMessage),
-    GetProtocols(MappedGetProtocolsMessage),
+    GetCurrentBranch(GetCurrentBranchMessage),
+    CurrentBranch(CurrentBranchMessage),
+    Deactivate(DeactivateMessage),
+    GetCurrentHead(GetCurrentHeadMessage),
+    CurrentHead(CurrentHeadMessage),
+    GetBlockHeaders(GetBlockHeadersMessage),
+    BlockHeader(BlockHeaderMessage),
+    GetOperations(GetOperationsMessage),
+    Operation(OperationMessage),
+    GetProtocols(GetProtocolsMessage),
     Protocol(ProtocolMessage),
-    GetOperationHashesForBlocks(MappedGetOperationHashesForBlocksMessage),
-    OperationHashesForBlock(MappedOperationHashesForBlocksMessage),
-    GetOperationsForBlocks(MappedGetOperationsForBlocksMessage),
-    OperationsForBlocks(MappedOperationsForBlocksMessage),
-    ConnectionMessage(MappedConnectionMessage),
+    GetOperationHashesForBlocks(GetOperationHashesForBlocksMessage),
+    OperationHashesForBlock(OperationHashesForBlocksMessage),
+    GetOperationsForBlocks(GetOperationsForBlocksMessage),
+    OperationsForBlocks(OperationsForBlocksMessage),
+    ConnectionMessage(ConnectionMessage),
     MetadataMessage(MetadataMessage),
     _Reserved,
 }
@@ -173,6 +174,88 @@ impl From<ConnectionMessage> for PeerMessage {
 impl From<MetadataMessage> for PeerMessage {
     fn from(value: MetadataMessage) -> Self {
         PeerMessage::MetadataMessage(value)
+    }
+}
+
+impl PeerMessage {
+    pub fn inner(&self) -> Option<TezosPeerMessage> {
+        match self {
+            PeerMessage::Disconnect => Some(TezosPeerMessage::Disconnect),
+            PeerMessage::Bootstrap => Some(TezosPeerMessage::Bootstrap),
+            PeerMessage::Advertise(msg) => Some(TezosPeerMessage::Advertise(msg.clone())),
+            PeerMessage::SwapRequest(msg) => Some(TezosPeerMessage::SwapRequest(msg.clone())),
+            PeerMessage::SwapAck(msg) => Some(TezosPeerMessage::SwapAck(msg.clone())),
+            PeerMessage::GetCurrentBranch(msg) => Some(TezosPeerMessage::GetCurrentBranch(msg.clone())),
+            PeerMessage::CurrentBranch(msg) => Some(TezosPeerMessage::CurrentBranch(msg.clone())),
+            PeerMessage::Deactivate(msg) => Some(TezosPeerMessage::Deactivate(msg.clone())),
+            PeerMessage::GetCurrentHead(msg) => Some(TezosPeerMessage::GetCurrentHead(msg.clone())),
+            PeerMessage::CurrentHead(msg) => Some(TezosPeerMessage::CurrentHead(msg.clone())),
+            PeerMessage::GetBlockHeaders(msg) => Some(TezosPeerMessage::GetBlockHeaders(msg.clone())),
+            PeerMessage::BlockHeader(msg) => Some(TezosPeerMessage::BlockHeader(msg.clone())),
+            PeerMessage::GetOperations(msg) => Some(TezosPeerMessage::GetOperations(msg.clone())),
+            PeerMessage::Operation(msg) => Some(TezosPeerMessage::Operation(msg.clone())),
+            PeerMessage::GetProtocols(msg) => Some(TezosPeerMessage::GetProtocols(msg.clone())),
+            PeerMessage::Protocol(msg) => Some(TezosPeerMessage::Protocol(msg.clone())),
+            PeerMessage::GetOperationHashesForBlocks(msg) => Some(TezosPeerMessage::GetOperationHashesForBlocks(msg.clone())),
+            PeerMessage::OperationHashesForBlock(msg) => Some(TezosPeerMessage::OperationHashesForBlock(msg.clone())),
+            PeerMessage::GetOperationsForBlocks(msg) => Some(TezosPeerMessage::GetOperationsForBlocks(msg.clone())),
+            PeerMessage::OperationsForBlocks(msg) => Some(TezosPeerMessage::OperationsForBlocks(msg.clone())),
+            PeerMessage::ConnectionMessage(_) => None,
+            PeerMessage::MetadataMessage(_) => None,
+            PeerMessage::_Reserved => None,
+        }
+    }
+}
+
+// impl From<AckMessage> for PeerMessage {
+//     fn from(value: AckMessage) -> Self {
+//         PeerMessage::AckMessage(value)
+//     }
+// }
+
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub enum MappedAckMessage {
+    Ack,
+    NackV0,
+    Nack(MappedNackInfo),
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct MappedNackInfo {
+    pub motive: MappedNackMotive,
+    pub potential_peers_to_connect: Vec<String>,
+}
+
+impl From<NackInfo> for MappedNackInfo {
+    fn from(value: NackInfo) -> Self {
+        Self {
+            motive: value.motive().into(),
+            potential_peers_to_connect: value.potential_peers_to_connect().clone(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy)]
+pub enum MappedNackMotive {
+    NoMotive,
+    TooManyConnections,
+    UnknownChainName,
+    DeprecatedP2pVersion,
+    DeprecatedDistributedDbVersion,
+    AlreadyConnected,
+}
+
+impl From<&NackMotive> for MappedNackMotive {
+    fn from(value: &NackMotive) -> Self {
+        match value {
+            NackMotive::NoMotive => Self::NoMotive,
+            NackMotive::TooManyConnections => Self::TooManyConnections,
+            NackMotive::UnknownChainName => Self::UnknownChainName,
+            NackMotive::DeprecatedP2pVersion => Self::DeprecatedP2pVersion,
+            NackMotive::DeprecatedDistributedDbVersion => Self::DeprecatedDistributedDbVersion,
+            NackMotive::AlreadyConnected => Self::AlreadyConnected,
+        }
     }
 }
 

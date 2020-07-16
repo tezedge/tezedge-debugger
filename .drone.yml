@@ -33,6 +33,8 @@ steps:
   - name: server
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
+    environment:
+      DEBUGGER: "FALSE"
     detach: true
     volumes:
       - name: binaries
@@ -47,15 +49,17 @@ steps:
     pull: if-not-exists
     environment:
       DEBUGGER_URL: "http://server:13031"
+      DEBUGGER: "FALSE"
     volumes:
       - name: binaries
         path: /etc/bin
       - name: client-identity
         path: /tmp/volume
     commands:
-      - sleep 1
+      - /etc/bin/tezedge-debugger &
+      - sleep 2
       - /etc/bin/drone-client --server server:13030
-#      - cargo test
+      - cargo test
 
 volumes:
   - name: binaries

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use bytes::Buf;
-use tracing::{warn, trace, error};
+use tracing::{warn, error};
 use crypto::{
     crypto_box::{PrecomputedKey, decrypt},
     nonce::Nonce,

@@ -13,7 +13,7 @@ use crypto::nonce::{Nonce, NoncePair, generate_nonces};
 use tezos_messages::p2p::encoding::connection::ConnectionMessage;
 use tezos_messages::p2p::binary_message::{BinaryChunk, BinaryMessage};
 use crypto::crypto_box::precompute;
-use tezedge_debugger::utility::stream::{EncryptedMessageWriter, EncryptedMessageReader};
+use tezedge_debugger::utility::stream::{EncryptedMessageWriter, EncryptedMessageReader, StreamError};
 use tezos_messages::p2p::encoding::peer::{PeerMessageResponse};
 use std::net::{SocketAddr};
 use std::convert::TryFrom;
@@ -66,7 +66,7 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
     let NoncePair { remote, local } = generate_nonces(
         sent_data.raw(),
         recv_data.raw(),
-        true,
+        false,
     );
 
     println!(
@@ -86,12 +86,32 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
     enc_writer.write_message(&metadata).await.unwrap();
 
     loop {
-        if let Ok(message) = enc_reader.read_message::<PeerMessageResponse>().await {
-            println!("[{}] Decrypted message", peer_addr);
-            enc_writer.write_message(&message).await.unwrap();
-        } else {
-            println!("[{}] Closing peer handler", peer_addr);
-            break;
+        match enc_reader.read_message::<PeerMessageResponse>().await {
+            Ok(message) => {
+                println!("[{}] Decrypted message", peer_addr);
+                enc_writer.write_message(&message).await.unwrap();
+                println!("[{}] Sent re-encrypted message", peer_addr);
+            }
+            Err(err) => {
+                match err {
+                    StreamError::FailedToEncryptMessage { .. } => {
+                        eprintln!("[{}] Failed to encrypt message: {:?}", peer_addr, err)
+                    }
+                    StreamError::FailedToDecryptMessage { .. } => {
+                        eprintln!("[{}] Failed to decrypt message: {:?}", peer_addr, err)
+                    }
+                    StreamError::SerializationError { .. } => {
+                        eprintln!("[{}] Failed to serialize message: {:?}", peer_addr, err)
+                    }
+                    StreamError::DeserializationError { .. } => {
+                        eprintln!("[{}] Failed to deserialize message: {:?}", peer_addr, err)
+                    }
+                    StreamError::NetworkError { .. } => {
+                        println!("[{}] Closing connection", peer_addr);
+                        return;
+                    }
+                }
+            }
         }
     }
 }

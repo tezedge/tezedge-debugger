@@ -77,7 +77,7 @@ async fn test_client(id: u32, messages: u32, server: String) {
     let NoncePair { remote, local } = generate_nonces(
         sent_data.raw(),
         recv_data.raw(),
-        false,
+        true,
     );
 
     let mut writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());

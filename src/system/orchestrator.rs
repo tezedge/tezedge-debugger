@@ -1,18 +1,25 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+use lazy_static::lazy_static;
 use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
+use serde::{Serialize, Deserialize};
 use tracing::{trace, error};
 use std::{
     collections::{HashMap, hash_map::Entry},
+    sync::{Arc, RwLock}, net::SocketAddr,
 };
 use crate::{
     system::prelude::*,
     messages::tcp_packet::Packet,
 };
 use crate::system::processor::spawn_processor;
+
+lazy_static! {
+    pub static ref CONNECTIONS: Arc<RwLock<HashMap<SocketAddr, Option<ConnectionState>>>> = Default::default();
+}
 
 pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Packet> {
     let (sender, mut receiver) = unbounded_channel::<Packet>();
@@ -94,4 +101,10 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
     });
 
     return sender;
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionState {
+    pub incoming: bool,
+    pub peer_id: String,
 }
