@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use bytes::Buf;
-use tracing::{warn, trace, error};
+use tracing::{warn, trace, error, field::{display, debug}};
 use crypto::{
     crypto_box::{PrecomputedKey, decrypt},
     nonce::Nonce,
@@ -65,7 +65,7 @@ impl P2pDecrypter {
                     chunk
                 }
                 Err(e) => {
-                    error!(error = display(e), "failed to load binary chunk");
+                    error!(error = display(&e), "failed to load binary chunk");
                     return None;
                 }
             };
@@ -81,10 +81,10 @@ impl P2pDecrypter {
                 }
                 Err(err) => {
                     trace!(
-                        err = debug(err),
-                        data = debug(content),
-                        nonce = debug(nonce),
-                        pck = display(hex::encode(pck.as_ref().as_ref())),
+                        err = debug(&err),
+                        data = debug(&content),
+                        nonce = debug(&nonce),
+                        pck = display(&hex::encode(pck.as_ref().as_ref())),
                         "failed to decrypt message",
                     );
                     None
@@ -123,7 +123,7 @@ impl P2pDecrypter {
                         self.dec_buf.drain(self.dec_buf.len() - bytes..);
                     }
                     Err(e) => {
-                        warn!(data = debug(&self.dec_buf), error = display(e), "failed to deserialize message");
+                        warn!(data = debug(&self.dec_buf), error = display(&e), "failed to deserialize message");
                         return None;
                     }
                 }
@@ -155,7 +155,7 @@ impl P2pDecrypter {
                         self.dec_buf.drain(self.dec_buf.len() - bytes..);
                     }
                     Err(e) => {
-                        warn!(error = display(e), "failed to deserialize message");
+                        warn!(error = display(&e), "failed to deserialize message");
                         return None;
                     }
                 }

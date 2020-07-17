@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tracing::{info, error, Level};
+use tracing::{info, error, Level, field::{debug, display}};
 use tezedge_debugger::{
     system::build_raw_socket_system,
     utility::{
@@ -43,11 +43,11 @@ async fn load_identity() -> Identity {
                 Ok(content) => {
                     match serde_json::from_str::<Identity>(&content) {
                         Ok(identity) => {
-                            info!(file_path = display(path), "loaded identity");
+                            info!(file_path = display(&path), "loaded identity");
                             return identity;
                         }
                         Err(err) => {
-                            error!(error = display(err), "identity file does not contains valid identity");
+                            error!(error = display(&err), "identity file does not contains valid identity");
                             exit(1);
                         }
                     }
@@ -55,7 +55,7 @@ async fn load_identity() -> Identity {
                 Err(err) => {
                     if last_try.elapsed().as_secs() >= 5 {
                         last_try = Instant::now();
-                        info!(error = display(err), "waiting for identity");
+                        info!(error = display(&err), "waiting for identity");
                     }
                 }
             }
@@ -85,7 +85,7 @@ async fn main() -> Result<(), failure::Error> {
     let storage = match open_database() {
         Ok(storage) => storage,
         Err(err) => {
-            error!(error = display(err), "failed to open database");
+            error!(error = display(&err), "failed to open database");
             exit(1);
         }
     };
@@ -100,7 +100,7 @@ async fn main() -> Result<(), failure::Error> {
     };
 
     if let Err(err) = syslog_producer(settings.clone()).await {
-        error!(error = display(err), "failed to build syslog server");
+        error!(error = display(&err), "failed to build syslog server");
         exit(1);
     }
 
@@ -109,7 +109,7 @@ async fn main() -> Result<(), failure::Error> {
             info!("system built");
         }
         Err(err) => {
-            error!(error = display(err), "failed to build system");
+            error!(error = display(&err), "failed to build system");
             exit(1);
         }
     }
@@ -122,7 +122,7 @@ async fn main() -> Result<(), failure::Error> {
     });
 
     if let Err(err) = tokio::signal::ctrl_c().await {
-        error!(error = display(err), "failed while listening for signal");
+        error!(error = display(&err), "failed while listening for signal");
         exit(1)
     }
 

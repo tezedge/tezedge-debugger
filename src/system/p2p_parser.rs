@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel, UnboundedReceiver};
-use tracing::{trace, info, error};
+use tracing::{trace, info, error, field::{display, debug}};
 use failure::Error;
 use crypto::{
     crypto_box::precompute,
@@ -83,7 +83,7 @@ impl Parser {
                 result
             }
             Err(err) => {
-                trace!(addr = display(self.initializer), error = display(err), "is not valid tezos p2p connection");
+                trace!(addr = display(&self.initializer), error = display(&err), "is not valid tezos p2p connection");
                 self.state = ParserState::Irrelevant;
                 None
             }
@@ -97,7 +97,7 @@ impl Parser {
             match self.encryption.process_encrypted(packet) {
                 Ok(result) => result,
                 Err(err) => {
-                    info!(addr = display(self.initializer), error = display(err), "received invalid message");
+                    info!(addr = display(&self.initializer), error = display(&err), "received invalid message");
                     self.state = ParserState::Irrelevant;
                     None
                 }
@@ -174,9 +174,9 @@ impl ParserEncryption {
             let place = if let Some(_) = self.first_connection_message {
                 if packet.source_address() == self.initializer {
                     info!(
-                        initializer = display(self.initializer.clone()),
-                        src = display(packet.source_address()),
-                        dst = display(packet.destination_address()),
+                        initializer = display(&self.initializer.clone()),
+                        src = display(&packet.source_address()),
+                        dst = display(&packet.destination_address()),
                         "received duplicate connection message"
                     );
                     return Ok(None);
@@ -250,7 +250,7 @@ impl ParserEncryption {
             self.outgoing_decrypter = Some(P2pDecrypter::new(precomputed_key.clone(), remote, self.store.clone()));
 
             info!(
-                initializer = display(self.initializer),
+                initializer = display(&self.initializer),
                 "connection upgraded to encrypted"
             );
             Ok(())

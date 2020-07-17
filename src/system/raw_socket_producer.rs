@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::messages::tcp_packet::Packet;
-use tracing::{trace, error};
+use tracing::{trace, error, field::{display, debug}};
 use std::{io, env, os::unix::io::AsRawFd};
 use crate::system::orchestrator::spawn_packet_orchestrator;
 use crate::system::SystemSettings;
