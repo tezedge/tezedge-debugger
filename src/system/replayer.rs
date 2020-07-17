@@ -34,7 +34,82 @@ async fn replay(node_address: SocketAddr, messages: Vec<PeerMessage>, incoming: 
 }
 
 #[allow(dead_code)]
-async fn replay_incoming(_node_address: SocketAddr, _messages: Vec<PeerMessage>) -> Result<(), failure::Error> {
+async fn replay_incoming(node_address: SocketAddr, messages: Vec<PeerMessage>) -> Result<(), failure::Error> {
+    tokio::spawn(async move {
+        let _: Result<(), failure::Error> = async move {
+            let stream = TcpStream::connect(node_address).await?;
+            let (reader, writer) = MessageStream::from(stream).split();
+            let (mut reader, mut writer) = (Some(reader), Some(writer));
+            let (mut enc_reader, mut enc_writer): (Option<EncryptedMessageReader>, Option<EncryptedMessageWriter>) = (None, None);
+            let messages = messages.into_iter();
+            let sending = true;
+            let encrypted = false;
+            let mut metadata_count: usize = 0;
+            let mut received_connection_message: Option<ConnectionMessage> = None;
+            let mut sent_connection_message: Option<ConnectionMessage> = None;
+
+            for message in messages {
+                if sending {
+                    if encrypted {
+                        match message {
+                            PeerMessage::ConnectionMessage(_) => return Ok(()),
+                            PeerMessage::MetadataMessage(metadata) => {
+                                metadata_count += 1;
+                                enc_writer.as_mut().unwrap().write_message(&metadata).await?;
+                            }
+                            message => {
+                                let message = PeerMessageResponse::from(message.inner().unwrap().clone());
+                                enc_writer.as_mut().unwrap().write_message(&message).await?;
+                            }
+                        }
+                    } else {
+                        match message {
+                            PeerMessage::ConnectionMessage(mut conn_msg) => {
+                                conn_msg.public_key = hex::decode(&IDENTITY.public_key)?;
+                                let sent_chunk = BinaryChunk::from_content(&conn_msg.as_bytes()?)?;
+                                sent_connection_message = Some(conn_msg);
+                                writer.as_mut().unwrap().write_message(&sent_chunk)
+                                    .await.unwrap();
+                            }
+                            _ => return Ok(()),
+                        }
+                        let sent = sent_connection_message.clone().unwrap();
+                        let recv = received_connection_message.clone().unwrap();
+                        let sent_data = BinaryChunk::from_content(&sent.as_bytes()?)?;
+                        let recv_data = BinaryChunk::from_content(&recv.as_bytes()?)?;
+                        let pk = precompute(
+                            &hex::encode(&recv.public_key),
+                            &IDENTITY.secret_key,
+                        )?;
+                        let NoncePair { remote, local } = generate_nonces(
+                            sent_data.raw(),
+                            recv_data.raw(),
+                            true,
+                        );
+                        let writer = std::mem::replace(&mut writer, None);
+                        let reader = std::mem::replace(&mut reader, None);
+                        enc_writer = Some(EncryptedMessageWriter::new(writer.unwrap(), pk.clone(), remote, IDENTITY.peer_id.clone()));
+                        enc_reader = Some(EncryptedMessageReader::new(reader.unwrap(), pk.clone(), local, IDENTITY.peer_id.clone()));
+                    }
+                } else {
+                    if encrypted {
+                        let reader = enc_reader.as_mut().unwrap();
+                        if metadata_count < 2 {
+                            let _ = reader.read_message::<MetadataMessage>().await?;
+                            metadata_count += 1;
+                        } else {
+                            let _ = reader.read_message::<PeerMessageResponse>().await?;
+                        }
+                    } else {
+                        let recv_chunk = reader.as_mut().unwrap().read_message().await?;
+                        let conn_msg = ConnectionMessage::try_from(recv_chunk)?;
+                        received_connection_message = Some(conn_msg);
+                    }
+                }
+            }
+            Ok(())
+        }.await;
+    });
     Ok(())
 }
 
@@ -46,7 +121,7 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<PeerMessage>) -
     tokio::spawn(async move {
         let _: Result<(), failure::Error> = async move {
             let mut listener = listener;
-            let (stream, peer_addr) = listener.accept().await?;
+            let (stream, _peer_addr) = listener.accept().await?;
             let (reader, writer) = MessageStream::from(stream).split();
             let (mut reader, mut writer) = (Some(reader), Some(writer));
             let (mut enc_reader, mut enc_writer): (Option<EncryptedMessageReader>, Option<EncryptedMessageWriter>) = (None, None);
