@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel, UnboundedReceiver};
-use tracing::{trace, info, error};
+use tracing::{trace, info, error, field::{display, debug}};
 use failure::Error;
 use crypto::{
     crypto_box::precompute,
@@ -87,7 +87,7 @@ impl Parser {
                 result
             }
             Err(err) => {
-                trace!(addr = display(self.initializer), error = display(err), "is not valid tezos p2p connection");
+                trace!(addr = display(self.initializer), error = display(&err), "is not valid tezos p2p connection");
                 self.state = ParserState::Irrelevant;
                 None
             }
@@ -101,7 +101,7 @@ impl Parser {
             match self.encryption.process_encrypted(packet) {
                 Ok(result) => result,
                 Err(err) => {
-                    info!(addr = display(self.initializer), error = display(err), "received invalid message");
+                    info!(addr = display(self.initializer), error = display(&err), "received invalid message");
                     self.state = ParserState::Irrelevant;
                     None
                 }

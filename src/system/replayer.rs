@@ -25,7 +25,8 @@ lazy_static! {
 }
 
 #[allow(dead_code)]
-async fn replay(node_address: SocketAddr, messages: Vec<PeerMessage>, incoming: bool) -> Result<(), failure::Error> {
+pub async fn replay(node_address: SocketAddr, messages: Vec<PeerMessage>, incoming: bool) -> Result<(), failure::Error> {
+    tracing::warn!(message_count = messages.len(), incoming, "starting replay of messages");
     if incoming {
         replay_incoming(node_address, messages).await
     } else {
@@ -36,20 +37,22 @@ async fn replay(node_address: SocketAddr, messages: Vec<PeerMessage>, incoming: 
 #[allow(dead_code)]
 async fn replay_incoming(node_address: SocketAddr, messages: Vec<PeerMessage>) -> Result<(), failure::Error> {
     tokio::spawn(async move {
-        let _: Result<(), failure::Error> = async move {
+        let err: Result<(), failure::Error> = async move {
             let stream = TcpStream::connect(node_address).await?;
             let (reader, writer) = MessageStream::from(stream).split();
             let (mut reader, mut writer) = (Some(reader), Some(writer));
             let (mut enc_reader, mut enc_writer): (Option<EncryptedMessageReader>, Option<EncryptedMessageWriter>) = (None, None);
             let messages = messages.into_iter();
-            let sending = true;
-            let encrypted = false;
+            let mut sending = true;
+            let mut encrypted = false;
             let mut metadata_count: usize = 0;
             let mut received_connection_message: Option<ConnectionMessage> = None;
             let mut sent_connection_message: Option<ConnectionMessage> = None;
 
             for message in messages {
+                tracing::info!(sending, encrypted, "Processing message");
                 if sending {
+                    sending = false;
                     if encrypted {
                         match message {
                             PeerMessage::ConnectionMessage(_) => return Ok(()),
@@ -68,11 +71,28 @@ async fn replay_incoming(node_address: SocketAddr, messages: Vec<PeerMessage>) -
                                 conn_msg.public_key = hex::decode(&IDENTITY.public_key)?;
                                 let sent_chunk = BinaryChunk::from_content(&conn_msg.as_bytes()?)?;
                                 sent_connection_message = Some(conn_msg);
+                                tracing::info!(msg = debug(&sent_connection_message), "Sending connection message");
                                 writer.as_mut().unwrap().write_message(&sent_chunk)
                                     .await.unwrap();
                             }
                             _ => return Ok(()),
                         }
+                    }
+                } else {
+                    sending = true;
+                    if encrypted {
+                        let reader = enc_reader.as_mut().unwrap();
+                        if metadata_count < 2 {
+                            let _ = reader.read_message::<MetadataMessage>().await?;
+                            metadata_count += 1;
+                        } else {
+                            let _ = reader.read_message::<PeerMessageResponse>().await?;
+                        }
+                    } else {
+                        let recv_chunk = reader.as_mut().unwrap().read_message().await?;
+                        let conn_msg = ConnectionMessage::try_from(recv_chunk)?;
+                        received_connection_message = Some(conn_msg);
+                        tracing::info!(msg = debug(&received_connection_message), "Received connection message");
                         let sent = sent_connection_message.clone().unwrap();
                         let recv = received_connection_message.clone().unwrap();
                         let sent_data = BinaryChunk::from_content(&sent.as_bytes()?)?;
@@ -91,24 +111,13 @@ async fn replay_incoming(node_address: SocketAddr, messages: Vec<PeerMessage>) -
                         enc_writer = Some(EncryptedMessageWriter::new(writer.unwrap(), pk.clone(), remote, IDENTITY.peer_id.clone()));
                         enc_reader = Some(EncryptedMessageReader::new(reader.unwrap(), pk.clone(), local, IDENTITY.peer_id.clone()));
                     }
-                } else {
-                    if encrypted {
-                        let reader = enc_reader.as_mut().unwrap();
-                        if metadata_count < 2 {
-                            let _ = reader.read_message::<MetadataMessage>().await?;
-                            metadata_count += 1;
-                        } else {
-                            let _ = reader.read_message::<PeerMessageResponse>().await?;
-                        }
-                    } else {
-                        let recv_chunk = reader.as_mut().unwrap().read_message().await?;
-                        let conn_msg = ConnectionMessage::try_from(recv_chunk)?;
-                        received_connection_message = Some(conn_msg);
-                    }
                 }
             }
             Ok(())
         }.await;
+        if let Err(err) = err {
+            tracing::error!(err = display(&err), "failed to replay");
+        }
     });
     Ok(())
 }
@@ -119,7 +128,7 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<PeerMessage>) -
     let listening_port = listener.local_addr()?.port();
     // Spawn replay handler
     tokio::spawn(async move {
-        let _: Result<(), failure::Error> = async move {
+        let err: Result<(), failure::Error> = async move {
             let mut listener = listener;
             let (stream, _peer_addr) = listener.accept().await?;
             let (reader, writer) = MessageStream::from(stream).split();
@@ -190,10 +199,14 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<PeerMessage>) -
                         received_connection_message = Some(conn_msg);
                     }
                 }
+                sending != sending;
             }
 
             Ok(())
         }.await;
+        if let Err(err) = err {
+            tracing::error!(err = display(&err), "failed to replay");
+        }
     });
 
     let connection = TcpStream::connect(node_address).await?;

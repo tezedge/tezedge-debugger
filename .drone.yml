@@ -49,17 +49,19 @@ steps:
     pull: if-not-exists
     environment:
       DEBUGGER_URL: "http://server:13031"
-      DEBUGGER: "FALSE"
+      DEBUGGER: "TRUE"
     volumes:
       - name: binaries
         path: /etc/bin
       - name: client-identity
         path: /tmp/volume
+      - name: cache
+        path: /tmp/cache
     commands:
       - /etc/bin/tezedge-debugger &
       - sleep 2
       - /etc/bin/drone-client --server server:13030
-      - cargo test
+      - cp -r /tmp/volume/* /tmp/cache
 
 volumes:
   - name: binaries
@@ -68,6 +70,9 @@ volumes:
     temp: {}
   - name: client-identity
     temp: {}
+  - name: cache
+    host:
+      path: /tmp/cache
 
 trigger:
   branch:

@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tracing::error;
+use tracing::{error, field::{display, debug}};
 use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
@@ -59,7 +59,7 @@ impl DatabaseProcessor {
             loop {
                 if let Some(mut msg) = receiver.recv().await {
                     if let Err(err) = store.p2p().store_message(&mut msg) {
-                        error!(error = display(err), "failed to store message");
+                        error!(error = display(&err), "failed to store message");
                     }
                 }
             }
