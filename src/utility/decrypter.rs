@@ -23,6 +23,7 @@ pub struct P2pDecrypter {
     precomputed_key: PrecomputedKey,
     nonce: Nonce,
     metadata: bool,
+    ack: bool,
     inc_buf: Vec<u8>,
     dec_buf: Vec<u8>,
     input_remaining: usize,
@@ -37,6 +38,7 @@ impl P2pDecrypter {
             nonce,
             store,
             metadata: false,
+            ack: false,
             inc_buf: Default::default(),
             dec_buf: Default::default(),
             input_remaining: 0,
@@ -99,9 +101,40 @@ impl P2pDecrypter {
     fn try_deserialize(&mut self, mut msg: Vec<u8>) -> Option<Vec<PeerMessage>> {
         if !self.metadata {
             self.try_deserialize_meta(&mut msg)
+        } else if !self.ack {
+            self.try_deserialize_ack(&mut msg)
         } else {
             self.try_deserialize_p2p(&mut msg)
         }
+    }
+
+    fn try_deserialize_ack(&mut self, msg: &mut Vec<u8>) -> Option<Vec<PeerMessage>> {
+        use crate::messages::ack_message::AckMessage;
+        self.input_remaining = self.input_remaining.saturating_sub(msg.len());
+        self.dec_buf.append(msg);
+
+        if self.input_remaining == 0 {
+            loop {
+                match AckMessage::from_bytes(self.dec_buf.clone()) {
+                    Ok(msg) => {
+                        self.dec_buf.clear();
+                        self.ack = true;
+                        return Some(vec![msg.into()]);
+                    }
+                    Err(BinaryReaderError::Underflow { bytes }) => {
+                        self.input_remaining += bytes;
+                        return None;
+                    }
+                    Err(BinaryReaderError::Overflow { bytes }) => {
+                        self.dec_buf.drain(self.dec_buf.len() - bytes..);
+                    }
+                    Err(e) => {
+                        warn!(data = debug(&self.dec_buf), error = display(&e), "failed to deserialize message");
+                        return None;
+                    }
+                }
+            }
+        } else { None }
     }
 
     fn try_deserialize_meta(&mut self, msg: &mut Vec<u8>) -> Option<Vec<PeerMessage>> {

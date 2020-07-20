@@ -19,6 +19,7 @@ use std::net::{SocketAddr, IpAddr};
 use std::convert::TryFrom;
 use tezos_messages::p2p::binary_message::cache::CachedData;
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
+use tezos_messages::p2p::encoding::ack::AckMessage;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
@@ -92,6 +93,13 @@ async fn test_client(id: u32, messages: u32, server: String) {
         .await.unwrap();
     assert_eq!(sent_metadata.as_bytes(), recv_metadata.as_bytes(), "received different metadata");
     println!("[{}] Got metadata message", id);
+
+    let sent_ack = AckMessage::Ack;
+    writer.write_message(&sent_ack).await.unwrap();
+    let recv_ack = reader.read_message::<AckMessage>()
+        .await.unwrap();
+    assert_eq!(sent_ack, recv_ack, "received different acks");
+    println!("[{}] Got Ack message", id);
 
     for msg_id in 0..messages {
         let message = PeerMessage::Advertise(AdvertiseMessage::new(&[

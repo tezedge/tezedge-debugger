@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tracing::{error, field::{display, debug}};
+use tracing::{error, info, field::{display, debug}};
 use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use crate::system::SystemSettings;
 use crate::messages::p2p_message::P2pMessage;
 use crate::storage::MessageStore;
+use storage::StorageError;
 
 type ProcessorTrait = dyn Processor + Sync + Send + 'static;
 
@@ -58,8 +59,9 @@ impl DatabaseProcessor {
         tokio::spawn(async move {
             loop {
                 if let Some(mut msg) = receiver.recv().await {
-                    if let Err(err) = store.p2p().store_message(&mut msg) {
-                        error!(error = display(&err), "failed to store message");
+                    match store.p2p().store_message(&mut msg) {
+                        Ok(id) => { info!(id, "stored new message"); },
+                        Err(err) => { error!(error = display(&err), "failed to store message"); },
                     }
                 }
             }

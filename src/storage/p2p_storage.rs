@@ -498,6 +498,7 @@ pub(crate) mod secondary_indexes {
         OperationHashesForBlock = 0x1 << 22,
         GetOperationsForBlocks = 0x1 << 23,
         OperationsForBlocks = 0x1 << 24,
+        AckMessage = 0x1 << 25,
     }
 
     impl Type {
@@ -526,6 +527,7 @@ pub(crate) mod secondary_indexes {
                     PeerMessage::OperationsForBlocks(_) => Self::OperationsForBlocks as u32,
                     PeerMessage::ConnectionMessage(_) => Self::ConnectionMessage as u32,
                     PeerMessage::MetadataMessage(_) => Self::Metadata as u32,
+                    PeerMessage::AckMessage(_) => Self::AckMessage as u32,
                     PeerMessage::_Reserved => Self::P2PMessage as u32,
                 }
             } else {

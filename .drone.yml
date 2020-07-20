@@ -42,8 +42,8 @@ steps:
       - name: server-identity
         path: /tmp/volume
     commands:
-      - /etc/bin/drone-server &
-      - /etc/bin/tezedge-debugger
+      - /etc/bin/drone-server
+#      - /etc/bin/tezedge-debugger
   - name: client
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists

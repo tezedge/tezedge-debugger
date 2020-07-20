@@ -18,6 +18,7 @@ use tezos_messages::p2p::encoding::peer::{PeerMessageResponse};
 use std::net::{SocketAddr};
 use std::convert::TryFrom;
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
+use tezos_messages::p2p::encoding::ack::AckMessage;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
@@ -84,6 +85,10 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
     let metadata = enc_reader.read_message::<MetadataMessage>().await.unwrap();
     println!("[{}] Decrypted metadata message", peer_addr);
     enc_writer.write_message(&metadata).await.unwrap();
+
+    let ack = enc_reader.read_message::<AckMessage>().await.unwrap();
+    println!("[{}] Decrypted ack message", peer_addr);
+    enc_writer.write_message(&ack).await.unwrap();
 
     loop {
         match enc_reader.read_message::<PeerMessageResponse>().await {

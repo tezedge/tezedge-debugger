@@ -218,7 +218,7 @@ impl ParserEncryption {
     pub fn process_encrypted(&mut self, packet: Packet) -> Result<Option<P2pMessage>, Error> {
         let (remote, incoming) = self.extract_remote(&packet);
 
-        let decrypter = if self.debugger == incoming {
+        let decrypter = if incoming {
             &mut self.incoming_decrypter
         } else {
             &mut self.outgoing_decrypter
@@ -250,7 +250,7 @@ impl ParserEncryption {
             let NoncePair { remote, local } = generate_nonces(
                 &sent_data.raw(),
                 &recv_data.raw(),
-                incoming,
+                !incoming,
             );
 
             let precomputed_key = precompute(

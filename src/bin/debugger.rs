@@ -26,12 +26,6 @@ fn open_database() -> Result<MessageStore, failure::Error> {
     Ok(MessageStore::new(rocksdb))
 }
 
-fn open_snapshot<P: AsRef<Path>>(path: P) -> Result<MessageStore, failure::Error> {
-    let schemas = cfs();
-    let db = Arc::new(open_kv(path, schemas)?);
-    Ok(MessageStore::new(db))
-}
-
 async fn load_identity() -> Identity {
     // Wait until identity appears
     let mut last_try = Instant::now();

@@ -12,7 +12,8 @@ use tezos_messages::p2p::encoding::{
 use std::net::SocketAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::persistent::{Decoder, SchemaError, Encoder};
-use tezos_messages::p2p::encoding::ack::{NackMotive, NackInfo};
+use crate::messages::ack_message::{AckMessage};
+use tezos_messages::p2p::encoding::ack::{NackInfo, NackMotive};
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
 pub enum SourceType {
@@ -29,7 +30,8 @@ impl SourceType {
             | PeerMessage::Advertise(_) | PeerMessage::Bootstrap | PeerMessage::SwapRequest(_)
             | PeerMessage::GetCurrentBranch(_) | PeerMessage::Deactivate(_) | PeerMessage::GetCurrentHead(_)
             | PeerMessage::GetBlockHeaders(_) | PeerMessage::GetOperations(_) | PeerMessage::GetProtocols(_)
-            | PeerMessage::GetOperationHashesForBlocks(_) | PeerMessage::GetOperationsForBlocks(_) => Self::from_incoming(incoming),
+            | PeerMessage::GetOperationHashesForBlocks(_) | PeerMessage::GetOperationsForBlocks(_)
+            | PeerMessage::AckMessage(_) => Self::from_incoming(incoming),
             PeerMessage::SwapAck(_) | PeerMessage::CurrentBranch(_) | PeerMessage::CurrentHead(_)
             | PeerMessage::BlockHeader(_) | PeerMessage::Operation(_) | PeerMessage::Protocol(_)
             | PeerMessage::OperationHashesForBlock(_) | PeerMessage::OperationsForBlocks(_) => Self::from_incoming(!incoming),
@@ -135,6 +137,7 @@ pub enum PeerMessage {
     OperationsForBlocks(OperationsForBlocksMessage),
     ConnectionMessage(ConnectionMessage),
     MetadataMessage(MetadataMessage),
+    AckMessage(AckMessage),
     _Reserved,
 }
 
@@ -177,6 +180,12 @@ impl From<MetadataMessage> for PeerMessage {
     }
 }
 
+impl From<AckMessage> for PeerMessage {
+    fn from(value: AckMessage) -> Self {
+        PeerMessage::AckMessage(value)
+    }
+}
+
 impl PeerMessage {
     pub fn inner(&self) -> Option<TezosPeerMessage> {
         match self {
@@ -202,17 +211,11 @@ impl PeerMessage {
             PeerMessage::OperationsForBlocks(msg) => Some(TezosPeerMessage::OperationsForBlocks(msg.clone())),
             PeerMessage::ConnectionMessage(_) => None,
             PeerMessage::MetadataMessage(_) => None,
+            PeerMessage::AckMessage(_) => None,
             PeerMessage::_Reserved => None,
         }
     }
 }
-
-// impl From<AckMessage> for PeerMessage {
-//     fn from(value: AckMessage) -> Self {
-//         PeerMessage::AckMessage(value)
-//     }
-// }
-
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum MappedAckMessage {
