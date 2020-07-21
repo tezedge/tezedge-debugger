@@ -9,7 +9,6 @@ use async_trait::async_trait;
 use crate::system::SystemSettings;
 use crate::messages::p2p_message::P2pMessage;
 use crate::storage::MessageStore;
-use storage::StorageError;
 
 type ProcessorTrait = dyn Processor + Sync + Send + 'static;
 

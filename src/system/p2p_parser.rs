@@ -142,7 +142,6 @@ enum ParserState {
 
 pub struct ParserEncryption {
     incoming: bool,
-    debugger: bool,
     initializer: SocketAddr,
     local_address: IpAddr,
     identity: Identity,
@@ -155,11 +154,8 @@ pub struct ParserEncryption {
 
 impl ParserEncryption {
     pub fn new(initializer: SocketAddr, local_address: IpAddr, identity: Identity, store: MessageStore) -> Self {
-        let debugger = std::env::var("DEBUGGER").unwrap_or("FALSE".to_string());
-        let debugger = &debugger == "TRUE";
         Self {
             initializer,
-            debugger,
             local_address,
             identity,
             store,

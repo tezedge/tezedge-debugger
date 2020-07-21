@@ -17,7 +17,6 @@ use tezos_messages::p2p::encoding::peer::{PeerMessageResponse, PeerMessage};
 use tezos_messages::p2p::encoding::advertise::AdvertiseMessage;
 use std::net::{SocketAddr, IpAddr};
 use std::convert::TryFrom;
-use tezos_messages::p2p::binary_message::cache::CachedData;
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 use tezos_messages::p2p::encoding::ack::AckMessage;
 use tezos_messages::p2p::encoding::version::Version;
@@ -90,7 +89,7 @@ async fn test_client(id: u32, messages: u32, server: String) {
     let sent_metadata = MetadataMessage::new(true, true);
     writer.write_message(&sent_metadata).await.unwrap();
     println!("[{}] Sent metadata message", id);
-    let recv_metadata = reader.read_message::<MetadataMessage>()
+    let _recv_metadata = reader.read_message::<MetadataMessage>()
         .await.unwrap();
     println!("[{}] Got metadata message", id);
 

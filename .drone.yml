@@ -9,8 +9,11 @@ steps:
     volumes:
       - name: server-identity
         path: /tmp/volume
+      - name: binaries
+        path: /tmp/binaries
     commands:
       - cp ./tests/server_identity.json /tmp/volume/identity.json
+      - cp ./tests/wait_until.sh /tmp/binaries
   - name: set_client_identity
     image: ubuntu
     pull: if-not-exists
@@ -33,8 +36,6 @@ steps:
   - name: server
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
-    environment:
-      DEBUGGER: "FALSE"
     detach: true
     volumes:
       - name: binaries
@@ -44,13 +45,11 @@ steps:
       - name:
     commands:
       - /etc/bin/drone-server
-#      - /etc/bin/tezedge-debugger
   - name: client
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
     environment:
       DEBUGGER_URL: "http://client:13031"
-      DEBUGGER: "TRUE"
     volumes:
       - name: binaries
         path: /etc/bin
@@ -85,8 +84,8 @@ steps:
     image: simplestakingcom/tezedge:v0.1.0
     pull: if-not-exists
     environment:
-      SNAPSHOT_PATH: "/tmp/snapshot/snapshot"
-      NODE_IP: "0.0.0.0:13030"
+      SNAPSHOT_PATH: "/tmp/replay/snapshot"
+      NODE_IP: "0.0.0.0:9732"
     volumes:
       - name: binaries
         path: /etc/bin
@@ -95,8 +94,12 @@ steps:
       - name: snapshot
         path: /tmp/snapshot
     commands:
-      - /home/appuser/tezedge/run.sh release --peers invalid:1  # Some random to prevent node from syncing
-#      - /etc/bin/replayer
+      - mkdir /tmp/replay
+      - cp -r /tmp/snapshot/snapshot /tmp/replay/
+      - cd /home/appuser/tezedge
+      - /home/appuser/tezedge/run.sh release --peers 1.1.1.1:1 & # Some random to prevent node from syncing
+      - /etc/bin/wait_until.sh
+      - /etc/bin/replayer
 
 volumes:
   - name: binaries

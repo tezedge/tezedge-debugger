@@ -159,7 +159,7 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
             let messages = messages.into_iter();
             let mut encrypted = false;
             let mut metadata_count: usize = 0;
-            let mut ack_count: usize = 0;
+            // let mut ack_count: usize = 0;
             let mut received_connection_message: Option<ConnectionMessage> = None;
             let mut sent_connection_message: Option<ConnectionMessage> = None;
 
