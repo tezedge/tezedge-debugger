@@ -41,6 +41,7 @@ steps:
         path: /etc/bin
       - name: server-identity
         path: /tmp/volume
+      - name:
     commands:
       - /etc/bin/drone-server
 #      - /etc/bin/tezedge-debugger
@@ -48,31 +49,64 @@ steps:
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
     environment:
-      DEBUGGER_URL: "http://server:13031"
+      DEBUGGER_URL: "http://client:13031"
       DEBUGGER: "TRUE"
     volumes:
       - name: binaries
         path: /etc/bin
       - name: client-identity
         path: /tmp/volume
-      - name: cache
-        path: /tmp/cache
+      - name: snapshot
+        path: /tmp/snapshot
     commands:
       - /etc/bin/tezedge-debugger &
       - sleep 2
       - /etc/bin/drone-client --server server:13030
-      - cp -r /tmp/volume/* /tmp/cache
+      - cp -r $(find /tmp/volume/ -type d -name "[0-9]*") /tmp/snapshot/snapshot
+      - cargo test
+  - name: drone-replay
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    environment:
+      SNAPSHOT_PATH: "/tmp/snapshot/snapshot"
+      NODE_IP: "0.0.0.0:13030"
+    volumes:
+      - name: binaries
+        path: /etc/bin
+      - name: client-identity
+        path: /tmp/volume
+      - name: snapshot
+        path: /tmp/snapshot
+    commands:
+      - /etc/bin/drone-server &
+      - sleep 1
+      - /etc/bin/replayer
+  - name: live-replay
+    image: simplestakingcom/tezedge:v0.1.0
+    pull: if-not-exists
+    environment:
+      SNAPSHOT_PATH: "/tmp/snapshot/snapshot"
+      NODE_IP: "0.0.0.0:13030"
+    volumes:
+      - name: binaries
+        path: /etc/bin
+      - name: client-identity
+        path: /tmp/volume
+      - name: snapshot
+        path: /tmp/snapshot
+    commands:
+      - /home/appuser/tezedge/run.sh release --peers invalid:1  # Some random to prevent node from syncing
+#      - /etc/bin/replayer
 
 volumes:
   - name: binaries
+    temp: {}
+  - name: snapshot
     temp: {}
   - name: server-identity
     temp: {}
   - name: client-identity
     temp: {}
-  - name: cache
-    host:
-      path: /tmp/cache
 
 trigger:
   branch:

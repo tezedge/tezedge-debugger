@@ -67,7 +67,7 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
     let NoncePair { remote, local } = generate_nonces(
         sent_data.raw(),
         recv_data.raw(),
-        false,
+        true,
     );
 
     println!(
@@ -79,8 +79,8 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
         hex::encode(precomputed_key.as_ref().as_ref())
     );
 
-    let mut enc_writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
-    let mut enc_reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
+    let mut enc_writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
+    let mut enc_reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
 
     let metadata = enc_reader.read_message::<MetadataMessage>().await.unwrap();
     println!("[{}] Decrypted metadata message", peer_addr);

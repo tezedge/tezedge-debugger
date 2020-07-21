@@ -20,6 +20,7 @@ use std::convert::TryFrom;
 use tezos_messages::p2p::binary_message::cache::CachedData;
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 use tezos_messages::p2p::encoding::ack::AckMessage;
+use tezos_messages::p2p::encoding::version::Version;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
@@ -55,7 +56,7 @@ async fn test_client(id: u32, messages: u32, server: String) {
         &IDENTITY.public_key,
         &IDENTITY.proof_of_work_stamp,
         &NONCE.get_bytes(),
-        Default::default(),
+        vec![Version::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1)],
     );
     let chunk = BinaryChunk::from_content(&sent_conn_msg.as_bytes().unwrap()).unwrap();
 
@@ -68,7 +69,7 @@ async fn test_client(id: u32, messages: u32, server: String) {
         .expect("got invalid connection message from server");
 
     let sent_data = chunk;
-    let recv_data = BinaryChunk::from_content(&recv_conn_msg.cache_reader().get().unwrap()).unwrap();
+    let recv_data = BinaryChunk::from_content(&recv_conn_msg.as_bytes().unwrap()).unwrap();
 
     let precomputed_key = precompute(
         &hex::encode(recv_conn_msg.public_key),
@@ -78,11 +79,11 @@ async fn test_client(id: u32, messages: u32, server: String) {
     let NoncePair { remote, local } = generate_nonces(
         sent_data.raw(),
         recv_data.raw(),
-        true,
+        false,
     );
 
-    let mut writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
-    let mut reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
+    let mut writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
+    let mut reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
 
     println!("[{}] Encrypted connection", id);
 
@@ -91,7 +92,6 @@ async fn test_client(id: u32, messages: u32, server: String) {
     println!("[{}] Sent metadata message", id);
     let recv_metadata = reader.read_message::<MetadataMessage>()
         .await.unwrap();
-    assert_eq!(sent_metadata.as_bytes(), recv_metadata.as_bytes(), "received different metadata");
     println!("[{}] Got metadata message", id);
 
     let sent_ack = AckMessage::Ack;
@@ -111,8 +111,7 @@ async fn test_client(id: u32, messages: u32, server: String) {
         println!("[{}] Sent encrypted message {}", id, msg_id);
         let recv_message = reader.read_message::<PeerMessageResponse>().await
             .unwrap();
-        assert_eq!(message.as_bytes(), recv_message.as_bytes(), "Received different message");
-        println!("[{}] Got re-encrypted message {} back", id, msg_id);
+        println!("[{}] Got message back {:?}", id, recv_message);
     }
 }
 
