@@ -20,11 +20,13 @@ pub mod prelude {
     pub use super::SystemSettings;
 }
 
+/// Create whole new system consisting of packet producer, packet orchestrator, parsers and final processor
 pub fn build_raw_socket_system(settings: SystemSettings) -> std::io::Result<()> {
     raw_socket_producer::raw_socket_producer(settings)
 }
 
 #[derive(Clone)]
+/// System settings describing the running system
 pub struct SystemSettings {
     pub identity: Identity,
     pub local_address: IpAddr,

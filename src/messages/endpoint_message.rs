@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+/// Messages sent by RPC server endpoints
 pub enum EndpointMessage {
     P2pMessage {
         #[serde(flatten)]

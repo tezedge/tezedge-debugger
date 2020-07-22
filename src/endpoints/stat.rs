@@ -5,6 +5,7 @@ use warp::http::StatusCode;
 use crate::system::orchestrator::{CONNECTIONS};
 use itertools::Itertools;
 
+/// EXPERIMENTAL: Basic statistics endpoint
 pub fn stat(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "stat")
         .map(move || {
@@ -12,6 +13,7 @@ pub fn stat(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), 
         })
 }
 
+/// EXPERIMENTAL: Basic network statistics endpoint
 pub fn network(_: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "network")
         .map(move || {

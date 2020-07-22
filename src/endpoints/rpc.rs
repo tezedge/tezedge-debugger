@@ -12,6 +12,7 @@ use warp::reply::{WithStatus, Json};
 use std::net::SocketAddr;
 
 #[derive(Default, Debug, Copy, Clone, Serialize, Deserialize)]
+/// Cursor structure mapped from the endpoint URI
 pub struct RpcCursor {
     pub cursor_id: Option<u64>,
     pub limit: Option<usize>,
@@ -26,6 +27,7 @@ impl Into<crate::storage::RpcFilters> for RpcCursor {
     }
 }
 
+/// Basic handler for captured RPC with cursor
 pub fn rpc(storage: MessageStore) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "rpc")
         .and(warp::query::query())

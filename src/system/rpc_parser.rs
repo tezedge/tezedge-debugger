@@ -10,6 +10,7 @@ use std::net::SocketAddr;
 use crate::system::SystemSettings;
 use crate::messages::rpc_message::{RESTMessage, RpcMessage};
 
+/// Parser for RPC messages
 struct Parser {
     local_rpc_addr: SocketAddr,
     receiver: UnboundedReceiver<Packet>,
@@ -19,6 +20,7 @@ struct Parser {
 }
 
 impl Parser {
+    /// Create new RPC message parser
     pub fn new(receiver: UnboundedReceiver<Packet>, settings: SystemSettings) -> Self {
         Self {
             receiver,
@@ -29,6 +31,7 @@ impl Parser {
         }
     }
 
+    /// Parse capture next message and parse it
     async fn parse_next(&mut self) {
         match self.receiver.recv().await {
             Some(packet) => {
@@ -41,6 +44,7 @@ impl Parser {
         }
     }
 
+    /// Parse captured message
     fn parse(&mut self, packet: Packet) {
         let incoming = packet.destination_address() == self.local_rpc_addr;
         let remote_addr = if incoming { packet.source_address() } else { packet.destination_address() };

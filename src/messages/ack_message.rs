@@ -10,6 +10,7 @@ use storage::persistent::BincodeEncoded;
 static DUMMY_BODY_CACHE: NeverCache = NeverCache;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+/// Acknowledgment message as defined in the protocol
 pub enum AckMessage {
     Ack,
     NackV0,
@@ -17,6 +18,7 @@ pub enum AckMessage {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy)]
+/// Motive of rejection
 pub enum NackMotive {
     NoMotive,
     TooManyConnections,
@@ -27,6 +29,7 @@ pub enum NackMotive {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Clone)]
+/// Information about connection rejection
 pub struct NackInfo {
     pub motive: NackMotive,
     pub potential_peers_to_connect: Vec<String>,

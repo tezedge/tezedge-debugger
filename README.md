@@ -9,7 +9,7 @@ scripts needed.
 How does it work
 ================
 Debugger relies on Raw Socket and identifying which packets are relevant to the running node. By sharing same network as
-node and local identity, debugger is able to decode and deserialize exchanged messages from the node.
+node and local identity, debugger is able to decode and deserialize exchanged messages from the nodes.
 
 Requirements
 ============
@@ -30,29 +30,42 @@ docker-compose -f docker-compose.rust.yml up
 ==================
 RPC endpoint of debugger are split into two parts P2P messages on `/p2p/*` endpoints and RPC messages on `/rpc/*` endpoint.
 ### P2P
-#### `/p2p/{offset}/{count}(/{host})?`
+#### `/v2/p2p`
 ##### Description
 Endpoint for checking all P2P communication on running node. 
 Messages are always sorted from newest to oldest.
-##### Arguments
-* `offset : 64bit integer value` - Skip last `offset` values.
-* `count : 64bit integer value` - Return `count` messages.
-* OPTIONAL `host : String in format <IP>:<PORT>` - Filter messages by remote address
+##### Query arguments
+* `cursor_id : 64bit integer value` - Cursor offset, used for easier navigating in messages. Default is the last message.
+* `limit : 64bit integer value` - Maximum number of messages returned by the RPC. Default is 100 messages.
+* `remote_addr : String representing socket address in format "<IP>:<PORT>"` - Filter message belonging to communication with given remote node.
+* `incoming : Boolean` - Filter messages by their direction
+* `types : comma separated list of types` - Filter messages by given types
+* `source_type: "local" or "remote"` - Filter messages by source of the message
 ##### Example
-* `/p2p/0/1` - Show last P2P message
-* `/p2p/50/50` - Show last 50 RPC messages, skipping first 50
-* `/p2p/0/1/51.15.81.27:9732` - Show last message between this node and node running on address `51.15.81.27:9732`.
+* `/v2/p2p` - Return last 100 P2P messages
+* `/v2/p2p?cursor_id=100&types=connection_message,metadata` - Return all connection and metadata messages from first 100 messages.
 
 ### RPC
-#### `/rpc/{offset}/{count}(/{ip})?`
+#### `/v2/rpc`
 ##### Description
 Endpoint for checking all RPC Requests/Responses on running node.
 Messages are always sorted from newest to oldest.
-##### Arguments
-* `offset : 64bit integer value` - Skip last `offset` values.
-* `count : 64bit integer value` - Return `count` messages.
-* OPTIONAL `IP : String representing valid IP address` - Filter messages by remote ip address
+##### Query
+* `cursor_id : 64bit integer value` - Cursor offset, used for easier navigating in messages. Default is the last message.
+* `limit : 64bit integer value` - Maximum number of messages returned by the RPC. Default is 100 messages.
+* `remote_addr : String representing socket address in format "<IP>:<PORT>"` - Filter message belonging to communication with given remote node.
 ##### Example
-* `/rpc/0/1` - Show last RPC message
-* `/rpc/50/50` - Show last fifty RPC messages, skipping first 50
-* `/rpc/0/1/172.16.0.1` - Show RPC message sent between node and remote running on `172.16.0.1`
+* `/v2/rpc?remote_addr=192.168.1.1:4852` - Show all requests made by the client with address 192.168.1.1:4852
+
+### Logs
+#### `/v2/log`
+##### Description
+Endpoint for checking all captured logs on running node
+Messages are always sorted from newest to oldest.
+##### Query arguments
+* `cursor_id : 64bit integer value` - Cursor offset, used for easier navigating in messages. Default is the last message.
+* `limit : 64bit integer value` - Maximum number of messages returned by the RPC. Default is 100 messages.
+* `level : string` - Log level, should be on of `trace, debug, info, warn, error`
+* `timestamp : string` - Unix timestamp representing time, from which to show logs
+##### Example
+* `/v2/log?level=error` - Return all errors in last one hundred logs

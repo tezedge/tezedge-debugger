@@ -16,6 +16,8 @@ use crate::messages::ack_message::{AckMessage};
 use tezos_messages::p2p::encoding::ack::{NackInfo, NackMotive};
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
+/// Determines, if message belongs to communication originated
+/// from remote or local node
 pub enum SourceType {
     #[serde(rename = "local")]
     Local,
@@ -24,6 +26,7 @@ pub enum SourceType {
 }
 
 impl SourceType {
+    /// Determine source from type of message and its destination
     pub fn from_p2p_msg(msg: &PeerMessage, incoming: bool) -> Self {
         match msg {
             PeerMessage::Disconnect | PeerMessage::ConnectionMessage(_) | PeerMessage::MetadataMessage(_)
@@ -39,6 +42,7 @@ impl SourceType {
         }
     }
 
+    /// Create new SourceType from raw incoming boolean
     pub fn from_incoming(incoming: bool) -> Self {
         if incoming {
             Self::Remote
@@ -47,6 +51,7 @@ impl SourceType {
         }
     }
 
+    /// Represent SourceType as a boolean
     pub fn as_bool(self) -> bool {
         if Self::Local == self {
             false
@@ -57,6 +62,7 @@ impl SourceType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// P2PMessage as stored in the database
 pub struct P2pMessage {
     pub id: Option<u64>,
     pub timestamp: u128,
@@ -81,10 +87,12 @@ impl Encoder for P2pMessage {
 }
 
 impl P2pMessage {
+    /// Create new UNIX timestamp
     fn make_ts() -> u128 {
         SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
     }
 
+    /// Make new P2pMessage from parts
     pub fn new<T: Into<PeerMessage>>(remote_addr: SocketAddr, incoming: bool, values: Vec<T>) -> Self {
         let payload = values.into_iter().map(|x| x.into()).collect::<Vec<PeerMessage>>();
         let source_type = payload.first().map(|msg| SourceType::from_p2p_msg(msg, incoming))
@@ -99,14 +107,17 @@ impl P2pMessage {
         }
     }
 
+    /// Get source type of this message
     pub fn source_type(&self) -> SourceType {
         self.source_type
     }
 
+    /// Get incoming flag of this message
     pub fn is_incoming(&self) -> bool {
         self.incoming
     }
 
+    /// Get remote address of this message
     pub fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
     }
@@ -114,6 +125,9 @@ impl P2pMessage {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
+/// Detailed representation of peer messages mapped from
+/// tezedge encoding, with difference, that most of
+/// binary data are cast to hex values
 pub enum PeerMessage {
     Disconnect,
     Bootstrap,

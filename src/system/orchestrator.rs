@@ -6,7 +6,7 @@ use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
 use serde::{Serialize, Deserialize};
-use tracing::{trace, error, field::{display, debug}};
+use tracing::{trace, error, field::{display}};
 use std::{
     collections::{HashMap, hash_map::Entry},
     sync::{Arc, RwLock}, net::SocketAddr,
@@ -21,6 +21,7 @@ lazy_static! {
     pub static ref CONNECTIONS: Arc<RwLock<HashMap<SocketAddr, Option<ConnectionState>>>> = Default::default();
 }
 
+/// Spawn new orchestrator which sorts all packets into the parsers, and spawns new parsers if necessary
 pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Packet> {
     let (sender, mut receiver) = unbounded_channel::<Packet>();
 
@@ -104,6 +105,7 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+/// Connection state information
 pub struct ConnectionState {
     pub incoming: bool,
     pub peer_id: String,

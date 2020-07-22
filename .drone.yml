@@ -66,9 +66,6 @@ steps:
   - name: drone-replay
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
-    environment:
-      SNAPSHOT_PATH: "/tmp/snapshot/snapshot"
-      NODE_IP: "0.0.0.0:13030"
     volumes:
       - name: binaries
         path: /etc/bin
@@ -79,13 +76,10 @@ steps:
     commands:
       - /etc/bin/drone-server &
       - sleep 1
-      - /etc/bin/replayer
+      - /etc/bin/replayer --node-ip "0.0.0.0:13030" --path "/tmp/snapshot/snapshot" --last-message-id 6
   - name: live-replay
     image: simplestakingcom/tezedge:v0.1.0
     pull: if-not-exists
-    environment:
-      SNAPSHOT_PATH: "/tmp/replay/snapshot"
-      NODE_IP: "0.0.0.0:9732"
     volumes:
       - name: binaries
         path: /etc/bin
@@ -99,7 +93,7 @@ steps:
       - cd /home/appuser/tezedge
       - /home/appuser/tezedge/run.sh release --peers 1.1.1.1:1 & # Some random to prevent node from syncing
       - /etc/bin/wait_until.sh
-      - /etc/bin/replayer
+      - /etc/bin/replayer --node-ip "0.0.0.0:9732" --path "/tmp/replay/snapshot" --last-message-id 6
 
 volumes:
   - name: binaries
