@@ -1,15 +1,15 @@
-Tezedge Debugger
+TezEdge Debugger
 ================
-Network message debugger for applications running on tezos protocol.
+Network message debugger for applications running on the Tezos protocol.
 
-The new debugger is based on Raw Sockets to capture all packets forming communication between (local) node and rest of the (remote) network.
-Replacing the TUN  (**tun**nel) devices with Raw Sockets allows much easier networking setups with docker and docker-compose. No custom
-scripts needed.
+The new Debugger is based on Raw Sockets and captures all packets that form the communication between the (local) node and rest of the (remote) network.
+Replacing the TUN  (**tun**nel) devices with Raw Sockets allows for much easier networking setups with docker and docker-compose. No custom
+scripts are needed.
 
 How does it work
 ================
-Debugger relies on Raw Socket and identifying which packets are relevant to the running node. By sharing same network as
-node and local identity, debugger is able to decode and deserialize exchanged messages from the nodes.
+The Debugger relies on a Raw Socket to identify which packets are relevant to the running node. By sharing the same network as
+the node and local identity, the Debugger is able to decode and deserialize the messages that are exchanged between nodes.
 
 Requirements
 ============
@@ -18,9 +18,9 @@ Requirements
 
 How to run
 ==========
-Easiest way to run the debugger is it by running it with included docker-compose files. There are two separate files one
-for our Rust Tezedege Light Node (docker-compose.rust.yml) and one for original OCaml node (docker-compose.ocaml.yml).
-How to change ports is described inside the docker-compose files.
+Easiest way to launch the Debugger is by running it with the included docker-compose files. There are two separate files: one
+for our Rust Tezedege Light Node (docker-compose.rust.yml) and the other for the original OCaml node (docker-compose.ocaml.yml).
+A guide on how to change ports is included inside the docker-compose files.
 ```bash
 docker-compose -f docker-compose.rust.yml build
 docker-compose -f docker-compose.rust.yml up
@@ -28,7 +28,7 @@ docker-compose -f docker-compose.rust.yml up
 
 (WIP) Debugger API
 ==================
-RPC endpoint of debugger are split into two parts P2P messages on `/p2p/*` endpoints and RPC messages on `/rpc/*` endpoint.
+The RPC endpoint of the Debugger is split into two parts: P2P messages on `/p2p/*` endpoints and RPC messages on `/rpc/*` endpoint.
 ### P2P
 #### `/v2/p2p`
 ##### Description
