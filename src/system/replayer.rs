@@ -28,8 +28,15 @@ lazy_static! {
 }
 
 #[allow(dead_code)]
-pub async fn replay(node_address: SocketAddr, messages: Vec<P2pMessage>, incoming: bool) -> Result<(), failure::Error> {
-    warn!(message_count = messages.len(), incoming, "starting replay of messages");
+/// Create an replay of given message onto the given address
+pub async fn replay(node_address: SocketAddr, messages: Vec<P2pMessage>) -> Result<(), failure::Error> {
+    let incoming = if messages.len() > 0 {
+        let msg = messages.get(messages.len() - 1);
+        msg.unwrap().incoming
+    } else {
+        return Ok(());
+    };
+    info!(message_count = messages.len(), incoming, "starting replay of messages");
     if incoming {
         replay_incoming(node_address, messages).await
     } else {
@@ -38,6 +45,9 @@ pub async fn replay(node_address: SocketAddr, messages: Vec<P2pMessage>, incomin
 }
 
 #[allow(dead_code)]
+/// Replay given messages to the given address as if this replay is an actual node driven by
+/// the given message
+/// More datailed info in the Replay Outgoing function
 async fn replay_incoming(node_address: SocketAddr, messages: Vec<P2pMessage>) -> Result<(), failure::Error> {
     tokio::spawn(async move {
         let err: Result<(), failure::Error> = async move {
@@ -145,13 +155,18 @@ async fn replay_incoming(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
 }
 
 #[allow(dead_code)]
+/// Replay given messages into the given address, as if local node tried to connect to the some remote
+/// node specified by the given node address
 async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) -> Result<(), failure::Error> {
+    // Prepare Tcp Listener for incoming connection
     let listener = TcpListener::bind("0.0.0.0:0").await?;
+    // Extract assigned port of the newly established listening port
     let listening_port = listener.local_addr()?.port();
     // Spawn replay handler
     tokio::spawn(async move {
         let err: Result<(), failure::Error> = async move {
             let mut listener = listener;
+            // Await the node to establish connection with node
             let (stream, _peer_addr) = listener.accept().await?;
             let (reader, writer) = MessageStream::from(stream).split();
             let (mut reader, mut writer) = (Some(reader), Some(writer));
@@ -159,11 +174,14 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
             let messages = messages.into_iter();
             let mut encrypted = false;
             let mut metadata_count: usize = 0;
-            // let mut ack_count: usize = 0;
+            let mut ack_count: usize = 0;
             let mut received_connection_message: Option<ConnectionMessage> = None;
             let mut sent_connection_message: Option<ConnectionMessage> = None;
 
+            // Drive replay by stored messages
             for mut message in messages.rev() {
+                // If connection is not encrypted, but both connection messages has been exchange,
+                // Do network upgrade
                 if !encrypted && sent_connection_message.is_some() && received_connection_message.is_some() {
                     let sent = sent_connection_message.clone().unwrap();
                     let recv = received_connection_message.clone().unwrap();
@@ -185,16 +203,22 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
                     encrypted = true;
                 }
 
-                let sending = !message.incoming;
+                // Check if the next message should be received or send
+                let sending = message.incoming;
                 if message.message.len() < 1 {
                     continue;
                 }
                 let message = message.message.pop().unwrap();
-
+                info!(sending, encrypted, "Processing message");
                 if sending {
                     if encrypted {
                         match message {
+                            // Do not send connection message over encrypted connection
                             PeerMessage::ConnectionMessage(_) => return Ok(()),
+                            PeerMessage::AckMessage(ack) => {
+                                ack_count += 1;
+                                enc_writer.as_mut().unwrap().write_message(&ack).await?;
+                            }
                             PeerMessage::MetadataMessage(metadata) => {
                                 metadata_count += 1;
                                 enc_writer.as_mut().unwrap().write_message(&metadata).await?;
@@ -211,31 +235,43 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
                                 conn_msg.versions.push(Version::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1));
                                 let sent_chunk = BinaryChunk::from_content(&conn_msg.as_bytes()?)?;
                                 sent_connection_message = Some(conn_msg);
+                                info!(msg = debug(&sent_connection_message), "Sending connection message");
                                 writer.as_mut().unwrap().write_message(&sent_chunk)
                                     .await.unwrap();
                             }
+                            // Do not send any other message over un-encrypted connection, but ConnectionMessage
                             _ => return Ok(()),
                         }
                     }
                 } else {
                     if encrypted {
                         let reader = enc_reader.as_mut().unwrap();
+                        // Tezos works, like that, it firstly exchanges:
+                        // - two unencrypted ConnectionMessages
+                        // - two encrypted MetadataMessages
+                        // - two encrypted Acknowledgements
+                        // - rest is encrypted communication
                         if metadata_count < 2 {
-                            let _ = reader.read_message::<MetadataMessage>().await?;
+                            let msg = reader.read_message::<MetadataMessage>().await?;
                             metadata_count += 1;
-                        // } else if ack_count < 2 {
-                        //     let _ = reader.read_messge::<AckMessage>().await?;
-                        //     ack_count += 1;
+                            info!(msg = debug(&msg), "Received metadata message");
+                        } else if ack_count < 2 {
+                            let msg = reader.read_messge::<AckMessage>().await?;
+                            ack_count += 1;
+                            info!(msg = debug(&msg), "Received ack message");
                         } else {
-                            let _ = reader.read_message::<PeerMessageResponse>().await?;
+                            let msg = reader.read_message::<PeerMessageResponse>().await?;
+                            info!(msg = debug(&msg), "Received encrypted message");
                         }
                     } else {
                         let recv_chunk = reader.as_mut().unwrap().read_message().await?;
                         let conn_msg = ConnectionMessage::try_from(recv_chunk)?;
                         received_connection_message = Some(conn_msg);
+                        info!(msg = debug(&received_connection_message), "Received connection message");
                     }
                 }
             }
+            tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
             Ok(())
         }.await;
         if let Err(err) = err {
@@ -243,6 +279,9 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
         }
     });
 
+    // Try to force local node to connect to the debugger to initialize the replay,
+    // by establishing encrypted connection (By exhange of Connection messages, Metadata and ACK)
+    // Then sending single advertise method, which point to the newly created listener
     let connection = TcpStream::connect(node_address).await?;
     let (mut reader, mut writer) = MessageStream::from(connection).split();
     let sent_conn_msg = ConnectionMessage::new(
@@ -250,10 +289,11 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
         &IDENTITY.public_key,
         &IDENTITY.proof_of_work_stamp,
         &Nonce::random().get_bytes(),
-        Default::default(),
+        vec![Version::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1)],
     );
     let chunk = BinaryChunk::from_content(&sent_conn_msg.as_bytes().unwrap()).unwrap();
 
+    // Follow same protocol as is in the handshake
     writer.write_message(&chunk).await?;
     let recv_chunk = reader.read_message().await?;
     let recv_conn_msg = ConnectionMessage::try_from(recv_chunk)?;
@@ -277,6 +317,8 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
     reader.read_message::<MetadataMessage>().await?;
     writer.write_message(&AckMessage::Ack).await?;
     reader.read_message::<AckMessage>().await?;
+    // And after handshake, send single advertise message, pointing to the local listening port
+    // created by the replayer
     let advertise = TezosPeerMessage::Advertise(AdvertiseMessage::new(&[
         SocketAddr::new(IpAddr::from([0, 0, 0, 0]), listening_port),
     ]));

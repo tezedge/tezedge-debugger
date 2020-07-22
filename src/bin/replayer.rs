@@ -24,5 +24,5 @@ async fn main() -> Result<(), failure::Error> {
     let addr: SocketAddr = std::env::var("NODE_IP")?.parse()?;
     let storage = open_snapshot(path)?;
     let msgs = storage.p2p().get_cursor(Some(6), 7, Default::default())?;
-    replay(addr, msgs, true).await
+    replay(addr, msgs).await
 }

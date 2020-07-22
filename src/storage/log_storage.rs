@@ -12,21 +12,25 @@ use crate::storage::log_storage::secondary_indexes::{LevelIndex, LogLevel, Times
 use crate::storage::secondary_index::SecondaryIndex;
 use crate::storage::sorted_intersect::sorted_intersect;
 
+/// Defined Key Value store for Log storage
 pub type LogStorageKV = dyn KeyValueStoreWithSchema<LogStore> + Sync + Send;
 
 #[derive(Debug, Default, Clone)]
+/// Allowed filters on log store
 pub struct LogFilters {
     pub level: Option<LogLevel>,
     pub date: Option<u128>,
 }
 
 impl LogFilters {
+    /// Check, if there are no set filters
     pub fn empty(&self) -> bool {
         self.level.is_none() && self.date.is_none()
     }
 }
 
 #[derive(Clone)]
+/// Log message store
 pub struct LogStore {
     kv: Arc<LogStorageKV>,
     level_index: LevelIndex,
@@ -37,6 +41,7 @@ pub struct LogStore {
 
 #[allow(dead_code)]
 impl LogStore {
+    /// Create new store on top of the RocksDB
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
             kv: kv.clone(),
@@ -47,28 +52,35 @@ impl LogStore {
         }
     }
 
+    /// Get current index
     fn index(&self) -> u64 {
         self.seq.load(Ordering::SeqCst)
     }
 
+    /// Increment count of messages in the store
     fn inc_count(&self) {
         self.count.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// Reserve new index for later use. The index must be manually inserted
+    /// with [LogStore::put_message]
     pub fn reserve_index(&self) -> u64 {
         self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
+    /// Create all indexes for given value
     pub fn make_indexes(&self, primary_index: u64, value: &LogMessage) -> Result<(), StorageError> {
         self.level_index.store_index(&primary_index, value)?;
         self.timestamp_index.store_index(&primary_index, value)
     }
 
+    /// Delete all indexes for given value
     pub fn delete_indexes(&self, primary_index: u64, value: &LogMessage) -> Result<(), StorageError> {
         self.level_index.delete_index(&primary_index, value)?;
         self.timestamp_index.delete_index(&primary_index, value)
     }
 
+    /// Put messages onto specific index
     pub fn put_message(&self, index: u64, msg: &mut LogMessage) -> Result<(), StorageError> {
         msg.id = Some(index);
         if self.kv.contains(&index)? {
@@ -81,6 +93,7 @@ impl LogStore {
         Ok(())
     }
 
+    /// Store message at the end of the store. Return ID of newly inserted value
     pub fn store_message(&self, msg: &mut LogMessage) -> Result<u64, StorageError> {
         let index = self.reserve_index();
         msg.id = Some(index);
@@ -90,6 +103,12 @@ impl LogStore {
         Ok(index)
     }
 
+    /// Create cursor into the database, allowing iteration over values matching given filters.
+    /// Values are sorted by the index in descending order.
+    /// * Arguments:
+    /// - cursor_index: Index of start of the sequence (if no value provided, start at the end)
+    /// - limit: Limit result to maximum of specified value
+    /// - filters: Specified filters for values
     pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filters: LogFilters) -> Result<Vec<LogMessage>, StorageError> {
         let mut ret = Vec::with_capacity(limit);
         if filters.empty() {
@@ -107,6 +126,8 @@ impl LogStore {
         Ok(ret)
     }
 
+    /// Create iterator ending on given index. If no value is provided
+    /// start at the end
     fn cursor_iterator<'a>(&'a self, cursor_index: Option<u64>) -> Result<Box<dyn 'a + Iterator<Item=(u64, LogMessage)>>, StorageError> {
         Ok(Box::new(self.kv.iterator(IteratorMode::From(&cursor_index.unwrap_or(std::u64::MAX), Direction::Reverse))?
             .filter_map(|(k, v)| {
@@ -114,6 +135,7 @@ impl LogStore {
             })))
     }
 
+    /// Create iterator with at maximum given index, having specified log level
     pub fn level_iterator<'a>(&'a self, cursor_index: Option<u64>, level: LogLevel) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(self.level_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), level)?
             .filter_map(|(_, value)| {
@@ -121,6 +143,7 @@ impl LogStore {
             })))
     }
 
+    /// Create iterator with at maximum given index, having specified log level
     pub fn timestamp_iterator<'a>(&'a self, cursor_index: Option<u64>, timestamp: u128) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         println!("Getting the timestamp iterator");
         Ok(Box::new(self.timestamp_index.get_iterator(&cursor_index.unwrap_or(std::u64::MAX), timestamp, Direction::Reverse)?

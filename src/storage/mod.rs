@@ -24,6 +24,7 @@ use storage::persistent::KeyValueSchema;
 use crate::storage::stat_storage::StatStore;
 
 #[derive(Clone)]
+/// Basic store for all captured messages
 pub struct MessageStore {
     p2p_db: P2pStore,
     log_db: LogStore,
@@ -34,6 +35,7 @@ pub struct MessageStore {
 }
 
 impl MessageStore {
+    /// Create new store onto given RocksDB database
     pub fn new(db: Arc<DB>) -> Self {
         Self {
             p2p_db: P2pStore::new(db.clone()),
@@ -45,23 +47,28 @@ impl MessageStore {
         }
     }
 
+    /// Get p2p message store
     pub fn p2p(&self) -> &P2pStore {
         &self.p2p_db
     }
 
+    /// Get log message store
     pub fn log(&self) -> &LogStore {
         &self.log_db
     }
 
+    /// Get rpc message store
     pub fn rpc(&self) -> &RpcStore {
         &self.rpc_db
     }
 
+    /// Get statistics store
     pub fn stat(&self) -> &StatStore {
         &self.stat_db
     }
 }
 
+/// Create list of all Column Family descriptors required for Message store
 pub fn cfs() -> Vec<ColumnFamilyDescriptor> {
     vec![
         P2pStore::descriptor(),
@@ -77,10 +84,13 @@ pub fn cfs() -> Vec<ColumnFamilyDescriptor> {
     ]
 }
 
+/// Create new UNIX timestamp
 pub fn get_ts() -> u128 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
 }
 
+/// Encoding for IPv4/IPv6 address. Both are represented as
+/// u128 value. IPv4 is prefixed with 96 zeroed bits
 fn encode_address(addr: &IpAddr) -> u128 {
     match addr {
         &IpAddr::V6(addr) => u128::from(addr),
@@ -89,6 +99,7 @@ fn encode_address(addr: &IpAddr) -> u128 {
 }
 
 #[allow(dead_code)]
+/// Decode some u128 as some valid IP address
 fn decode_address(value: u128) -> IpAddr {
     use std::net::{Ipv4Addr, Ipv6Addr};
     if value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000 == 0 {
@@ -98,6 +109,10 @@ fn decode_address(value: u128) -> IpAddr {
     }
 }
 
+/// Dissect given number as vector of it binary parts.
+/// It is always true, that sum of the parts is equal to the original number
+/// For example: number 11 is dissected as values 8, 2 and 1
+/// (because: 1011 == 1000 + 10 + 1)
 pub fn dissect(mut number: u32) -> Vec<u32> {
     let mut ret: Vec<u32> = Vec::with_capacity(number.count_ones() as usize);
     while number != 0 {
@@ -109,8 +124,19 @@ pub fn dissect(mut number: u32) -> Vec<u32> {
 }
 
 pub mod sorted_intersect {
+    /// Module implements sorted intersection algorithm
+    /// Intersection is an *set* operation returning values
+    /// that are present in both sets
+    /// For sets:
+    /// - A = {1,2,3,4,5}
+    /// - B = {3,4,5,6,7}
+    /// Intersection of A and B is set {3,4,5}
+    ///
+    /// Sorted intersect works on any sorted vectors.
     use std::cmp::Ordering;
 
+    /// For given vector of *sorted* iterators, return new vector containing values
+    /// present in *every* iterator
     pub fn sorted_intersect<I>(mut iters: Vec<I>, limit: usize) -> Vec<I::Item>
         where
             I: Iterator,
@@ -169,10 +195,12 @@ pub mod sorted_intersect {
         ret
     }
 
+    /// Create heap out of vector
     fn heapify<Item: Ord>(heap: &mut Vec<(Item, usize)>) {
         heap.sort_by(|(a, _), (b, _)| a.cmp(b));
     }
 
+    /// Fill heap with new values
     fn fill_heap<'a, Item: Ord, Inner: 'a + Iterator<Item=Item>, Outer: Iterator<Item=&'a mut Inner>>(iters: Outer, heap: &mut Vec<(Inner::Item, usize)>) -> bool {
         for (i, iter) in iters.enumerate() {
             let value = iter.next();
@@ -186,6 +214,8 @@ pub mod sorted_intersect {
         true
     }
 
+    /// Check if top of the heap is a hit, meaning if it should be contained in the
+    /// resulting set
     fn is_hit<Item: Ord>(heap: &Vec<(Item, usize)>) -> bool {
         let value = heap.iter().next().map(|(value, _)|
             heap.iter().fold((value, true), |(a, eq), (b, _)| {

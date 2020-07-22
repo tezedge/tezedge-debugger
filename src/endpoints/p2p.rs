@@ -19,6 +19,7 @@ use crate::messages::p2p_message::{SourceType};
 use crate::messages::endpoint_message::EndpointMessage;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+/// Cursor structure mapped from the endpoint URI
 pub struct P2pCursor {
     cursor_id: Option<u64>,
     limit: Option<usize>,
@@ -30,6 +31,7 @@ pub struct P2pCursor {
 }
 
 impl P2pCursor {
+    /// Parse given list of types as bit-flag
     fn get_types(&self) -> Result<Option<u32>, ParseTypeError> {
         if let Some(ref values) = self.types {
             let mut ret = 0u32;
@@ -65,6 +67,7 @@ impl TryInto<P2pFilters> for P2pCursor {
     }
 }
 
+/// Basic handler for p2p message endpoint with cursor
 pub fn p2p(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "p2p")
         .and(warp::query::query())

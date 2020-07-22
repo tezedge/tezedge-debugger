@@ -12,6 +12,7 @@ use std::convert::TryInto;
 use serde::{Serialize, Deserialize};
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+/// Cursor structure mapped from the endpoint URI
 pub struct LogCursor {
     pub cursor_id: Option<u64>,
     pub limit: Option<usize>,
@@ -20,6 +21,7 @@ pub struct LogCursor {
 }
 
 impl LogCursor {
+    /// Parse given timestamp as UNIX timestamp
     fn get_timestamp(&self) -> Result<Option<u128>, Error> {
         if let Some(ref ts) = self.timestamp {
             Ok(Some(ts.parse()?))
@@ -28,6 +30,7 @@ impl LogCursor {
         }
     }
 
+    /// Parse given log level as an database-understandable value
     fn get_level(&self) -> Result<Option<LogLevel>, ParseLogLevel> {
         if let Some(ref level) = self.level {
             Ok(Some(level.parse()?))
@@ -48,6 +51,7 @@ impl TryInto<LogFilters> for LogCursor {
     }
 }
 
+/// Basic handler for log endpoint with cursor
 pub fn log(storage: MessageStore) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "log")
         .and(warp::query::query())

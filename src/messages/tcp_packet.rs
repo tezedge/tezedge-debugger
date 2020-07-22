@@ -20,7 +20,7 @@ pub enum Packet {
 }
 
 impl Packet {
-    /// Build new (semi-universal) packet from raw buffer, from *correct* IPv(4/6) + TCP packet
+    /// Build new (semi-universal) TCP packet from raw buffer, from *correct* IPv(4/6) + TCP packet
     /// No other protocols are supported
     pub fn new(buf: &[u8]) -> Option<Self> {
         if buf.len() == 0 {
@@ -53,6 +53,7 @@ impl Packet {
         }
     }
 
+    /// Get buffer, containing message and tcp header
     pub fn tcp_buffer(&self) -> &[u8] {
         match self {
             Self::V4(_) => Ipv4Packet::new_unchecked(self.ip_buffer()).payload(),
@@ -66,7 +67,7 @@ impl Packet {
     }
 
     #[inline]
-    /// Get Socket address (IP address + TCP port number) of source generating this packet
+    /// Get Socket address (IP address + TCP port number) of source of this packet
     pub fn source_address(&self) -> SocketAddr {
         let port = self.tcp_packet().src_port();
         match self {
@@ -76,28 +77,12 @@ impl Packet {
     }
 
     #[inline]
-    /// Get Socket address (IP address + TCP port number) of source generating this packet
+    /// Get Socket address (IP address + TCP port number) of destination of this packet
     pub fn destination_address(&self) -> SocketAddr {
         let port = self.tcp_packet().dst_port();
         match self {
             Self::V4(ref packet) => SocketAddr::new(packet.dst_addr().0.into(), port),
             Self::V6(ref packet) => SocketAddr::new(packet.dst_addr().0.into(), port),
-        }
-    }
-
-    #[inline]
-    /// Socket Address identifying specific packet chain
-    pub fn identification_pair(&self) -> IdAddrs {
-        let mut hasher = DefaultHasher::new();
-        self.source_address().hash(&mut hasher);
-        let sh = hasher.finish();
-        let mut hasher = DefaultHasher::new();
-        self.destination_address().hash(&mut hasher);
-        let dh = hasher.finish();
-        if sh < dh {
-            (self.source_address(), self.destination_address())
-        } else {
-            (self.destination_address(), self.source_address())
         }
     }
 
