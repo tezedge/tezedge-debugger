@@ -14,6 +14,19 @@ services:
       - "10000:13031"      # debugger RPC port
       - "10001:13131/udp"  # debugger syslog port
     entrypoint: sleep inf
+  cadvisor:
+    image: gcr.io/google-containers/cadvisor:latest
+    container_name: cadvisor
+    command:
+      - "--global_housekeeping_interval=1m"
+      - "--housekeeping_interval=1m"
+      - "--max_housekeeping_interval=1m"
+      - "--application_metrics_count_limit=1"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
   rust-debugger:
     image: debugger
     build: .

@@ -16,7 +16,12 @@ use tezedge_debugger::storage::{MessageStore, get_ts, cfs};
 use std::path::Path;
 use std::sync::Arc;
 use storage::persistent::open_kv;
-use tezedge_debugger::system::syslog_producer::syslog_producer;
+use tezedge_debugger::system::{
+    syslog_producer::syslog_producer,
+    metric_collector::metric_collector,
+};
+use reqwest::Url;
+use std::time::Duration;
 
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
@@ -105,6 +110,8 @@ async fn main() -> Result<(), failure::Error> {
         syslog_port: 13131,
         rpc_port: 13031,
         node_rpc_port: 18732,
+        cadvisor_url: Url::parse("http://cadvisor:8080").unwrap(),
+        metrics_fetch_interval: Duration::from_secs(60),
     };
 
     // Create syslog server to capture logs from docker / syslogs
@@ -112,6 +119,8 @@ async fn main() -> Result<(), failure::Error> {
         error!(error = display(&err), "failed to build syslog server");
         exit(1);
     }
+
+    metric_collector(settings.clone()).await;
 
     // Create actual system
     match build_raw_socket_system(settings.clone()) {
