@@ -4,7 +4,7 @@
 use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema};
 use std::sync::Arc;
 use rocksdb::{DB};
-use tracing::{info, error, field::{display, debug}};
+use tracing::{info, error, field::{display}};
 use std::sync::atomic::{AtomicU64, Ordering};
 use crate::messages::log_message::LogMessage;
 use storage::{StorageError, IteratorMode, Direction};
@@ -16,7 +16,7 @@ use crate::storage::sorted_intersect::sorted_intersect;
 pub type LogStorageKV = dyn KeyValueStoreWithSchema<LogStore> + Sync + Send;
 
 #[derive(Debug, Default, Clone)]
-/// Allowed filters on log store
+/// Allowed filters for log message store
 pub struct LogFilters {
     pub level: Option<LogLevel>,
     pub date: Option<u128>,
@@ -152,6 +152,7 @@ impl LogStore {
             })))
     }
 
+    /// Load all values for indexes given.
     fn load_indexes<Iter: 'static + Iterator<Item=u64>>(&self, indexes: Iter) -> impl Iterator<Item=LogMessage> + 'static {
         let kv = self.kv.clone();
         indexes.filter_map(move |index| {
@@ -185,7 +186,7 @@ pub(crate) mod secondary_indexes {
         sync::Arc,
         str::FromStr,
     };
-    use tracing::{warn, field::{display, debug}};
+    use tracing::{warn, field::{display}};
     use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
     use crate::storage::LogStore;
     use serde::{Serialize, Deserialize};

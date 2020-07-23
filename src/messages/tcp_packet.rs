@@ -7,8 +7,6 @@ use smoltcp::{
         Ipv4Packet, Ipv6Packet, TcpPacket, IpProtocol as Protocol,
     },
 };
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
 
 pub type IdAddrs = (SocketAddr, SocketAddr);
 

@@ -14,7 +14,7 @@ use tezos_messages::p2p::encoding::ack::AckMessage;
 use tezos_messages::p2p::encoding::advertise::AdvertiseMessage;
 use tezos_messages::p2p::encoding::prelude::{PeerMessageResponse, PeerMessage as TezosPeerMessage};
 use crate::messages::prelude::PeerMessage;
-use tracing::{error, warn, info, field::{debug, display}};
+use tracing::{error, info, field::{display, debug}};
 use crate::messages::p2p_message::P2pMessage;
 use tezos_messages::p2p::encoding::version::Version;
 
@@ -256,7 +256,7 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
                             metadata_count += 1;
                             info!(msg = debug(&msg), "Received metadata message");
                         } else if ack_count < 2 {
-                            let msg = reader.read_messge::<AckMessage>().await?;
+                            let msg = reader.read_message::<AckMessage>().await?;
                             ack_count += 1;
                             info!(msg = debug(&msg), "Received ack message");
                         } else {
