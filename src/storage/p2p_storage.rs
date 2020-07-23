@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use storage::{StorageError, persistent::{KeyValueSchema, KeyValueStoreWithSchema}, IteratorMode, Direction};
-use tracing::{info, warn};
+use tracing::{info, warn, field::{display, debug}};
 use rocksdb::DB;
 use std::{
     sync::{

@@ -8,7 +8,7 @@ use std::{
         Arc, atomic::{AtomicU64, Ordering},
     }, net::{SocketAddr},
 };
-use tracing::{info, warn};
+use tracing::{info, warn, field::{display, debug}};
 use secondary_indexes::RemoteAddrIndex;
 use crate::storage::secondary_index::SecondaryIndex;
 use crate::storage::sorted_intersect::sorted_intersect;
