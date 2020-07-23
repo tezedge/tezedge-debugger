@@ -6,6 +6,7 @@ use storage::persistent::{Encoder, SchemaError, Decoder};
 use std::net::SocketAddr;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// Rpc message as stored in the database
 pub struct RpcMessage {
     pub incoming: bool,
     pub timestamp: u128,
@@ -30,6 +31,7 @@ impl Encoder for RpcMessage {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
+/// Detailed representation of REST messages
 pub enum RESTMessage {
     Request {
         method: String,

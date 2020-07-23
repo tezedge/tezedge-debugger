@@ -7,7 +7,7 @@ use common::{debugger_url, get_rpc_as_json};
 use std::collections::HashMap;
 
 const V2_ENDPOINT: &str = "v2/p2p";
-const EXPECTED_MESSAGES: usize = 6;
+const EXPECTED_MESSAGES: usize = 8;
 
 #[tokio::test]
 /// Test content of p2p endpoints, if it contains correct count of messages.
@@ -18,7 +18,7 @@ async fn tests_p2p_correct_test_output() {
         .await.unwrap();
     let values = response.as_array()
         .expect("expected array of messages");
-    assert_eq!(values.len(), EXPECTED_MESSAGES, "expected four parsed messages");
+    assert_eq!(values.len(), EXPECTED_MESSAGES, "expected eight parsed messages");
     for value in values {
         use serde_json::Value;
         let value = value.as_object()

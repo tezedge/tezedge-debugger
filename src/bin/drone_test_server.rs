@@ -13,11 +13,12 @@ use crypto::nonce::{Nonce, NoncePair, generate_nonces};
 use tezos_messages::p2p::encoding::connection::ConnectionMessage;
 use tezos_messages::p2p::binary_message::{BinaryChunk, BinaryMessage};
 use crypto::crypto_box::precompute;
-use tezedge_debugger::utility::stream::{EncryptedMessageWriter, EncryptedMessageReader};
+use tezedge_debugger::utility::stream::{EncryptedMessageWriter, EncryptedMessageReader, StreamError};
 use tezos_messages::p2p::encoding::peer::{PeerMessageResponse};
 use std::net::{SocketAddr};
 use std::convert::TryFrom;
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
+use tezos_messages::p2p::encoding::ack::AckMessage;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
@@ -78,20 +79,44 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
         hex::encode(precomputed_key.as_ref().as_ref())
     );
 
-    let mut enc_writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
-    let mut enc_reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
+    let mut enc_writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
+    let mut enc_reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
 
     let metadata = enc_reader.read_message::<MetadataMessage>().await.unwrap();
     println!("[{}] Decrypted metadata message", peer_addr);
     enc_writer.write_message(&metadata).await.unwrap();
 
+    let ack = enc_reader.read_message::<AckMessage>().await.unwrap();
+    println!("[{}] Decrypted ack message", peer_addr);
+    enc_writer.write_message(&ack).await.unwrap();
+
     loop {
-        if let Ok(message) = enc_reader.read_message::<PeerMessageResponse>().await {
-            println!("[{}] Decrypted message", peer_addr);
-            enc_writer.write_message(&message).await.unwrap();
-        } else {
-            println!("[{}] Closing peer handler", peer_addr);
-            break;
+        match enc_reader.read_message::<PeerMessageResponse>().await {
+            Ok(message) => {
+                println!("[{}] Decrypted message", peer_addr);
+                enc_writer.write_message(&message).await.unwrap();
+                println!("[{}] Sent re-encrypted message", peer_addr);
+            }
+            Err(err) => {
+                match err {
+                    StreamError::FailedToEncryptMessage { .. } => {
+                        eprintln!("[{}] Failed to encrypt message: {:?}", peer_addr, err)
+                    }
+                    StreamError::FailedToDecryptMessage { .. } => {
+                        eprintln!("[{}] Failed to decrypt message: {:?}", peer_addr, err)
+                    }
+                    StreamError::SerializationError { .. } => {
+                        eprintln!("[{}] Failed to serialize message: {:?}", peer_addr, err)
+                    }
+                    StreamError::DeserializationError { .. } => {
+                        eprintln!("[{}] Failed to deserialize message: {:?}", peer_addr, err)
+                    }
+                    StreamError::NetworkError { .. } => {
+                        println!("[{}] Closing connection", peer_addr);
+                        return;
+                    }
+                }
+            }
         }
     }
 }

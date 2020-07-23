@@ -12,8 +12,12 @@ use tezos_messages::p2p::encoding::{
 use std::net::SocketAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::persistent::{Decoder, SchemaError, Encoder};
+use crate::messages::ack_message::{AckMessage};
+use tezos_messages::p2p::encoding::ack::{NackInfo, NackMotive};
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
+/// Determines, if message belongs to communication originated
+/// from remote or local node
 pub enum SourceType {
     #[serde(rename = "local")]
     Local,
@@ -22,13 +26,15 @@ pub enum SourceType {
 }
 
 impl SourceType {
+    /// Determine source from type of message and its destination
     pub fn from_p2p_msg(msg: &PeerMessage, incoming: bool) -> Self {
         match msg {
             PeerMessage::Disconnect | PeerMessage::ConnectionMessage(_) | PeerMessage::MetadataMessage(_)
             | PeerMessage::Advertise(_) | PeerMessage::Bootstrap | PeerMessage::SwapRequest(_)
             | PeerMessage::GetCurrentBranch(_) | PeerMessage::Deactivate(_) | PeerMessage::GetCurrentHead(_)
             | PeerMessage::GetBlockHeaders(_) | PeerMessage::GetOperations(_) | PeerMessage::GetProtocols(_)
-            | PeerMessage::GetOperationHashesForBlocks(_) | PeerMessage::GetOperationsForBlocks(_) => Self::from_incoming(incoming),
+            | PeerMessage::GetOperationHashesForBlocks(_) | PeerMessage::GetOperationsForBlocks(_)
+            | PeerMessage::AckMessage(_) => Self::from_incoming(incoming),
             PeerMessage::SwapAck(_) | PeerMessage::CurrentBranch(_) | PeerMessage::CurrentHead(_)
             | PeerMessage::BlockHeader(_) | PeerMessage::Operation(_) | PeerMessage::Protocol(_)
             | PeerMessage::OperationHashesForBlock(_) | PeerMessage::OperationsForBlocks(_) => Self::from_incoming(!incoming),
@@ -36,6 +42,7 @@ impl SourceType {
         }
     }
 
+    /// Create new SourceType from raw incoming boolean
     pub fn from_incoming(incoming: bool) -> Self {
         if incoming {
             Self::Remote
@@ -44,6 +51,7 @@ impl SourceType {
         }
     }
 
+    /// Represent SourceType as a boolean
     pub fn as_bool(self) -> bool {
         if Self::Local == self {
             false
@@ -54,6 +62,7 @@ impl SourceType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// P2PMessage as stored in the database
 pub struct P2pMessage {
     pub id: Option<u64>,
     pub timestamp: u128,
@@ -78,10 +87,12 @@ impl Encoder for P2pMessage {
 }
 
 impl P2pMessage {
+    /// Create new UNIX timestamp
     fn make_ts() -> u128 {
         SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
     }
 
+    /// Make new P2pMessage from parts
     pub fn new<T: Into<PeerMessage>>(remote_addr: SocketAddr, incoming: bool, values: Vec<T>) -> Self {
         let payload = values.into_iter().map(|x| x.into()).collect::<Vec<PeerMessage>>();
         let source_type = payload.first().map(|msg| SourceType::from_p2p_msg(msg, incoming))
@@ -96,14 +107,17 @@ impl P2pMessage {
         }
     }
 
+    /// Get source type of this message
     pub fn source_type(&self) -> SourceType {
         self.source_type
     }
 
+    /// Get incoming flag of this message
     pub fn is_incoming(&self) -> bool {
         self.incoming
     }
 
+    /// Get remote address of this message
     pub fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
     }
@@ -111,29 +125,33 @@ impl P2pMessage {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
+/// Detailed representation of peer messages mapped from
+/// tezedge encoding, with difference, that most of
+/// binary data are cast to hex values
 pub enum PeerMessage {
     Disconnect,
     Bootstrap,
     Advertise(AdvertiseMessage),
     SwapRequest(SwapMessage),
     SwapAck(SwapMessage),
-    GetCurrentBranch(MappedGetCurrentBranchMessage),
-    CurrentBranch(MappedCurrentBranchMessage),
-    Deactivate(MappedDeactivateMessage),
-    GetCurrentHead(MappedGetCurrentHeadMessage),
-    CurrentHead(MappedCurrentHeadMessage),
-    GetBlockHeaders(MappedGetBlockHeadersMessage),
-    BlockHeader(MappedBlockHeaderMessage),
-    GetOperations(MappedGetOperationsMessage),
-    Operation(MappedOperationMessage),
-    GetProtocols(MappedGetProtocolsMessage),
+    GetCurrentBranch(GetCurrentBranchMessage),
+    CurrentBranch(CurrentBranchMessage),
+    Deactivate(DeactivateMessage),
+    GetCurrentHead(GetCurrentHeadMessage),
+    CurrentHead(CurrentHeadMessage),
+    GetBlockHeaders(GetBlockHeadersMessage),
+    BlockHeader(BlockHeaderMessage),
+    GetOperations(GetOperationsMessage),
+    Operation(OperationMessage),
+    GetProtocols(GetProtocolsMessage),
     Protocol(ProtocolMessage),
-    GetOperationHashesForBlocks(MappedGetOperationHashesForBlocksMessage),
-    OperationHashesForBlock(MappedOperationHashesForBlocksMessage),
-    GetOperationsForBlocks(MappedGetOperationsForBlocksMessage),
-    OperationsForBlocks(MappedOperationsForBlocksMessage),
-    ConnectionMessage(MappedConnectionMessage),
+    GetOperationHashesForBlocks(GetOperationHashesForBlocksMessage),
+    OperationHashesForBlock(OperationHashesForBlocksMessage),
+    GetOperationsForBlocks(GetOperationsForBlocksMessage),
+    OperationsForBlocks(OperationsForBlocksMessage),
+    ConnectionMessage(ConnectionMessage),
     MetadataMessage(MetadataMessage),
+    AckMessage(AckMessage),
     _Reserved,
 }
 
@@ -173,6 +191,88 @@ impl From<ConnectionMessage> for PeerMessage {
 impl From<MetadataMessage> for PeerMessage {
     fn from(value: MetadataMessage) -> Self {
         PeerMessage::MetadataMessage(value)
+    }
+}
+
+impl From<AckMessage> for PeerMessage {
+    fn from(value: AckMessage) -> Self {
+        PeerMessage::AckMessage(value)
+    }
+}
+
+impl PeerMessage {
+    pub fn inner(&self) -> Option<TezosPeerMessage> {
+        match self {
+            PeerMessage::Disconnect => Some(TezosPeerMessage::Disconnect),
+            PeerMessage::Bootstrap => Some(TezosPeerMessage::Bootstrap),
+            PeerMessage::Advertise(msg) => Some(TezosPeerMessage::Advertise(msg.clone())),
+            PeerMessage::SwapRequest(msg) => Some(TezosPeerMessage::SwapRequest(msg.clone())),
+            PeerMessage::SwapAck(msg) => Some(TezosPeerMessage::SwapAck(msg.clone())),
+            PeerMessage::GetCurrentBranch(msg) => Some(TezosPeerMessage::GetCurrentBranch(msg.clone())),
+            PeerMessage::CurrentBranch(msg) => Some(TezosPeerMessage::CurrentBranch(msg.clone())),
+            PeerMessage::Deactivate(msg) => Some(TezosPeerMessage::Deactivate(msg.clone())),
+            PeerMessage::GetCurrentHead(msg) => Some(TezosPeerMessage::GetCurrentHead(msg.clone())),
+            PeerMessage::CurrentHead(msg) => Some(TezosPeerMessage::CurrentHead(msg.clone())),
+            PeerMessage::GetBlockHeaders(msg) => Some(TezosPeerMessage::GetBlockHeaders(msg.clone())),
+            PeerMessage::BlockHeader(msg) => Some(TezosPeerMessage::BlockHeader(msg.clone())),
+            PeerMessage::GetOperations(msg) => Some(TezosPeerMessage::GetOperations(msg.clone())),
+            PeerMessage::Operation(msg) => Some(TezosPeerMessage::Operation(msg.clone())),
+            PeerMessage::GetProtocols(msg) => Some(TezosPeerMessage::GetProtocols(msg.clone())),
+            PeerMessage::Protocol(msg) => Some(TezosPeerMessage::Protocol(msg.clone())),
+            PeerMessage::GetOperationHashesForBlocks(msg) => Some(TezosPeerMessage::GetOperationHashesForBlocks(msg.clone())),
+            PeerMessage::OperationHashesForBlock(msg) => Some(TezosPeerMessage::OperationHashesForBlock(msg.clone())),
+            PeerMessage::GetOperationsForBlocks(msg) => Some(TezosPeerMessage::GetOperationsForBlocks(msg.clone())),
+            PeerMessage::OperationsForBlocks(msg) => Some(TezosPeerMessage::OperationsForBlocks(msg.clone())),
+            PeerMessage::ConnectionMessage(_) => None,
+            PeerMessage::MetadataMessage(_) => None,
+            PeerMessage::AckMessage(_) => None,
+            PeerMessage::_Reserved => None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub enum MappedAckMessage {
+    Ack,
+    NackV0,
+    Nack(MappedNackInfo),
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct MappedNackInfo {
+    pub motive: MappedNackMotive,
+    pub potential_peers_to_connect: Vec<String>,
+}
+
+impl From<NackInfo> for MappedNackInfo {
+    fn from(value: NackInfo) -> Self {
+        Self {
+            motive: value.motive().into(),
+            potential_peers_to_connect: value.potential_peers_to_connect().clone(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy)]
+pub enum MappedNackMotive {
+    NoMotive,
+    TooManyConnections,
+    UnknownChainName,
+    DeprecatedP2pVersion,
+    DeprecatedDistributedDbVersion,
+    AlreadyConnected,
+}
+
+impl From<&NackMotive> for MappedNackMotive {
+    fn from(value: &NackMotive) -> Self {
+        match value {
+            NackMotive::NoMotive => Self::NoMotive,
+            NackMotive::TooManyConnections => Self::TooManyConnections,
+            NackMotive::UnknownChainName => Self::UnknownChainName,
+            NackMotive::DeprecatedP2pVersion => Self::DeprecatedP2pVersion,
+            NackMotive::DeprecatedDistributedDbVersion => Self::DeprecatedDistributedDbVersion,
+            NackMotive::AlreadyConnected => Self::AlreadyConnected,
+        }
     }
 }
 

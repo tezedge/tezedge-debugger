@@ -8,26 +8,30 @@ use std::{
         Arc, atomic::{AtomicU64, Ordering},
     }, net::{SocketAddr},
 };
-use tracing::{info, warn};
+use tracing::{info, warn, field::{display, debug}};
 use secondary_indexes::RemoteAddrIndex;
 use crate::storage::secondary_index::SecondaryIndex;
 use crate::storage::sorted_intersect::sorted_intersect;
 use crate::messages::rpc_message::RpcMessage;
 
+/// Defined Key Value store for Log storage
+pub type RpcMessageStorageKV = dyn KeyValueStoreWithSchema<RpcStore> + Sync + Send;
+
 #[derive(Debug, Default, Clone)]
+/// Allowed filters for log message store
 pub struct RpcFilters {
     pub remote_addr: Option<SocketAddr>,
 }
 
 impl RpcFilters {
+    /// Check, if there are no set filters
     pub fn empty(&self) -> bool {
         self.remote_addr.is_none()
     }
 }
 
-pub type RpcMessageStorageKV = dyn KeyValueStoreWithSchema<RpcStore> + Sync + Send;
-
 #[derive(Clone)]
+/// RPC message store
 pub struct RpcStore {
     kv: Arc<RpcMessageStorageKV>,
     remote_addr_index: RemoteAddrIndex,
@@ -37,6 +41,7 @@ pub struct RpcStore {
 
 #[allow(dead_code)]
 impl RpcStore {
+    /// Create new store on top of the RocksDB
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
             kv: kv.clone(),
@@ -46,26 +51,33 @@ impl RpcStore {
         }
     }
 
+    /// Get current index
     fn index(&self) -> u64 {
         self.seq.load(Ordering::SeqCst)
     }
 
+    /// Increment count of messages in the store
     fn inc_count(&self) {
         self.count.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// Reserve new index for later use. The index must be manually inserted
+    /// with [LogStore::put_message]
     pub fn reserve_index(&self) -> u64 {
         self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
+    /// Create all indexes for given value
     pub fn make_indexes(&self, primary_index: u64, value: &RpcMessage) -> Result<(), StorageError> {
         self.remote_addr_index.store_index(&primary_index, value)
     }
 
+    /// Delete all indexes for given value
     pub fn delete_indexes(&self, primary_index: u64, value: &RpcMessage) -> Result<(), StorageError> {
         self.remote_addr_index.delete_index(&primary_index, value)
     }
 
+    /// Put messages onto specific index
     pub fn put_message(&self, index: u64, msg: &mut RpcMessage) -> Result<(), StorageError> {
         msg.id = index;
         if self.kv.contains(&index)? {
@@ -78,6 +90,7 @@ impl RpcStore {
         Ok(())
     }
 
+    /// Store message at the end of the store. Return ID of newly inserted value
     pub fn store_message(&self, msg: &mut RpcMessage) -> Result<u64, StorageError> {
         let index = self.reserve_index();
         msg.id = index;
@@ -87,6 +100,12 @@ impl RpcStore {
         Ok(index)
     }
 
+    /// Create cursor into the database, allowing iteration over values matching given filters.
+    /// Values are sorted by the index in descending order.
+    /// * Arguments:
+    /// - cursor_index: Index of start of the sequence (if no value provided, start at the end)
+    /// - limit: Limit result to maximum of specified value
+    /// - filters: Specified filters for values
     pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filters: RpcFilters) -> Result<Vec<RpcMessage>, StorageError> {
         let mut ret = Vec::with_capacity(limit);
         if filters.empty() {
@@ -101,6 +120,8 @@ impl RpcStore {
         Ok(ret)
     }
 
+    /// Create iterator ending on given index. If no value is provided
+    /// start at the end
     fn cursor_iterator<'a>(&'a self, cursor_index: Option<u64>) -> Result<Box<dyn 'a + Iterator<Item=(u64, RpcMessage)>>, StorageError> {
         Ok(Box::new(self.kv.iterator(IteratorMode::From(&cursor_index.unwrap_or(std::u64::MAX), Direction::Reverse))?
             .filter_map(|(k, v)| {
@@ -108,6 +129,7 @@ impl RpcStore {
             })))
     }
 
+    /// Create iterator with at maximum given index, having specified remote address
     fn remote_addr_iterator<'a>(&'a self, cursor_index: Option<u64>, remote_addr: SocketAddr) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(self.remote_addr_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), remote_addr)?
             .filter_map(|(_, value)| {
@@ -115,6 +137,7 @@ impl RpcStore {
             })))
     }
 
+    /// Load all values for indexes given.
     fn load_indexes<Iter: 'static + Iterator<Item=u64>>(&self, indexes: Iter) -> impl Iterator<Item=RpcMessage> + 'static {
         let kv = self.kv.clone();
         indexes.filter_map(move |index| {
