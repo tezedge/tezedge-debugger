@@ -2457,6 +2457,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bincode",
+ "byteorder",
  "bytes 0.5.6",
  "chrono",
  "crypto",
