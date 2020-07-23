@@ -222,7 +222,7 @@ impl ParserEncryption {
 
         Ok(decrypter.as_mut()
             .map(|decrypter| {
-                tracing::info!(incoming, "trying to decrypt message");
+                tracing::trace!(incoming, "trying to decrypt message");
                 decrypter.recv_msg(&packet, incoming)
             }).flatten()
             .map(|msgs| {
@@ -254,7 +254,7 @@ impl ParserEncryption {
                 &self.identity.secret_key,
             )?;
 
-            tracing::info!(
+            info!(
                 sent=debug(sent_data.raw()),
                 recv=debug(recv_data.raw()),
                 local=debug(&local),
