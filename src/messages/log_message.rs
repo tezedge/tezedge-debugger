@@ -7,6 +7,7 @@ use syslog_loose::Message;
 use storage::persistent::BincodeEncoded;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Received logs saved in the database
 pub struct LogMessage {
     pub level: String,
     #[serde(alias = "timestamp", alias = "time", rename(serialize = "timestamp"))]
@@ -20,6 +21,7 @@ pub struct LogMessage {
 }
 
 impl LogMessage {
+    /// Create new log from undefined raw string
     pub fn raw(line: String) -> Self {
         Self {
             level: "fatal".to_string(),
@@ -30,6 +32,7 @@ impl LogMessage {
         }
     }
 
+    /// Parse rust formatted log
     fn rust_log_line(line: &str) -> Option<(&str, &str)> {
         let (_, level_msg) = line.split_at(20);
         let level = level_msg.split_whitespace().next()?;
@@ -37,6 +40,7 @@ impl LogMessage {
         Some((level, msg))
     }
 
+    /// Parse ocaml formatted log
     fn ocaml_log_line(line: &str) -> Option<(&str, &str)> {
         let mut parts = line.split("-");
         let _ = parts.next();
@@ -57,7 +61,9 @@ impl LogMessage {
 }
 
 impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for LogMessage {
-    // <27>1 2020-06-24T10:32:37.026683+02:00 Ubuntu-1910-eoan-64-minimal 451e91e7df18 1482 451e91e7df18 - Jun 24 08:32:37.026 INFO Blacklisting IP because peer failed at bootstrap process, ip: 104.248.136.94
+    /// Create LogMessage from received syslog message
+    /// Syslog messages are of format:
+    /// <27>1 2020-06-24T10:32:37.026683+02:00 Ubuntu-1910-eoan-64-minimal 451e91e7df18 1482 451e91e7df18 - Jun 24 08:32:37.026 INFO Blacklisting IP because peer failed at bootstrap process, ip: 104.248.136.94
     fn from(msg: Message<S>) -> Self {
         let date = msg.timestamp
             .map(|dt| dt.timestamp_nanos() as u128)

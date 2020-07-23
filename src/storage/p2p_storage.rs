@@ -15,7 +15,11 @@ use secondary_indexes::*;
 use itertools::Itertools;
 use crate::messages::p2p_message::P2pMessage;
 
+/// Defined Key Value store for Log storage
+pub type P2pMessageStorageKV = dyn KeyValueStoreWithSchema<P2pStore> + Sync + Send;
+
 #[derive(Debug, Default, Clone)]
+/// Allowed filters for p2p message store
 pub struct P2pFilters {
     pub remote_addr: Option<SocketAddr>,
     pub types: Option<u32>,
@@ -25,6 +29,7 @@ pub struct P2pFilters {
 }
 
 impl P2pFilters {
+    /// Check, if there are no set filters
     pub fn empty(&self) -> bool {
         self.remote_addr.is_none() && self.types.is_none()
             && self.request_id.is_none() && self.incoming.is_none()
@@ -32,9 +37,8 @@ impl P2pFilters {
     }
 }
 
-pub type P2pMessageStorageKV = dyn KeyValueStoreWithSchema<P2pStore> + Sync + Send;
-
 #[derive(Clone)]
+/// P2P message store
 pub struct P2pStore {
     kv: Arc<P2pMessageStorageKV>,
     remote_addr_index: RemoteAddrIndex,
@@ -47,6 +51,7 @@ pub struct P2pStore {
 
 #[allow(dead_code)]
 impl P2pStore {
+    /// Create new store on top of the RocksDB
     pub fn new(kv: Arc<DB>) -> Self {
         Self {
             kv: kv.clone(),
@@ -59,18 +64,23 @@ impl P2pStore {
         }
     }
 
+    /// Get current index
     fn index(&self) -> u64 {
         self.seq.load(Ordering::SeqCst)
     }
 
+    /// Increment count of messages in the store
     fn inc_count(&self) {
         self.count.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// Reserve new index for later use. The index must be manually inserted
+    /// with [LogStore::put_message]
     pub fn reserve_index(&self) -> u64 {
         self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
+    /// Create all indexes for given value
     pub fn make_indexes(&self, primary_index: u64, value: &P2pMessage) -> Result<(), StorageError> {
         self.remote_addr_index.store_index(&primary_index, value)?;
         self.type_index.store_index(&primary_index, value)?;
@@ -78,6 +88,7 @@ impl P2pStore {
         self.source_type_index.store_index(&primary_index, value)
     }
 
+    /// Put messages onto specific index
     pub fn delete_indexes(&self, primary_index: u64, value: &P2pMessage) -> Result<(), StorageError> {
         self.remote_addr_index.delete_index(&primary_index, value)?;
         self.type_index.delete_index(&primary_index, value)?;
@@ -85,6 +96,7 @@ impl P2pStore {
         self.source_type_index.delete_index(&primary_index, value)
     }
 
+    /// Store message at the end of the store. Return ID of newly inserted value
     pub fn put_message(&self, index: u64, msg: &P2pMessage) -> Result<(), StorageError> {
         if self.kv.contains(&index)? {
             self.kv.merge(&index, &msg)?;
@@ -96,6 +108,12 @@ impl P2pStore {
         Ok(())
     }
 
+    /// Create cursor into the database, allowing iteration over values matching given filters.
+    /// Values are sorted by the index in descending order.
+    /// * Arguments:
+    /// - cursor_index: Index of start of the sequence (if no value provided, start at the end)
+    /// - limit: Limit result to maximum of specified value
+    /// - filters: Specified filters for values
     pub fn store_message(&self, msg: &mut P2pMessage) -> Result<u64, StorageError> {
         let index = self.reserve_index();
         msg.id = Some(index);
@@ -105,6 +123,8 @@ impl P2pStore {
         Ok(index)
     }
 
+    /// Create iterator ending on given index. If no value is provided
+    /// start at the end
     pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filters: P2pFilters) -> Result<Vec<P2pMessage>, StorageError> {
         let mut ret = Vec::with_capacity(limit);
         if filters.empty() {
@@ -130,6 +150,7 @@ impl P2pStore {
         Ok(ret)
     }
 
+    /// Create iterator with at maximum given index, having specified log level
     fn cursor_iterator<'a>(&'a self, cursor_index: Option<u64>) -> Result<Box<dyn 'a + Iterator<Item=(u64, P2pMessage)>>, StorageError> {
         Ok(Box::new(self.kv.iterator(IteratorMode::From(&cursor_index.unwrap_or(std::u64::MAX), Direction::Reverse))?
             .filter_map(|(k, v)| {
@@ -137,6 +158,7 @@ impl P2pStore {
             })))
     }
 
+    /// Create iterator with at maximum given index, having specified remote address
     fn remote_addr_iterator<'a>(&'a self, cursor_index: Option<u64>, remote_addr: SocketAddr) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(self.remote_addr_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), remote_addr)?
             .filter_map(|(_, value)| {
@@ -144,6 +166,7 @@ impl P2pStore {
             })))
     }
 
+    /// Create iterator with at maximum given index, having specified type of message
     pub fn type_iterator<'a>(&'a self, cursor_index: Option<u64>, types: u32) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         let types = dissect(types);
         let mut iterators = Vec::with_capacity(types.len());
@@ -156,6 +179,7 @@ impl P2pStore {
         Ok(Box::new(iterators.into_iter().kmerge_by(|x, y| x > y)))
     }
 
+    /// Create iterator with at maximum given index, having incoming flag set to specific value
     pub fn incoming_iterator<'a>(&'a self, cursor_index: Option<u64>, is_incoming: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(self.incoming_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), is_incoming)?
             .filter_map(|(_, value)| {
@@ -170,6 +194,7 @@ impl P2pStore {
             })))
     }
 
+    /// Load all values for indexes given.
     pub fn load_indexes<Iter: 'static + Iterator<Item=u64>>(&self, indexes: Iter) -> impl Iterator<Item=P2pMessage> + 'static {
         let kv = self.kv.clone();
         indexes.filter_map(move |index| {
@@ -498,6 +523,7 @@ pub(crate) mod secondary_indexes {
         OperationHashesForBlock = 0x1 << 22,
         GetOperationsForBlocks = 0x1 << 23,
         OperationsForBlocks = 0x1 << 24,
+        AckMessage = 0x1 << 25,
     }
 
     impl Type {
@@ -526,6 +552,7 @@ pub(crate) mod secondary_indexes {
                     PeerMessage::OperationsForBlocks(_) => Self::OperationsForBlocks as u32,
                     PeerMessage::ConnectionMessage(_) => Self::ConnectionMessage as u32,
                     PeerMessage::MetadataMessage(_) => Self::Metadata as u32,
+                    PeerMessage::AckMessage(_) => Self::AckMessage as u32,
                     PeerMessage::_Reserved => Self::P2PMessage as u32,
                 }
             } else {

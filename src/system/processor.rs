@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tracing::{error, field::{display, debug}};
+use tracing::{error, trace, field::{display}};
 use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
@@ -13,15 +13,19 @@ use crate::storage::MessageStore;
 type ProcessorTrait = dyn Processor + Sync + Send + 'static;
 
 #[async_trait]
+/// Trait describing message processor
 pub trait Processor {
+    /// Main processing function for messages
     async fn process(&mut self, msg: P2pMessage);
 }
 
+/// Spawn new primary processor, returning channel to send the messages
 pub fn spawn_processor(settings: SystemSettings) -> UnboundedSender<P2pMessage> {
     let (sender, mut receiver) = unbounded_channel::<P2pMessage>();
 
     tokio::spawn(async move {
         let mut processors: Vec<Box<ProcessorTrait>> = Default::default();
+        // Initially, only database processor is spawned
         processors.push(Box::new(DatabaseProcessor::new(settings.storage.clone())));
         loop {
             if let Some(message) = receiver.recv().await {
@@ -38,12 +42,14 @@ pub fn spawn_processor(settings: SystemSettings) -> UnboundedSender<P2pMessage> 
     sender
 }
 
+/// Database processor, which stores all received messages
 struct DatabaseProcessor {
     store: MessageStore,
     sender: UnboundedSender<P2pMessage>,
 }
 
 impl DatabaseProcessor {
+    /// Create new processor on top of the given message store
     pub fn new(store: MessageStore) -> Self {
         let ret = Self {
             sender: Self::start_database_task(store.clone()),
@@ -53,13 +59,15 @@ impl DatabaseProcessor {
         ret
     }
 
+    /// Start the processing task
     fn start_database_task(store: MessageStore) -> UnboundedSender<P2pMessage> {
         let (sender, mut receiver) = unbounded_channel::<P2pMessage>();
         tokio::spawn(async move {
             loop {
                 if let Some(mut msg) = receiver.recv().await {
-                    if let Err(err) = store.p2p().store_message(&mut msg) {
-                        error!(error = display(&err), "failed to store message");
+                    match store.p2p().store_message(&mut msg) {
+                        Ok(id) => { trace!(id, "stored new message"); },
+                        Err(err) => { error!(error = display(&err), "failed to store message"); },
                     }
                 }
             }
