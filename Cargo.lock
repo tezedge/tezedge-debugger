@@ -61,6 +61,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cff77d8686867eceff3105329d4698d96c2391c176d5d03adc90c7389162b5b8"
 
 [[package]]
+name = "async-compression"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9021768bcce77296b64648cc7a7460e3df99979b97ed5c925c38d1cc83778d98"
+dependencies = [
+ "bytes 0.5.5",
+ "flate2",
+ "futures-core",
+ "memchr",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -103,7 +116,7 @@ dependencies = [
  "addr2line",
  "cfg-if",
  "libc",
- "miniz_oxide",
+ "miniz_oxide 0.3.7",
  "object",
  "rustc-demangle",
 ]
@@ -708,6 +721,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "flate2"
+version = "1.0.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68c90b0fc46cf89d227cc78b40e494ff81287a92dd07631e5af0d06fe3cf885e"
+dependencies = [
+ "cfg-if",
+ "crc32fast",
+ "libc",
+ "miniz_oxide 0.4.0",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -906,7 +931,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
- "http",
+ "http 0.2.1",
  "indexmap",
  "slab",
  "tokio",
@@ -939,7 +964,7 @@ dependencies = [
  "bitflags",
  "bytes 0.5.6",
  "headers-core",
- "http",
+ "http 0.2.1",
  "mime 0.3.16",
  "sha-1",
  "time",
@@ -951,7 +976,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7f66481bfee273957b1f20485a4ff3362987f85b2c236580d81b4eb7a326429"
 dependencies = [
- "http",
+ "http 0.2.1",
 ]
 
 [[package]]
@@ -980,6 +1005,17 @@ checksum = "644f9158b2f133fd50f5fb3242878846d9eb792e445c893805ff0e3824006e35"
 
 [[package]]
 name = "http"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6ccf5ede3a895d8856620237b2f02972c1bbc78d2965ad7fe8838d4a0ed41f0"
+dependencies = [
+ "bytes 0.4.12",
+ "fnv",
+ "itoa",
+]
+
+[[package]]
+name = "http"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d569972648b2c512421b5f2a405ad6ac9666547189d0c5477a3f200f3e02f9"
@@ -996,7 +1032,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13d5ff830006f7646652e057693569bfe0d51760c0085a071769d142a205111b"
 dependencies = [
  "bytes 0.5.6",
- "http",
+ "http 0.2.1",
 ]
 
 [[package]]
@@ -1025,7 +1061,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2",
- "http",
+ "http 0.2.1",
  "http-body",
  "httparse",
  "itoa",
@@ -1076,6 +1112,15 @@ checksum = "5b88cd59ee5f71fea89a62248fc8f387d44400cefe05ef548466d61ced9029a7"
 dependencies = [
  "autocfg 1.0.0",
  "hashbrown",
+]
+
+[[package]]
+name = "input_buffer"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e1b822cc844905551931d6f81608ed5f50a79c1078a4e2b4d42dbc7c1eedfbf"
+dependencies = [
+ "bytes 0.4.12",
 ]
 
 [[package]]
@@ -1360,6 +1405,15 @@ checksum = "2684d4c2e97d99848d30b324b00c8fcc7e5c897b7cbb5819b09e7c90e8baf212"
 dependencies = [
  "mime 0.3.16",
  "unicase 2.6.0",
+]
+
+[[package]]
+name = "miniz_oxide"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be0f75932c1f6cfae3c04000e40114adf955636e19040f9c0a2c380702aa1c7f"
+dependencies = [
+ "adler",
 ]
 
 [[package]]
@@ -2077,12 +2131,13 @@ version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b82c9238b305f26f53443e3a4bc8528d64b8d0bee408ec949eb7bf5635ec680"
 dependencies = [
+ "async-compression",
  "base64 0.12.3",
  "bytes 0.5.6",
  "encoding_rs",
  "futures-core",
  "futures-util",
- "http",
+ "http 0.2.1",
  "http-body",
  "hyper",
  "hyper-tls",
@@ -2392,6 +2447,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
 
 [[package]]
+name = "slack"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e73d6b4e9be66870e183e87c68e4da9b73ec50ecbe67d7d836026c3e472cb241"
+dependencies = [
+ "log 0.3.9",
+ "serde 1.0.114",
+ "serde_derive",
+ "serde_json",
+ "slack_api",
+ "tungstenite 0.9.2",
+ "url",
+]
+
+[[package]]
+name = "slack_api"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07d3c02beffb13b2ca8f6a946dbdc4ba1c97afecd253d5909dfa9b2631dc5cd4"
+dependencies = [
+ "reqwest",
+ "serde 1.0.114",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
 name = "slog"
 version = "2.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2655,6 +2737,7 @@ dependencies = [
  "serde 1.0.114",
  "serde_cbor",
  "serde_json",
+ "slack",
  "smoltcp",
  "storage",
  "structopt",
@@ -2822,7 +2905,7 @@ dependencies = [
  "log 0.4.11",
  "pin-project",
  "tokio",
- "tungstenite",
+ "tungstenite 0.10.1",
 ]
 
 [[package]]
@@ -2942,6 +3025,26 @@ name = "try-lock"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
+
+[[package]]
+name = "tungstenite"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a0c2bd5aeb7dcd2bb32e472c8872759308495e5eccc942e929a513cd8d36110"
+dependencies = [
+ "base64 0.11.0",
+ "byteorder",
+ "bytes 0.4.12",
+ "http 0.1.21",
+ "httparse",
+ "input_buffer 0.2.0",
+ "log 0.4.8",
+ "native-tls",
+ "rand 0.7.3",
+ "sha-1",
+ "url",
+ "utf-8",
+]
 
 [[package]]
 name = "tungstenite"
@@ -3123,7 +3226,7 @@ dependencies = [
  "bytes 0.5.6",
  "futures",
  "headers",
- "http",
+ "http 0.2.1",
  "hyper",
  "log 0.4.11",
  "mime 0.3.16",
