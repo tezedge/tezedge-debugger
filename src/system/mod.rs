@@ -42,6 +42,9 @@ pub struct SystemSettings {
     pub cadvisor_url: Url,
     pub metrics_fetch_interval: Duration,
     pub notification_cfg: NotificationConfig,
+    /// mount point of disk where database stored
+    // needed for disk exhausting estimation
+    pub mount_point: String,
 }
 
 #[derive(Clone)]
@@ -49,5 +52,5 @@ pub struct NotificationConfig {
     /// minimal interval between notifications
     pub minimal_interval: Duration,
     pub channel: notification::ChannelConfig,
-    pub condition: metric_alert::AlertCondition,
+    pub alert_config: metric_alert::AlertConfig,
 }
