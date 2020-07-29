@@ -48,6 +48,8 @@ impl MemoryEstimator {
             } else {
                 self.usage.push((timestamp, usage));
             }
+        } else {
+            self.usage.push((timestamp, usage));
         }
     }
 

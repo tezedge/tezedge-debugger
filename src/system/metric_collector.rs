@@ -75,7 +75,7 @@ pub async fn metric_collector(settings: SystemSettings) {
             // if observer has some alert and we have some notifier, send the notification
             if let Some(notifier) = notifier {
                 let recent_send = if let Some(last) = *last_notification_time {
-                    Utc::now() - last > minimal_interval
+                    Utc::now() - last < minimal_interval
                 } else {
                     false
                 };

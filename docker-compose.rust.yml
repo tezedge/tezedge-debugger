@@ -42,6 +42,7 @@ services:
     network_mode: "service:rust-network"
     environment:
       - RUST_BACKTRACE=1
+      - SLACK_HOOKS_URL=https://hooks.slack.com/services/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
     volumes:
       - "rust-shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger

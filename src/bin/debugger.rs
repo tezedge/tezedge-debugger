@@ -14,6 +14,7 @@ use std::time::Instant;
 use tezedge_debugger::storage::{MessageStore, get_ts, cfs};
 use std::path::Path;
 use std::sync::Arc;
+use std::env;
 use storage::persistent::open_kv;
 use tezedge_debugger::system::{
     SystemSettings,
@@ -120,7 +121,8 @@ async fn main() -> Result<(), failure::Error> {
         notification_cfg: NotificationConfig {
             minimal_interval: Duration::minutes(15),
             channel: ChannelConfig::Slack {
-                url: "https://hooks.slack.com/services/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".to_owned(),
+                url: env::var("SLACK_HOOKS_URL")
+                    .expect("variable `SLACK_HOOKS_URL` should contain the valid url"),
                 channel_id: "#tezedge".to_owned(),
             },
             alert_config: AlertConfig,
