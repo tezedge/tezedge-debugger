@@ -103,7 +103,7 @@ dependencies = [
  "addr2line",
  "cfg-if",
  "libc",
- "miniz_oxide 0.3.7",
+ "miniz_oxide",
  "object",
  "rustc-demangle",
 ]
@@ -388,7 +388,7 @@ dependencies = [
  "cookie",
  "failure",
  "idna 0.1.5",
- "log 0.4.8",
+ "log 0.4.11",
  "publicsuffix",
  "serde 1.0.114",
  "serde_json",
@@ -778,7 +778,7 @@ dependencies = [
  "cfg-if",
  "crc32fast",
  "libc",
- "miniz_oxide 0.4.0",
+ "miniz_oxide",
 ]
 
 [[package]]
@@ -997,7 +997,7 @@ dependencies = [
  "futures 0.1.29",
  "http 0.1.21",
  "indexmap",
- "log 0.4.8",
+ "log 0.4.11",
  "slab",
  "string",
  "tokio-io",
@@ -1007,7 +1007,7 @@ dependencies = [
 name = "h2"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "993f9e0baeed60001cf565546b0d3dbe6a6ad23f2bd31644a133c641eccf6d53"
+checksum = "79b7246d7e4b979c03fa093da39cfb3617a96bbeee6310af63991668d7e843ff"
 dependencies = [
  "bytes 0.5.6",
  "fnv",
@@ -1016,10 +1016,10 @@ dependencies = [
  "futures-util",
  "http 0.2.1",
  "indexmap",
+ "log 0.4.11",
  "slab",
  "tokio 0.2.21",
  "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -1166,7 +1166,7 @@ dependencies = [
  "httparse",
  "iovec",
  "itoa",
- "log 0.4.8",
+ "log 0.4.11",
  "net2",
  "rustc_version",
  "time",
@@ -1185,7 +1185,7 @@ dependencies = [
 name = "hyper"
 version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e68a8dd9716185d9e64ea473ea6ef63529252e3e27623295a0378a19665d5eb"
+checksum = "a6e7655b9594024ad0ee439f3b5a7299369dc2a3f459b47c696f9ff676f9aa1f"
 dependencies = [
  "bytes 0.5.6",
  "futures-channel",
@@ -1196,6 +1196,7 @@ dependencies = [
  "http-body 0.3.1",
  "httparse",
  "itoa",
+ "log 0.4.11",
  "pin-project",
  "socket2",
  "time",
@@ -1223,7 +1224,7 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d979acc56dcb5b8dddba3917601745e877576475aa046df3226eabdecef78eed"
 dependencies = [
- "bytes 0.5.5",
+ "bytes 0.5.6",
  "hyper 0.13.6",
  "native-tls",
  "tokio 0.2.21",
@@ -1571,15 +1572,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "miniz_oxide"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be0f75932c1f6cfae3c04000e40114adf955636e19040f9c0a2c380702aa1c7f"
-dependencies = [
- "adler",
-]
-
-[[package]]
 name = "mio"
 version = "0.6.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1737,7 +1729,7 @@ version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a31937dea023539c72ddae0e3571deadc1414b300483fa7aaec176168cfa9d2"
 dependencies = [
- "winapi 0.3.8",
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -1887,7 +1879,7 @@ dependencies = [
  "redox_syscall",
  "rustc_version",
  "smallvec 0.6.13",
- "winapi 0.3.8",
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -2349,7 +2341,7 @@ dependencies = [
  "http 0.1.21",
  "hyper 0.12.35",
  "hyper-tls 0.3.2",
- "log 0.4.8",
+ "log 0.4.11",
  "mime 0.3.16",
  "mime_guess 2.0.3",
  "native-tls",
@@ -2381,7 +2373,7 @@ dependencies = [
  "http 0.2.1",
  "http-body 0.3.1",
  "hyper 0.13.6",
- "hyper-tls 0.4.1",
+ "hyper-tls 0.4.3",
  "js-sys",
  "lazy_static",
  "log 0.4.11",
@@ -2757,7 +2749,7 @@ dependencies = [
 name = "smallvec"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3757cb9d89161a2f24e1cf78efa0c1fcff485d18e3f55e0aa3480824ddaa0f3f"
+checksum = "c7cb5678e1615754284ec264d9bb5b4c27d2018577fd90ac0ceb578591ed5ee4"
 
 [[package]]
 name = "smoltcp"
@@ -2927,7 +2919,7 @@ dependencies = [
  "ntapi",
  "once_cell",
  "rayon",
- "winapi 0.3.8",
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -3208,7 +3200,7 @@ checksum = "57fc868aae093479e3131e3d165c93b1c7474109d13c90ec0dda2a1bbfff0674"
 dependencies = [
  "bytes 0.4.12",
  "futures 0.1.29",
- "log 0.4.8",
+ "log 0.4.11",
 ]
 
 [[package]]
@@ -3231,7 +3223,7 @@ dependencies = [
  "crossbeam-utils",
  "futures 0.1.29",
  "lazy_static",
- "log 0.4.8",
+ "log 0.4.11",
  "mio",
  "num_cpus",
  "parking_lot",
@@ -3276,7 +3268,7 @@ dependencies = [
  "crossbeam-utils",
  "futures 0.1.29",
  "lazy_static",
- "log 0.4.8",
+ "log 0.4.11",
  "num_cpus",
  "slab",
  "tokio-executor",
@@ -3311,7 +3303,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8b8fe88007ebc363512449868d7da4389c9400072a3f666f212c7280082882a"
 dependencies = [
  "futures 0.3.5",
- "log 0.4.8",
+ "log 0.4.11",
  "pin-project",
  "tokio 0.2.21",
  "tungstenite",
@@ -3453,10 +3445,10 @@ dependencies = [
  "base64 0.11.0",
  "byteorder",
  "bytes 0.5.6",
- "http",
+ "http 0.2.1",
  "httparse",
  "input_buffer",
- "log 0.4.8",
+ "log 0.4.11",
  "rand 0.7.3",
  "sha-1",
  "url 2.1.1",
@@ -3642,7 +3634,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6395efa4784b027708f7451087e647ec73cc74f5d9bc2e418404248d679a230"
 dependencies = [
  "futures 0.1.29",
- "log 0.4.8",
+ "log 0.4.11",
  "try-lock",
 ]
 
@@ -3662,12 +3654,12 @@ version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df341dee97c9ae29dfa5e0b0fbbbf620e0d6a36686389bedf83b3daeb8b0d0ac"
 dependencies = [
- "bytes 0.5.5",
+ "bytes 0.5.6",
  "futures 0.3.5",
  "headers",
  "http 0.2.1",
  "hyper 0.13.6",
- "log 0.4.8",
+ "log 0.4.11",
  "mime 0.3.16",
  "mime_guess 2.0.3",
  "multipart",
@@ -3826,7 +3818,7 @@ version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2986deb581c4fe11b621998a5e53361efe6b48a151178d0cd9eeffa4dc6acc9"
 dependencies = [
- "winapi 0.3.8",
+ "winapi 0.3.9",
 ]
 
 [[package]]
