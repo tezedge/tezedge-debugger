@@ -78,7 +78,7 @@ steps:
       - sleep 1
       - /etc/bin/replayer --node-ip "0.0.0.0:13030" --path "/tmp/snapshot/snapshot" --last-message-id 6
   - name: live-replay
-    image: simplestakingcom/tezedge:v0.1.0
+    image: simplestakingcom/tezedge:v0.2.0
     pull: if-not-exists
     volumes:
       - name: binaries
