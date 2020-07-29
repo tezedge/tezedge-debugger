@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 use tezos_messages::p2p::encoding::{
     prelude::*,
     prelude::PeerMessage as TezosPeerMessage,
-    version::Version,
+    version::NetworkVersion,
     operation_hashes_for_blocks::OperationHashesForBlock,
 };
 use std::net::SocketAddr;
@@ -589,7 +589,7 @@ impl From<GetCurrentBranchMessage> for MappedGetCurrentBranchMessage {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MappedConnectionMessage {
     pub port: u16,
-    pub versions: Vec<Version>,
+    pub versions: Vec<NetworkVersion>,
     pub public_key: String,
     pub proof_of_work_stamp: String,
     pub message_nonce: String,

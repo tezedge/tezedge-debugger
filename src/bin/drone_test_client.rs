@@ -22,7 +22,7 @@ use std::net::{SocketAddr, IpAddr};
 use std::convert::TryFrom;
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 use tezos_messages::p2p::encoding::ack::AckMessage;
-use tezos_messages::p2p::encoding::version::Version;
+use tezos_messages::p2p::encoding::version::NetworkVersion;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
@@ -70,7 +70,7 @@ async fn test_client(id: u32, messages: u32, server: String) {
         &IDENTITY.public_key,
         &IDENTITY.proof_of_work_stamp,
         &NONCE.get_bytes(),
-        vec![Version::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1)],
+        vec![NetworkVersion::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1)],
     );
     let chunk = BinaryChunk::from_content(&sent_conn_msg.as_bytes().unwrap()).unwrap();
 
