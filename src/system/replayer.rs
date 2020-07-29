@@ -16,7 +16,7 @@ use tezos_messages::p2p::encoding::prelude::{PeerMessageResponse, PeerMessage as
 use crate::messages::prelude::PeerMessage;
 use tracing::{error, info, field::{display, debug}};
 use crate::messages::p2p_message::P2pMessage;
-use tezos_messages::p2p::encoding::version::Version;
+use tezos_messages::p2p::encoding::version::NetworkVersion;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {
@@ -111,7 +111,7 @@ async fn replay_incoming(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
                         match message {
                             PeerMessage::ConnectionMessage(mut conn_msg) => {
                                 conn_msg.public_key = hex::decode(&IDENTITY.public_key)?;
-                                conn_msg.versions.push(Version::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1));
+                                conn_msg.versions.push(NetworkVersion::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1));
                                 let sent_chunk = BinaryChunk::from_content(&conn_msg.as_bytes()?)?;
                                 sent_connection_message = Some(conn_msg);
                                 info!(msg = debug(&sent_connection_message), "Sending connection message");
@@ -232,7 +232,7 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
                         match message {
                             PeerMessage::ConnectionMessage(mut conn_msg) => {
                                 conn_msg.public_key = hex::decode(&IDENTITY.public_key)?;
-                                conn_msg.versions.push(Version::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1));
+                                conn_msg.versions.push(NetworkVersion::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1));
                                 let sent_chunk = BinaryChunk::from_content(&conn_msg.as_bytes()?)?;
                                 sent_connection_message = Some(conn_msg);
                                 info!(msg = debug(&sent_connection_message), "Sending connection message");
@@ -289,7 +289,7 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
         &IDENTITY.public_key,
         &IDENTITY.proof_of_work_stamp,
         &Nonce::random().get_bytes(),
-        vec![Version::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1)],
+        vec![NetworkVersion::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1)],
     );
     let chunk = BinaryChunk::from_content(&sent_conn_msg.as_bytes().unwrap()).unwrap();
 
