@@ -22,7 +22,7 @@ Easiest way to launch the Debugger is by running it with the included docker-com
 for our Rust Tezedege Light Node (docker-compose.rust.yml) and the other for the original OCaml node (docker-compose.ocaml.yml).
 A guide on how to change ports is included inside the docker-compose files.
 ```bash
-docker-compose -f docker-compose.rust.yml build
+docker-compose -f docker-compose.rust.yml pull
 docker-compose -f docker-compose.rust.yml up
 ```
 

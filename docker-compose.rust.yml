@@ -1,8 +1,9 @@
 version: "3"
 
 services:
+  
   rust-network:
-    image: debugger
+    image: simplestakingcom/tezedge-debugger:v0.1.0
     build: .
     ports:
       # Node specific ports
@@ -14,8 +15,9 @@ services:
       - "10000:13031"      # debugger RPC port
       - "10001:13131/udp"  # debugger syslog port
     entrypoint: sleep inf
+    
   rust-debugger:
-    image: debugger
+    image: simplestakingcom/tezedge-debugger:v0.1.0
     build: .
     network_mode: "service:rust-network"
     environment:
@@ -24,7 +26,7 @@ services:
       - "rust-shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger
   rust-node:
-    image: simplestakingcom/tezedge:v0.1.0
+    image: simplestakingcom/tezedge:v0.2.0
     entrypoint: sh -c "sleep 5 && /home/appuser/tezedge/docker/compose/tezedge.sh"
     network_mode: "service:rust-network"
     depends_on:
