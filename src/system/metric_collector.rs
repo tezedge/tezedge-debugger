@@ -104,11 +104,15 @@ pub async fn metric_collector(settings: SystemSettings) {
     let messenger = settings
         .notification_cfg
         .channel
-        .notifier()
-        .map_err(|e|
-            error!(error = tracing::field::display(&e), "failed to login to slack")
-        )
-        .ok();
+        .clone()
+        .and_then(|config| {
+            config
+                .notifier()
+                .map_err(|e|
+                    error!(error = tracing::field::display(&e), "failed to login to slack")
+                )
+                .ok()
+        });
     let mut sender = messenger.map(|m| m.sender(settings.notification_cfg.minimal_interval));
 
     tokio::spawn(async move {

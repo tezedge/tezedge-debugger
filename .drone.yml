@@ -50,6 +50,7 @@ steps:
     pull: if-not-exists
     environment:
       DEBUGGER_URL: "http://client:13031"
+      CADVISOR_URL: "http://cadvisor:8080"
     volumes:
       - name: binaries
         path: /etc/bin

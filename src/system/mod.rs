@@ -48,6 +48,6 @@ pub struct SystemSettings {
 pub struct NotificationConfig {
     /// minimal interval between notifications
     pub minimal_interval: Duration,
-    pub channel: notification::ChannelConfig,
+    pub channel: Option<notification::ChannelConfig>,
     pub alert_config: metric_alert::AlertConfig,
 }

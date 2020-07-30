@@ -110,6 +110,15 @@ async fn main() -> Result<(), failure::Error> {
 
     let cadvisor_url = env::var("CADVISOR_URL")
         .expect("variable `CADVISOR_URL` contains the valid url");
+    // if there is no url, we have no config
+    let channel_config = env::var("SLACK_HOOKS_URL")
+        .ok()
+        .map(|url| {
+            ChannelConfig::Slack {
+                url,
+                channel_id: "#tezedge".to_owned(),
+            }
+        });
 
     // Create system setting to drive the rest of the system
     let settings = SystemSettings {
@@ -123,11 +132,7 @@ async fn main() -> Result<(), failure::Error> {
         metrics_fetch_interval: Duration::minutes(1),
         notification_cfg: NotificationConfig {
             minimal_interval: Duration::minutes(5),
-            channel: ChannelConfig::Slack {
-                url: env::var("SLACK_HOOKS_URL")
-                    .expect("variable `SLACK_HOOKS_URL` contains the url"),
-                channel_id: "#tezedge".to_owned(),
-            },
+            channel: channel_config,
             alert_config: AlertConfig {
                 db_mount_point: "/tmp/volume".to_owned(),
             },
