@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tracing::{info, error, Level, field::{display}};
+use tracing::{info, error, Level};
 use tezedge_debugger::{
     system::build_raw_socket_system,
     utility::{
@@ -159,7 +159,7 @@ async fn main() -> Result<(), failure::Error> {
 
     // Wait for SIGTERM signal
     if let Err(err) = tokio::signal::ctrl_c().await {
-        error!(error = display(&err), "failed while listening for signal");
+        error!(error = tracing::field::display(&err), "failed while listening for signal");
         exit(1)
     }
 

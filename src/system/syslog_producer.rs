@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tracing::{error, info, field::{display}};
+use tracing::{error, info};
 use tokio::{
     io,
     net::UdpSocket,
@@ -28,7 +28,7 @@ pub async fn syslog_producer(settings: SystemSettings) -> io::Result<()> {
                 let msg = syslog_loose::parse_message(log);
                 let mut log_msg = LogMessage::from(msg);
                 if let Err(err) = settings.storage.log().store_message(&mut log_msg) {
-                    error!(error = display(&err), "failed to store log");
+                    error!(error = tracing::field::display(&err), "failed to store log");
                 }
             }
         }
