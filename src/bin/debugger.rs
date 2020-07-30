@@ -131,7 +131,7 @@ async fn main() -> Result<(), failure::Error> {
         cadvisor_url: Url::parse(cadvisor_url.as_str()).unwrap(),
         metrics_fetch_interval: Duration::minutes(1),
         notification_cfg: NotificationConfig {
-            minimal_interval: Duration::minutes(5),
+            minimal_interval: Duration::minutes(15),
             channel: channel_config,
             alert_config: AlertConfig {
                 db_mount_point: "/tmp/volume".to_owned(),
