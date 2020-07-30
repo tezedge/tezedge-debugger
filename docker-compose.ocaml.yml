@@ -2,33 +2,6 @@ version: "3"
 
 services:
 
-  ocaml-network:
-    image: simplestakingcom/tezedge-debugger:v0.1.0
-    build: .
-    ports:
-      # Node specific ports
-      - "11200:9732"       # node P2P port
-      - "11100:8732"       # node RPC port
-      # Debugger Ports must be specified on node service, because of debugger network_mode attaches
-      # debugger's container to the node container, allowing it to analyze node's traffic
-      - "11000:13031"      # debugger RPC port
-      - "11001:13131/udp"  # debugger syslog port
-    entrypoint: sleep inf
-
-  cadvisor:
-    image: gcr.io/google-containers/cadvisor:latest
-    container_name: cadvisor
-    command:
-      - "--global_housekeeping_interval=1m"
-      - "--housekeeping_interval=1m"
-      - "--max_housekeeping_interval=1m"
-      - "--application_metrics_count_limit=1"
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:rw
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-
   ocaml-debugger:
     image: simplestakingcom/tezedge-debugger:v0.1.0
     build: .
@@ -59,6 +32,40 @@ services:
         syslog-format: "rfc5424micro"
     volumes:
       - "ocaml-shared-data:/var/run/tezos/node"
+
+  cadvisor:
+    image: gcr.io/google-containers/cadvisor:latest
+    container_name: cadvisor
+    command:
+      - "--global_housekeeping_interval=1m"
+      - "--housekeeping_interval=1m"
+      - "--max_housekeeping_interval=1m"
+      - "--application_metrics_count_limit=1"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+  
+  ocaml-explorer:
+    image: simplestakingcom/tezedge-explorer:v0.1.6
+    depends_on:
+      - rust-debugger
+    ports:
+      - "8080:8080"
+
+  ocaml-network:
+    image: simplestakingcom/tezedge-debugger:v0.1.0
+    build: .
+    ports:
+      # Node specific ports
+      - "11200:9732"       # node P2P port
+      - "11100:8732"       # node RPC port
+      # Debugger Ports must be specified on node service, because of debugger network_mode attaches
+      # debugger's container to the node container, allowing it to analyze node's traffic
+      - "11000:13031"      # debugger RPC port
+      - "11001:13131/udp"  # debugger syslog port
+    entrypoint: sleep inf
 
 volumes:
   ocaml-shared-data:

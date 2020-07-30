@@ -1,34 +1,6 @@
 version: "3"
 
 services:
-  
-  rust-network:
-    image: simplestakingcom/tezedge-debugger:v0.1.0
-    build: .
-    ports:
-      # Node specific ports
-      - "10300:4927"       # node WS port (required only for tezedge)
-      - "10200:9732"       # node P2P port
-      - "10100:18732"      # node RPC port
-      # Debugger Ports must be specified on node service, because of debugger network_mode attaches
-      # debugger's container to the node container, allowing it to analyze node's traffic
-      - "10000:13031"      # debugger RPC port
-      - "10001:13131/udp"  # debugger syslog port
-    entrypoint: sleep inf
-
-  cadvisor:
-    image: gcr.io/google-containers/cadvisor:latest
-    container_name: cadvisor
-    command:
-      - "--global_housekeeping_interval=1m"
-      - "--housekeeping_interval=1m"
-      - "--max_housekeeping_interval=1m"
-      - "--application_metrics_count_limit=1"
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:rw
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
 
   rust-debugger:
     image: simplestakingcom/tezedge-debugger:v0.1.0
@@ -60,6 +32,41 @@ services:
         syslog-format: "rfc5424micro"
     volumes:
       - "rust-shared-data:/tmp/tezedge"
+
+  cadvisor:
+    image: gcr.io/google-containers/cadvisor:latest
+    container_name: cadvisor
+    command:
+      - "--global_housekeeping_interval=1m"
+      - "--housekeeping_interval=1m"
+      - "--max_housekeeping_interval=1m"
+      - "--application_metrics_count_limit=1"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+
+  rust-explorer:
+    image: simplestakingcom/tezedge-explorer:v0.1.6
+    depends_on:
+      - rust-debugger
+    ports:
+      - "8080:8080"
+
+  rust-network:
+    image: simplestakingcom/tezedge-debugger:v0.1.0
+    build: .
+    ports:
+      # Node specific ports
+      - "4927:4927"       # node WS port (required only for tezedge)
+      - "8752:9732"       # node P2P port
+      - "10100:18732"      # node RPC port
+      # Debugger Ports must be specified on node service, because of debugger network_mode attaches
+      # debugger's container to the node container, allowing it to analyze node's traffic
+      - "8753:13031"      # debugger RPC port
+      - "10001:13131/udp"  # debugger syslog port
+    entrypoint: sleep inf
 
 volumes:
   rust-shared-data:
