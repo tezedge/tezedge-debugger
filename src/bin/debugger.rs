@@ -119,15 +119,16 @@ async fn main() -> Result<(), failure::Error> {
         cadvisor_url: Url::parse("http://cadvisor:8080").unwrap(),
         metrics_fetch_interval: Duration::minutes(1),
         notification_cfg: NotificationConfig {
-            minimal_interval: Duration::minutes(15),
+            minimal_interval: Duration::minutes(5),
             channel: ChannelConfig::Slack {
                 url: env::var("SLACK_HOOKS_URL")
                     .expect("variable `SLACK_HOOKS_URL` should contain the valid url"),
                 channel_id: "#tezedge".to_owned(),
             },
-            alert_config: AlertConfig,
+            alert_config: AlertConfig {
+                db_mount_point: "/tmp/volume".to_owned(),
+            },
         },
-        mount_point: "/tmp/volume".to_owned(),
     };
 
     // Create syslog server to capture logs from docker / syslogs

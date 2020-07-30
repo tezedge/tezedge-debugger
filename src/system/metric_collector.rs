@@ -7,8 +7,8 @@ use crate::system::SystemSettings;
 pub async fn metric_collector(settings: SystemSettings) {
     use tokio::time;
     use reqwest::Url;
-    use tracing::error;
-    use chrono::{DateTime, Utc, Duration};
+    use tracing::{error, info};
+    use chrono::Duration;
     use std::{fmt, collections::HashMap};
     use crate::{
         messages::metric_message::{MetricMessage, ContainerInfo},
@@ -45,9 +45,7 @@ pub async fn metric_collector(settings: SystemSettings) {
         url: &Url,
         storage: &MetricStore,
         observer: &mut SystemCapacityObserver,
-        notifier: Option<Sender>,
-        minimal_interval: Duration,
-        last_notification_time: &mut Option<DateTime<Utc>>,
+        notifier: &mut Option<Sender>,
     ) -> Result<(), MetricCollectionError> {
         // perform http GET request 
         let r = reqwest::get(url.clone())
@@ -74,27 +72,18 @@ pub async fn metric_collector(settings: SystemSettings) {
                 .collect();
             // if observer has some alert and we have some notifier, send the notification
             if let Some(notifier) = notifier {
-                let recent_send = if let Some(last) = *last_notification_time {
-                    Utc::now() - last < minimal_interval
-                } else {
-                    false
-                };
-                if !recent_send {
-                    // TODO: separate last_notification_time for alert and status
-                    let alert = observer.alert();
-                    if !alert.is_empty() {
-                        let message = alert.into_iter().fold(String::new(), |s, item| format!("{}{}\n", s, item));
-                        notifier.send(&NotificationMessage::Warning(message))
-                            .map_err(MetricCollectionError::NotificationSend)?;
-                        *last_notification_time = Some(Utc::now());
-                    }
-                    let status = observer.status();
-                    if !status.is_empty() {
-                        let message = status.into_iter().fold(String::new(), |s, item| format!("{}{}\n", s, item));
-                        notifier.send(&NotificationMessage::Info(message))
-                            .map_err(MetricCollectionError::NotificationSend)?;
-                        *last_notification_time = Some(Utc::now());
-                    }
+                let alert = observer.alert();
+                if !alert.is_empty() {
+                    let message = alert.into_iter().fold(String::new(), |s, item| format!("{}{}\n", s, item));
+                    notifier.send(&NotificationMessage::Warning(message))
+                        .map_err(MetricCollectionError::NotificationSend)?;
+                }
+                let status = observer.status();
+                if !status.is_empty() {
+                    let message = status.into_iter().fold(String::new(), |s, item| format!("{}{}\n", s, item));
+                    info!(machine_status = tracing::field::display(&message));
+                    notifier.send(&NotificationMessage::Info(message))
+                        .map_err(MetricCollectionError::NotificationSend)?;
                 }
             }
             // write into db
@@ -120,24 +109,20 @@ pub async fn metric_collector(settings: SystemSettings) {
             error!(error = tracing::field::display(&e), "failed to login to slack")
         )
         .ok();
-    let sender = messenger.map(|m| m.sender());
+    let mut sender = messenger.map(|m| m.sender(settings.notification_cfg.minimal_interval));
 
     tokio::spawn(async move {
-        let mut last_notification_time = None;
         loop {
             // notifier is `Send` but not `Sync`
             // should clone it and drop after each iteration
             // it happens each `metrics_fetch_interval` few minute or so, minimal overhead
-            let notifier = sender.clone();
             let mut condition = settings.notification_cfg.alert_config.condition_checker();
 
             fetch_and_store(
                 &url,
                 settings.storage.metric(),
                 &mut condition,
-                notifier,
-                settings.notification_cfg.minimal_interval.clone(),
-                &mut last_notification_time,
+                &mut sender,
             )
                 .await
                 .unwrap_or_else(|e|

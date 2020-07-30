@@ -4,6 +4,7 @@
 /// Abstraction over notification channel
 
 use std::{error::Error, fmt};
+use chrono::{DateTime, Utc, Duration};
 
 #[derive(Clone)]
 /// Config provided by messenger admin
@@ -39,26 +40,36 @@ pub enum Messenger {
 }
 
 impl Messenger {
-    pub fn sender(&self) -> Sender {
+    pub fn sender(&self, minimal_interval: Duration) -> Sender {
         match self {
             &Messenger::Slack {
                 ref client ,
                 ref channel_id,
-            } => Sender::Slack {
-                sender: client.clone(),
-                channel_id: channel_id.clone(),
+            } => Sender {
+                minimal_interval: minimal_interval,
+                inner: Inner::Slack {
+                    sender: client.clone(),
+                    channel_id: channel_id.clone(),
+                },
+                last_notification: None,
             },
         }
     }
 }
 
 /// The object can be sent another thread and can send notification message
+pub struct Sender {
+    minimal_interval: Duration,
+    inner: Inner,
+    last_notification: Option<DateTime<Utc>>,
+}
+
 #[derive(Clone)]
-pub enum Sender {
+enum Inner {
     Slack {
         sender: slack_hook::Slack,
         channel_id: String,
-    }
+    },
 }
 
 pub enum SendError {
@@ -79,9 +90,20 @@ pub enum NotificationMessage {
 }
 
 impl Sender {
-    pub fn send(&self, msg: &NotificationMessage) -> Result<(), SendError> {
-        match self {
-            &Sender::Slack { ref sender, ref channel_id } => {
+    pub fn send(&mut self, msg: &NotificationMessage) -> Result<(), SendError> {
+        let recent_send = if let Some(last) = self.last_notification {
+            Utc::now() - last < self.minimal_interval
+        } else {
+            false
+        };
+        if recent_send {
+            return Ok(());
+        };
+
+        self.last_notification = Some(Utc::now());
+
+        match &self.inner {
+            &Inner::Slack { ref sender, ref channel_id } => {
                 let payload = match msg {
                     NotificationMessage::Warning(ref msg) => slack_hook::PayloadBuilder::new()
                         .text(msg.as_str())
@@ -94,6 +116,7 @@ impl Sender {
                         .text(msg.as_str())
                         .channel(channel_id.as_str())
                         .username("[e2e][info]")
+                        .icon_emoji(":info:")
                         .build()
                         .map_err(SendError::Slack)?,
                 };
