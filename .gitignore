@@ -1,10 +1,2 @@
-/target/
-
-# `cargo install` artifacts
-/bin/
-/.crates.toml
-/.crates2.json
-
-**/*.rs.bk
-
-/.vscode
+target/
+bin/

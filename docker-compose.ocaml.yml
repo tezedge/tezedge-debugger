@@ -1,8 +1,9 @@
 version: "3"
 
 services:
+
   ocaml-network:
-    image: debugger
+    image: simplestakingcom/tezedge-debugger:v0.1.0
     build: .
     ports:
       # Node specific ports
@@ -13,6 +14,7 @@ services:
       - "11000:13031"      # debugger RPC port
       - "11001:13131/udp"  # debugger syslog port
     entrypoint: sleep inf
+
   cadvisor:
     image: gcr.io/google-containers/cadvisor:latest
     container_name: cadvisor
@@ -35,8 +37,9 @@ services:
       - RUST_BACKTRACE=full
     volumes:
       - "ocaml-shared-data:/tmp/volume"
+
   ocaml-debugger:
-    image: debugger
+    image: simplestakingcom/tezedge-debugger:v0.1.0
     build: .
     network_mode: "service:ocaml-network"
     environment:
@@ -48,6 +51,7 @@ services:
     depends_on:
       - cadvisor
       - builder
+
   ocaml-node:
     image: tezos/tezos:carthagenet
     network_mode: "service:ocaml-network"

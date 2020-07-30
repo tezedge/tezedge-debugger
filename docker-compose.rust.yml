@@ -1,8 +1,9 @@
 version: "3"
 
 services:
+  
   rust-network:
-    image: debugger
+    image: simplestakingcom/tezedge-debugger:v0.1.0
     build: .
     ports:
       # Node specific ports
@@ -36,8 +37,9 @@ services:
       - RUST_BACKTRACE=full
     volumes:
       - "rust-shared-data:/tmp/volume"
+
   rust-debugger:
-    image: debugger
+    image: simplestakingcom/tezedge-debugger:v0.1.0
     build: .
     network_mode: "service:rust-network"
     environment:
@@ -49,8 +51,9 @@ services:
     depends_on:
       - cadvisor
       - builder
+
   rust-node:
-    image: simplestakingcom/tezedge:v0.1.0
+    image: simplestakingcom/tezedge:v0.2.0
     entrypoint: sh -c "sleep 5 && /home/appuser/tezedge/docker/compose/tezedge.sh"
     network_mode: "service:rust-network"
     depends_on:
