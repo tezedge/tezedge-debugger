@@ -108,6 +108,9 @@ async fn main() -> Result<(), failure::Error> {
         }
     };
 
+    let cadvisor_url = env::var("CADVISOR_URL")
+        .expect("variable `CADVISOR_URL` contains the valid url");
+
     // Create system setting to drive the rest of the system
     let settings = SystemSettings {
         identity,
@@ -116,13 +119,13 @@ async fn main() -> Result<(), failure::Error> {
         syslog_port: 13131,
         rpc_port: 13031,
         node_rpc_port: 18732,
-        cadvisor_url: Url::parse("http://cadvisor:8080").unwrap(),
+        cadvisor_url: Url::parse(cadvisor_url.as_str()).unwrap(),
         metrics_fetch_interval: Duration::minutes(1),
         notification_cfg: NotificationConfig {
             minimal_interval: Duration::minutes(5),
             channel: ChannelConfig::Slack {
                 url: env::var("SLACK_HOOKS_URL")
-                    .expect("variable `SLACK_HOOKS_URL` should contain the valid url"),
+                    .expect("variable `SLACK_HOOKS_URL` contains the url"),
                 channel_id: "#tezedge".to_owned(),
             },
             alert_config: AlertConfig {

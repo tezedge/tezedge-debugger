@@ -1,0 +1,2 @@
+[v1]
+"tezedge_debugger 0.1.0 (path+file:///drone/src)" = ["decrypt", "drone-client", "drone-server", "replayer", "tezedge-debugger"]

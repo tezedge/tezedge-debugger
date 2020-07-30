@@ -15,6 +15,7 @@ services:
       - "10000:13031"      # debugger RPC port
       - "10001:13131/udp"  # debugger syslog port
     entrypoint: sleep inf
+
   cadvisor:
     image: gcr.io/google-containers/cadvisor:latest
     container_name: cadvisor
@@ -29,16 +30,6 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
 
-  builder:
-    image: builder
-    build:
-      context: ./
-      dockerfile: builder.dockerfile
-    environment:
-      - RUST_BACKTRACE=full
-    volumes:
-      - "rust-shared-data:/tmp/volume"
-
   rust-debugger:
     image: simplestakingcom/tezedge-debugger:v0.1.0
     build: .
@@ -46,12 +37,12 @@ services:
     environment:
       - RUST_BACKTRACE=1
       - SLACK_HOOKS_URL=https://hooks.slack.com/services/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
+      - CADVISOR_URL=http://cadvisor:8080
     volumes:
       - "rust-shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger
     depends_on:
       - cadvisor
-      - builder
 
   rust-node:
     image: simplestakingcom/tezedge:v0.2.0

@@ -118,7 +118,7 @@ impl SystemCapacityObserver {
                 let available = gb(disk.get_available_space());
                 v.push(
                     format!(
-                        "Disk {:?} total space: {:.2}, available space: {:.2}",
+                        "Disk {:?} total space: {:.2} GiB, available space: {:.2} GiB",
                         name,
                         total,
                         available,
