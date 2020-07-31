@@ -9,7 +9,7 @@ services:
     environment:
       - RUST_BACKTRACE=1
       - SLACK_HOOKS_URL="https://hooks.slack.com/services/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"
-      - CADVISOR_URL="http://cadvisor:8080"
+      - CADVISOR_URL="http://cadvisor:8081"
     volumes:
       - "ocaml-shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger
@@ -37,6 +37,7 @@ services:
     image: gcr.io/google-containers/cadvisor:latest
     container_name: cadvisor
     command:
+      - "-port=8081"
       - "--global_housekeeping_interval=1m"
       - "--housekeeping_interval=1m"
       - "--max_housekeeping_interval=1m"
