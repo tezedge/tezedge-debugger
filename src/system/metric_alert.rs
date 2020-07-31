@@ -31,9 +31,10 @@ impl AlertConfig {
             .map(|(x, _)| x);
         SystemCapacityObserver {
             system: system,
-            disk_index: disk_index,
             memory: MemoryEstimator::new(),
+            disk_index: disk_index,
             _disk: DiskEstimator::new(),
+            cpu: CpuUsage::None,
         }
     }
 }
@@ -72,16 +73,61 @@ impl MemoryEstimator {
     }
 }
 
+pub enum CpuUsage {
+    None,
+    One((DateTime<Utc>, Duration)),
+    Two {
+        pre_last: (DateTime<Utc>, Duration),
+        last: (DateTime<Utc>, Duration),
+    },
+}
+
+impl CpuUsage {
+    pub fn observe(&mut self, timestamp: DateTime<Utc>, usage: Duration) {
+        *self = match *self {
+            CpuUsage::None => CpuUsage::One((timestamp, usage)),
+            CpuUsage::One(pre_last) => CpuUsage::Two {
+                pre_last,
+                last: (timestamp, usage),
+            },
+            CpuUsage::Two { pre_last: _, last} => CpuUsage::Two {
+                pre_last: last,
+                last: (timestamp, usage),
+            },
+        }
+    }
+
+    pub fn status(&self) -> Option<f64> {
+        match self {
+            &CpuUsage::None | &CpuUsage::One(..) => None,
+            &CpuUsage::Two {
+                pre_last: (fst_timestamp, fst_duration),
+                last: (scd_timestamp,scd_duration),
+            } => {
+                let duration_total = scd_timestamp - fst_timestamp;
+                let duration_used = scd_duration - fst_duration;
+                let nanoseconds = |d: Duration| -> f64 {
+                    d.num_nanoseconds().unwrap_or(1) as f64
+                };
+                Some(nanoseconds(duration_used) / nanoseconds(duration_total))
+            },
+        }
+    }
+}
+
 pub struct SystemCapacityObserver {
     system: System,
-    disk_index: Option<usize>,
     memory: MemoryEstimator,
+    disk_index: Option<usize>,
     _disk: DiskEstimator,
+    cpu: CpuUsage,
 }
 
 impl SystemCapacityObserver {
     pub fn observe(&mut self, message: &MetricMessage) {
-        self.memory.observe(message.0.timestamp.clone(), message.0.memory.usage.clone());
+        let timestamp = message.0.timestamp.clone();
+        self.memory.observe(timestamp, message.0.memory.usage.clone());
+        self.cpu.observe(timestamp, Duration::nanoseconds(message.0.cpu.usage.total.clone() as i64));
         self.system.refresh_disks();
         self.system.refresh_memory();
         self.system.refresh_cpu();
@@ -125,6 +171,10 @@ impl SystemCapacityObserver {
                     ),
                 )
             }
+        }
+
+        if let Some(cpu_usage) = self.cpu.status() {
+            v.push(format!("CPU usage: {:.1}%", cpu_usage * 100.0))
         }
 
         v

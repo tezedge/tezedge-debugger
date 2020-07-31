@@ -8,8 +8,8 @@ services:
     network_mode: "service:rust-network"
     environment:
       - RUST_BACKTRACE=1
-      - SLACK_HOOKS_URL="https://hooks.slack.com/services/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"
-      - CADVISOR_URL="http://cadvisor:8081"
+      - SLACK_HOOKS_URL=https://hooks.slack.com/services/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
+      - CADVISOR_URL=http://cadvisor:8081
     volumes:
       - "rust-shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger
