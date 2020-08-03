@@ -1,6 +1,56 @@
 kind: pipeline
 type: docker
-name: default
+name: metric
+
+steps:
+  - name: ocaml-node
+    image: docker/compose:1.23.2
+    pull: if-not-exists
+    environment:
+      DOCKER_HOST: "unix:///var/run/docker.sock"
+    volumes:
+      - name: dockersock
+        path: /var/run
+    commands:
+      - sleep 5
+      - docker-compose -f docker-compose.ocaml.yml build
+      - docker-compose -f docker-compose.ocaml.yml up -d
+  - name: tester
+    image: simplestakingcom/tezedge-ci-builder:latest
+    pull: if-not-exists
+    environment:
+      DOCKER_HOST: "unix:///var/run/docker.sock"
+    volumes:
+      - name: dockersock
+        path: /var/run
+    environment:
+      DEBUGGER_URL: "http://ocaml-node:11000"
+    commands:
+      - cargo test
+
+services:
+  - name: docker
+    image: docker:dind
+    privileged: true
+    command: [ '-H', 'unix:///var/run/docker.sock' ]
+    volumes:
+      - name: dockersock
+        path: /var/run
+
+volumes:
+  - name: dockersock
+    temp: {}
+  
+trigger:
+  branch:
+    - master
+    - dev
+
+---
+
+kind: pipeline
+type: docker
+name: replay
 
 steps:
   - name: set_server_identity
