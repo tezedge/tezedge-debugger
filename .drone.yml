@@ -3,44 +3,67 @@ type: docker
 name: metric
 
 steps:
-  - name: ocaml-node
-    image: docker/compose:1.23.2
+  - name: cadvisor
+    image: gcr.io/google-containers/cadvisor:latest
     pull: if-not-exists
-    environment:
-      DOCKER_HOST: "unix:///var/run/docker.sock"
+    privileged: true
+    detach: true
     volumes:
-      - name: dockersock
-        path: /var/run
+      - name: rootfs
+        path: /rootfs:ro
+      - name: run
+        path: /var/run:rw
+      - name: sys
+        path: /sys:ro
+      - name: docker
+        path: /var/lib/docker:ro
+    commands:
+      - /usr/bin/cadvisor -port=8081
+
+  - name: ocaml-node
+    image: tezos/tezos:carthagenet
+    pull: if-not-exists
+    detach: true
+    volumes:
+      - name: ocaml-shared-data
+        path: /var/run/tezos/node
     commands:
       - sleep 5
-      - docker-compose -f docker-compose.ocaml.yml build
-      - docker-compose -f docker-compose.ocaml.yml up -d
-  - name: tester
+      - /usr/local/bin/entrypoint.sh tezos-node --cors-header='content-type' --cors-origin='*' > /dev/null 2>&1
+
+  - name: build
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
     environment:
-      DOCKER_HOST: "unix:///var/run/docker.sock"
+      RUST_BACKTRACE: 1
+      CADVISOR_URL: "http://cadvisor:8081"
+      DEBUGGER_URL: "http://build:13031"
     volumes:
-      - name: dockersock
-        path: /var/run
-    environment:
-      DEBUGGER_URL: "http://ocaml-node:11000"
+      - name: ocaml-shared-data
+        path: /tmp/volume
     commands:
-      - cargo test
-
-services:
-  - name: docker
-    image: docker:dind
-    privileged: true
-    command: [ '-H', 'unix:///var/run/docker.sock' ]
-    volumes:
-      - name: dockersock
-        path: /var/run
+      - cargo install --bins --path . --root .
+      - ./bin/tezedge-debugger &
+      - sleep 30  # wait for some metrics to arrive
+      - curl "http://build:13031/v2/metric/"
+      - cargo test --package tezedge_debugger --test metric -- test_metrics --exact --nocapture
 
 volumes:
-  - name: dockersock
+  - name: ocaml-shared-data
     temp: {}
-  
+  - name: rootfs
+    host:
+      path: /
+  - name: run
+    host:
+      path: /var/run
+  - name: sys
+    host:
+      path: /sys
+  - name: docker
+    host:
+      path: /var/lib/docker
+
 trigger:
   branch:
     - master
