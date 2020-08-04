@@ -2999,6 +2999,7 @@ dependencies = [
  "tezos_encoding",
  "tezos_messages",
  "tokio 0.2.21",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "url 2.1.1",
