@@ -5,9 +5,9 @@ use crate::system::SystemSettings;
 
 /// infinitely performs http requests to cadvisor and put response into db
 pub async fn metric_collector(settings: SystemSettings) {
-    use tokio::time;
+    use tokio::{time, stream::StreamExt};
     use reqwest::Url;
-    use tracing::{error, info};
+    use tracing::error;
     use chrono::Duration;
     use std::{fmt, collections::HashMap};
     use crate::{
@@ -17,6 +17,7 @@ pub async fn metric_collector(settings: SystemSettings) {
             notification::{Sender, SendError, NotificationMessage},
             metric_alert::SystemCapacityObserver,
         },
+        utility::docker::DockerClient,
     };
 
     enum MetricCollectionError {
@@ -41,12 +42,40 @@ pub async fn metric_collector(settings: SystemSettings) {
         }
     }
 
-    async fn fetch_and_store(
-        url: &Url,
+    fn notify_and_store(
+        messages: Vec<MetricMessage>,
         storage: &MetricStore,
         observer: &mut SystemCapacityObserver,
         notifier: &mut Option<Sender>,
     ) -> Result<(), MetricCollectionError> {
+        for message in messages.iter() {
+            observer.observe(message);
+        }
+
+        // if observer has some alert and we have some notifier, send the notification
+        if let Some(notifier) = notifier {
+            let alert = observer.alert();
+            if !alert.is_empty() {
+                let message = alert.into_iter().fold(String::new(), |s, item| format!("{}{}\n", s, item));
+                notifier.send(&NotificationMessage::Warning(message))
+                    .map_err(MetricCollectionError::NotificationSend)?;
+            }
+            let status = observer.status();
+            if !status.is_empty() {
+                let message = status.into_iter().fold(String::new(), |s, item| format!("{}{}\n", s, item));
+                notifier.send(&NotificationMessage::Info(message))
+                    .map_err(MetricCollectionError::NotificationSend)?;
+            }
+        }
+        // write into db
+        storage
+            .store_message_array(messages)
+            .map_err(MetricCollectionError::StoreMessage)?;
+        
+        Ok(())
+    }
+
+    async fn fetch_cadvisor(url: &Url) -> Result<Vec<MetricMessage>, MetricCollectionError> {
         // perform http GET request 
         let r = reqwest::get(url.clone())
             .await
@@ -59,46 +88,21 @@ pub async fn metric_collector(settings: SystemSettings) {
             .map_err(MetricCollectionError::DeserializeJson)?;
 
         // find the first container that contains tezos node, assume there is single such container
-        if let Some(container_info) = info.into_iter().find(|&(_, ref i)| i.tezos_node()) {
+        let messages = if let Some(container_info) = info.into_iter().find(|&(_, ref i)| i.tezos_node()) {
             // take stats from the `ContainerInfo` object, wrap it as `MetricMessage`
             // and show it to `SystemCapacityObserver` in order to determine if should show an alert
-            let messages = container_info.1.stats
+            container_info.1.stats
                 .into_iter()
                 .map(|x| {
-                    let message = MetricMessage(x);
-                    observer.observe(&message);
+                    let message = MetricMessage::Cadvisor(x);
                     message
                 })
-                .collect();
-            // if observer has some alert and we have some notifier, send the notification
-            if let Some(notifier) = notifier {
-                let alert = observer.alert();
-                if !alert.is_empty() {
-                    let message = alert.into_iter().fold(String::new(), |s, item| format!("{}{}\n", s, item));
-                    notifier.send(&NotificationMessage::Warning(message))
-                        .map_err(MetricCollectionError::NotificationSend)?;
-                }
-                let status = observer.status();
-                if !status.is_empty() {
-                    let message = status.into_iter().fold(String::new(), |s, item| format!("{}{}\n", s, item));
-                    info!(machine_status = tracing::field::display(&message));
-                    notifier.send(&NotificationMessage::Info(message))
-                        .map_err(MetricCollectionError::NotificationSend)?;
-                }
-            }
-            // write into db
-            storage
-                .store_message_array(messages)
-                .map_err(MetricCollectionError::StoreMessage)?;
-        }
-        Ok(())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        Ok(messages)
     }
-
-    // prepare url to fetch statistics from docker containers
-    // unwrap is safe because joining constant
-    let url = settings.cadvisor_url
-        .join("api/v1.3/docker")
-        .unwrap();
 
     // login to messenger, it will provide object that can send alerts
     let messenger = settings
@@ -114,33 +118,63 @@ pub async fn metric_collector(settings: SystemSettings) {
                 .ok()
         });
     let mut sender = messenger.map(|m| m.sender(settings.notification_cfg.minimal_interval));
+    let mut condition = settings.notification_cfg.alert_config.condition_checker();
 
-    tokio::spawn(async move {
-        loop {
-            // notifier is `Send` but not `Sync`
-            // should clone it and drop after each iteration
-            // it happens each `metrics_fetch_interval` few minute or so, minimal overhead
-            let mut condition = settings.notification_cfg.alert_config.condition_checker();
+    match &settings.cadvisor_url {
+        &Some(ref url) => {
+            // prepare url to fetch statistics from docker containers
+            // unwrap is safe because joining constant
+            let url = url
+                .join("api/v1.3/docker")
+                .unwrap();
 
-            fetch_and_store(
-                &url,
-                settings.storage.metric(),
-                &mut condition,
-                &mut sender,
-            )
-                .await
-                .unwrap_or_else(|e|
-                    error!(error = tracing::field::display(&e), "failed to fetch and store metrics")
-                );
-            // this interval should be less equal to 
-            // `--housekeeping_interval` of the cadvisor in the docker-compose.*.yml config
-            let duration = settings.metrics_fetch_interval
-                .to_std()
-                .unwrap_or_else(|e| {
-                    error!(error = tracing::field::display(&e), "bad config value `metrics_fetch_interval`");
-                    Duration::minutes(1).to_std().unwrap()
-                });
-            time::delay_for(duration).await;
-        }
-    });
+            tokio::spawn(async move {
+                loop {
+                    let messages = fetch_cadvisor(&url)
+                        .await
+                        .unwrap_or_else(|e| {
+                            error!(error = tracing::field::display(&e), "failed to fetch metrics");
+                            Vec::new()
+                        });
+                    notify_and_store(messages, settings.storage.metric(), &mut condition, &mut sender)
+                        .unwrap_or_else(|e|
+                            error!(error = tracing::field::display(&e), "failed to send notification and store metrics")
+                        );
+
+                    // this interval should be less equal to 
+                    // `--housekeeping_interval` of the cadvisor in the docker-compose.*.yml config
+                    let duration = settings.metrics_fetch_interval
+                        .to_std()
+                        .unwrap_or_else(|e| {
+                            error!(error = tracing::field::display(&e), "bad config value `metrics_fetch_interval`");
+                            Duration::minutes(1).to_std().unwrap()
+                        });
+                    time::delay_for(duration).await;
+                }
+            });
+        },
+        None => {
+            tokio::spawn(async move {
+                match DockerClient::default().await {
+                    Ok(mut client) => {
+                        let list = client.list_containers().await.unwrap();
+                        if let Some(container) = list.into_iter().find(|c| c.tezos_node()) {
+                            let mut stats_stream = client.stats(container.id.as_str()).await;
+                            while let Some(n) = stats_stream.next().await {
+                                let messages = vec![MetricMessage::Docker(n.unwrap())];
+                                let storage = settings.storage.metric();
+                                notify_and_store(messages, storage, &mut condition, &mut sender)
+                                    .unwrap_or_else(|e|
+                                        error!(error = tracing::field::display(&e), "failed to send notification and store metrics")
+                                    );
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        error!(error = tracing::field::display(&e), "failed to connect to docker socket");
+                    },
+                }
+            });
+        },
+    }
 }

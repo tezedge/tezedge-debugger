@@ -40,7 +40,7 @@ impl MetricStore {
 
     pub fn store_message_array(&self, messages: Vec<MetricMessage>) -> Result<(), StorageError> {
         for message in messages {
-            self.kv.put(&MetricMessageKey(message.0.timestamp), &message)?;
+            self.kv.put(&MetricMessageKey(message.timestamp()), &message)?;
         }
         Ok(())
     }
@@ -65,11 +65,11 @@ impl MetricStore {
             (None, None) =>
                 skip_take(it, cursor_index, limit),
             (Some(start), None) =>
-                skip_take(it.take_while(|x| x.0.timestamp > start), cursor_index, limit),
+                skip_take(it.take_while(|x| x.timestamp() > start), cursor_index, limit),
             (None, Some(end)) =>
-                skip_take(it.skip_while(|x| x.0.timestamp > end), cursor_index, limit),
+                skip_take(it.skip_while(|x| x.timestamp() > end), cursor_index, limit),
             (Some(start), Some(end)) =>
-                skip_take(it.skip_while(|x| x.0.timestamp > end).take_while(|x| x.0.timestamp > start), cursor_index, limit),
+                skip_take(it.skip_while(|x| x.timestamp() > end).take_while(|x| x.timestamp() > start), cursor_index, limit),
         };
 
         Ok(ret)

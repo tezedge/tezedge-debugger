@@ -39,7 +39,7 @@ pub struct SystemSettings {
     pub syslog_port: u16,
     pub rpc_port: u16,
     pub node_rpc_port: u16,
-    pub cadvisor_url: Url,
+    pub cadvisor_url: Option<Url>,
     pub metrics_fetch_interval: Duration,
     pub notification_cfg: NotificationConfig,
 }

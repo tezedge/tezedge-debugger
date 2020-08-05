@@ -8,7 +8,6 @@ services:
     network_mode: "service:rust-network"
     environment:
       - RUST_BACKTRACE=1
-      - CADVISOR_URL=http://cadvisor:8081
       # the URL should be secret, replace this placeholder with the actual slack webhooks URL
       - SLACK_HOOKS_URL=https://hooks.slack.com/services/XXXXXXXXX/XXXXXXXXXXX/************************
     volumes:
@@ -33,21 +32,6 @@ services:
         syslog-format: "rfc5424micro"
     volumes:
       - "rust-shared-data:/tmp/tezedge"
-
-  cadvisor:
-    image: gcr.io/google-containers/cadvisor:latest
-    container_name: cadvisor
-    command:
-      - "-port=8081"
-      - "--global_housekeeping_interval=1m"
-      - "--housekeeping_interval=1m"
-      - "--max_housekeeping_interval=1m"
-      - "--application_metrics_count_limit=1"
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:rw
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
 
   rust-explorer:
     image: simplestakingcom/tezedge-explorer:v0.1.6

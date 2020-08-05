@@ -35,6 +35,7 @@ impl AlertConfig {
             disk_index: disk_index,
             _disk: DiskEstimator::new(),
             cpu: CpuUsage::None,
+            cpu_usage_literal: None,
         }
     }
 }
@@ -121,13 +122,23 @@ pub struct SystemCapacityObserver {
     disk_index: Option<usize>,
     _disk: DiskEstimator,
     cpu: CpuUsage,
+    cpu_usage_literal: Option<f64>,
 }
 
 impl SystemCapacityObserver {
     pub fn observe(&mut self, message: &MetricMessage) {
-        let timestamp = message.0.timestamp.clone();
-        self.memory.observe(timestamp, message.0.memory.usage.clone());
-        self.cpu.observe(timestamp, Duration::nanoseconds(message.0.cpu.usage.total.clone() as i64));
+        let timestamp = message.timestamp();
+        self.memory.observe(timestamp, message.memory_used());
+        match message {
+            &MetricMessage::Cadvisor(ref stats) => {
+                self.cpu.observe(timestamp, Duration::nanoseconds(stats.cpu.usage.total.clone() as i64));        
+            },
+            &MetricMessage::Docker(ref stats) => {
+                let cpu_delta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
+                let system_cpu_delta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
+                self.cpu_usage_literal = Some((cpu_delta as f64 / system_cpu_delta as f64) * stats.cpu_stats.online_cpus as f64);
+            },
+        }
         self.system.refresh_disks();
         self.system.refresh_memory();
         self.system.refresh_cpu();
@@ -174,6 +185,10 @@ impl SystemCapacityObserver {
         }
 
         if let Some(cpu_usage) = self.cpu.status() {
+            v.push(format!("CPU usage: {:.1}%", cpu_usage * 100.0))
+        }
+
+        if let Some(cpu_usage) = self.cpu_usage_literal {
             v.push(format!("CPU usage: {:.1}%", cpu_usage * 100.0))
         }
 

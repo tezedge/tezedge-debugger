@@ -109,7 +109,8 @@ async fn main() -> Result<(), failure::Error> {
     };
 
     let cadvisor_url = env::var("CADVISOR_URL")
-        .expect("variable `CADVISOR_URL` contains the valid url");
+        .ok()
+        .and_then(|s| Url::parse(s.as_str()).ok());
     // if there is no url, we have no config
     let channel_config = env::var("SLACK_HOOKS_URL")
         .ok()
@@ -128,10 +129,10 @@ async fn main() -> Result<(), failure::Error> {
         syslog_port: 13131,
         rpc_port: 13031,
         node_rpc_port: 18732,
-        cadvisor_url: Url::parse(cadvisor_url.as_str()).unwrap(),
+        cadvisor_url: cadvisor_url,
         metrics_fetch_interval: Duration::minutes(1),
         notification_cfg: NotificationConfig {
-            minimal_interval: Duration::minutes(15),
+            minimal_interval: Duration::minutes(3),
             channel: channel_config,
             alert_config: AlertConfig {
                 db_mount_point: "/tmp/volume".to_owned(),

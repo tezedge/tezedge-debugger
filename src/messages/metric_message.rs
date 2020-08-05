@@ -2,9 +2,30 @@ use serde::{Serialize, Deserialize};
 use storage::persistent::{Decoder, Encoder, SchemaError};
 use chrono::{DateTime, Utc, TimeZone};
 use std::collections::BTreeMap;
+use crate::utility::docker;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MetricMessage(pub ContainerStats);
+pub enum MetricMessage {
+    Cadvisor(ContainerStats),
+    Docker(docker::Stats),
+}
+
+impl MetricMessage {
+    pub fn timestamp(&self) -> DateTime<Utc> {
+        match self {
+            &MetricMessage::Cadvisor(ref stats) => stats.timestamp.clone(),
+            &MetricMessage::Docker(ref stats) => stats.read.clone(),
+        }
+    }
+
+    pub fn memory_used(&self) -> u64 {
+        match self {
+            &MetricMessage::Cadvisor(ref stats) => stats.memory.usage,
+            &MetricMessage::Docker(ref stats) =>
+                stats.memory_stats.usage - stats.memory_stats.stats.cache,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct MetricMessageKey(pub DateTime<Utc>);
