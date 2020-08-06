@@ -19,13 +19,14 @@ async fn test_metrics() {
     let mut last_time: Option<DateTime<Utc>> = None;
     for stat in response.as_array().unwrap() {
         let stat = stat.as_object().unwrap();
-        let time = stat.get("timestamp").unwrap().as_str().unwrap();
-        let this_time = Utc.datetime_from_str(&time, "%Y-%m-%dT%H:%M:%S.%fZ").unwrap();
+        let stat = stat.get("container_stat").unwrap().as_object().unwrap();
+        let time = stat.get("read").unwrap().as_str().unwrap();
+        let this_time = Utc.datetime_from_str(&time, "%Y-%m-%dT%H:%M:%SZ").unwrap();
         if let Some(last_time) = last_time {
             assert!(last_time >= this_time, "{} >= {}", last_time, this_time);
         }
         last_time = Some(this_time);
-        let mem = stat.get("memory").unwrap().as_object().unwrap();
-        let _ = mem.get("usage").unwrap().as_u64().unwrap();
+        let mem = stat.get("memory_stats").unwrap().as_object().unwrap();
+        let _ = mem.get("stats").unwrap().as_object().unwrap();
     }
 }
