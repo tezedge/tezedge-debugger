@@ -2,17 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 /// Abstraction over notification channel
-
 use std::{error::Error, fmt};
 use chrono::{DateTime, Utc, Duration};
 
 #[derive(Clone)]
 /// Config provided by messenger admin
 pub enum ChannelConfig {
-    Slack {
-        url: String,
-        channel_id: String,
-    },
+    Slack { url: String, channel_id: String },
 }
 
 impl ChannelConfig {
@@ -36,14 +32,14 @@ pub enum Messenger {
     Slack {
         client: slack_hook::Slack,
         channel_id: String,
-    }
+    },
 }
 
 impl Messenger {
     pub fn sender(&self, minimal_interval: Duration) -> Sender {
         match self {
             &Messenger::Slack {
-                ref client ,
+                ref client,
                 ref channel_id,
             } => Sender {
                 minimal_interval: minimal_interval,
@@ -103,7 +99,10 @@ impl Sender {
         self.last_notification = Some(Utc::now());
 
         match &self.inner {
-            &Inner::Slack { ref sender, ref channel_id } => {
+            &Inner::Slack {
+                ref sender,
+                ref channel_id,
+            } => {
                 let payload = match msg {
                     NotificationMessage::Warning(ref msg) => slack_hook::PayloadBuilder::new()
                         .text(msg.as_str())
@@ -120,8 +119,7 @@ impl Sender {
                         .build()
                         .map_err(SendError::Slack)?,
                 };
-                sender.send(&payload)
-                    .map_err(SendError::Slack)
+                sender.send(&payload).map_err(SendError::Slack)
             },
         }
     }

@@ -3,7 +3,7 @@
 
 use sysinfo::{System, SystemExt, DiskExt};
 use chrono::{DateTime, Utc, Duration};
-use super::StatsSource;
+use super::StatSource;
 
 /// Configuration of alert appearing conditions and other information
 #[derive(Clone)]
@@ -18,7 +18,11 @@ impl AlertConfig {
         let system = {
             use sysinfo::RefreshKind;
 
-            let r = RefreshKind::new().with_disks_list().with_disks().with_memory().with_cpu();
+            let r = RefreshKind::new()
+                .with_disks_list()
+                .with_disks()
+                .with_memory()
+                .with_cpu();
             let mut s = System::new_with_specifics(r);
             s.refresh_disks_list();
             s.refresh_disks();
@@ -26,7 +30,10 @@ impl AlertConfig {
             s.refresh_cpu();
             s
         };
-        let disk_index = system.get_disks().iter().enumerate()
+        let disk_index = system
+            .get_disks()
+            .iter()
+            .enumerate()
             .find(|&d| d.1.get_mount_point().to_str() == Some(self.db_mount_point.as_str()))
             .map(|(x, _)| x);
         CapacityMonitor {
@@ -53,18 +60,16 @@ struct MemoryEstimator {
 
 impl MemoryEstimator {
     pub fn new() -> Self {
-        MemoryEstimator {
-            usage: Vec::new(),
-        }
+        MemoryEstimator { usage: Vec::new() }
     }
 
     pub fn observe(&mut self, timestamp: DateTime<Utc>, usage: u64) {
-        // TODO(capacity estimation): 
+        // TODO(capacity estimation):
         self.usage.push((timestamp, usage));
     }
 
     pub fn estimate(&self, _available: u64) -> Option<Duration> {
-        // TODO(capacity estimation): 
+        // TODO(capacity estimation):
         None
     }
 
@@ -84,10 +89,11 @@ pub struct CapacityMonitor {
 impl CapacityMonitor {
     pub fn observe<S>(&mut self, stats: &S)
     where
-        S: StatsSource,
+        S: StatSource,
     {
         let timestamp = stats.timestamp();
-        self.memory.observe(timestamp, stats.memory_usage() - stats.memory_cache());
+        self.memory
+            .observe(timestamp, stats.memory_usage() - stats.memory_cache());
         let c_cpu_delta = stats.container_cpu_usage() - stats.last_container_cpu_usage();
         let c_cpu_delta = c_cpu_delta.num_nanoseconds().unwrap_or(1) as f64;
         let t_cpu_delta = stats.total_cpu_usage() - stats.last_total_cpu_usage();
@@ -102,11 +108,14 @@ impl CapacityMonitor {
         let mut alerts = Vec::new();
         if let Some(estimate) = self.memory.estimate(self.system.get_available_memory()) {
             if estimate < Duration::minutes(10) {
-                alerts.push(format!("Warning, memory will exhaust estimated in {}", estimate));
+                alerts.push(format!(
+                    "Warning, memory will exhaust estimated in {}",
+                    estimate
+                ));
             }
         }
 
-        // TODO(capacity estimation): 
+        // TODO(capacity estimation):
         let _ = &self.disk;
 
         alerts
@@ -117,27 +126,21 @@ impl CapacityMonitor {
         let gb = |x| (x as f64) / (0x40000000 as f64);
 
         let memory = self.memory.status();
-        v.push(
-            format!(
-                "Memory used: {:.2} GiB, free: {:.2} GiB",
-                gb(memory),
-                gb(self.system.get_free_memory() * 1024),
-            ),
-        );
+        v.push(format!(
+            "Memory used: {:.2} GiB, free: {:.2} GiB",
+            gb(memory),
+            gb(self.system.get_free_memory() * 1024),
+        ));
 
         if let Some(disk_index) = self.disk_index {
             if let Some(disk) = self.system.get_disks().get(disk_index) {
                 let name = disk.get_name();
                 let total = gb(disk.get_total_space());
                 let available = gb(disk.get_available_space());
-                v.push(
-                    format!(
-                        "Disk {:?} total space: {:.2} GiB, available space: {:.2} GiB",
-                        name,
-                        total,
-                        available,
-                    ),
-                )
+                v.push(format!(
+                    "Disk {:?} total space: {:.2} GiB, available space: {:.2} GiB",
+                    name, total, available,
+                ))
             }
         }
 

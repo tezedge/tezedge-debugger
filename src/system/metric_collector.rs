@@ -14,7 +14,7 @@ pub async fn metric_collector(settings: SystemSettings) {
         storage::MetricStore,
         utility::{
             docker::{DockerClient, Container, Stat},
-            stats::{CapacityMonitor, Sender, SendError, NotificationMessage, StatsSource},
+            stats::{CapacityMonitor, Sender, SendError, NotificationMessage, StatSource},
         },
     };
 

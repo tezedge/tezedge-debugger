@@ -4,9 +4,9 @@
 use chrono::{DateTime, Utc, Duration};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
-use crate::utility::stats::StatsSource;
+use crate::utility::stats::StatSource;
 
-impl StatsSource for Stat {
+impl StatSource for Stat {
     fn timestamp(&self) -> DateTime<Utc> {
         self.read.clone()
     }
@@ -65,12 +65,10 @@ pub struct PidsStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BlkioStats {
-}
+pub struct BlkioStats {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StorageStats {
-}
+pub struct StorageStats {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CpuStats {
@@ -95,8 +93,7 @@ pub struct CpuUsage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PreCpuStats {
-}
+pub struct PreCpuStats {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryStats {
@@ -117,5 +114,4 @@ pub struct MemoryStatsExt {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Network {
-}
+pub struct Network {}

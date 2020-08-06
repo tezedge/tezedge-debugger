@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use storage::persistent::{Decoder, Encoder, SchemaError};
 use chrono::{DateTime, Utc, TimeZone};
-use crate::utility::{docker::Stat, stats::StatsSource};
+use crate::utility::{docker::Stat, stats::StatSource};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricMessage(pub Stat);
