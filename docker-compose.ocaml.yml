@@ -8,8 +8,12 @@ services:
     network_mode: "service:ocaml-network"
     environment:
       - RUST_BACKTRACE=1
-      # the URL should be secret, replace this placeholder with the actual slack webhooks URL
-      - SLACK_HOOKS_URL=https://hooks.slack.com/services/XXXXXXXXX/XXXXXXXXXXX/************************
+      # Replace this placeholder with the actual slack webhooks URL.
+      # The URL should not be stored in public VCS.
+      # Create a script secrets.sh with the secrets and
+      # use `./patch_yml.sh insert_secret` to do it automatically
+      # do not forget to run `./patch_yml.sh remove_secret` before push.
+      - SLACK_HOOKS_URL
     volumes:
       - "ocaml-shared-data:/tmp/volume"
       - /var/run:/var/run:rw
