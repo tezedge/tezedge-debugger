@@ -8,6 +8,10 @@ services:
     network_mode: "service:ocaml-network"
     environment:
       - RUST_BACKTRACE=1
+      # WARNING: it is not secure to use docker such way,
+      # adversary might take root access of the server through docker daemon.
+      # Consider to use https: https://docs.docker.com/engine/security/https/
+      - DOCKER_DAEMON_ADDRESS=:2375
       # Replace this placeholder with the actual slack webhooks URL.
       # The URL should not be stored in public VCS.
       # Create a script secrets.sh with the secrets and
@@ -16,7 +20,6 @@ services:
       - SLACK_HOOKS_URL
     volumes:
       - "ocaml-shared-data:/tmp/volume"
-      - /var/run:/var/run:rw
     entrypoint: ./tezedge-debugger
 
   ocaml-node:

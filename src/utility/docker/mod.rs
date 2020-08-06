@@ -12,6 +12,3 @@ pub use self::container::Container;
 
 mod top;
 pub use self::top::Top;
-
-#[cfg(test)]
-mod tests;

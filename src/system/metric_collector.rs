@@ -5,16 +5,14 @@ use crate::system::SystemSettings;
 
 /// infinitely performs http requests to cadvisor and put response into db
 pub async fn metric_collector(settings: SystemSettings) {
-    use tokio::{stream::StreamExt, sync::Mutex};
     use tracing::{error, warn};
-    use std::fmt;
-    use chrono::Utc;
+    use std::{fmt, net::SocketAddr};
     use crate::{
         messages::metric_message::MetricMessage,
         storage::MetricStore,
         utility::{
             docker::{DockerClient, Container},
-            stats::{CapacityMonitor, Sender, SendError, NotificationMessage, StatSource, ProcessStat},
+            stats::{CapacityMonitor, Sender, SendError, NotificationMessage, ProcessStat},
         },
     };
 
@@ -80,9 +78,11 @@ pub async fn metric_collector(settings: SystemSettings) {
         });
     let mut sender = messenger.map(|m| m.sender(settings.notification_cfg.minimal_interval));
     let mut monitor = settings.notification_cfg.alert_config.monitor();
+    let address = settings.docker_daemon_address.clone()
+        .unwrap_or(SocketAddr::new(settings.local_address.clone(), 2375));
 
     tokio::spawn(async move {
-        match DockerClient::default().await {
+        match DockerClient::connect(address.clone()).await {
             Ok(mut client) => {
                 let container = loop {
                     use tokio::time::delay_for;
@@ -104,11 +104,8 @@ pub async fn metric_collector(settings: SystemSettings) {
                     warn!(warning = "tezos node still not run, will retry in 5 seconds");
                     delay_for(Duration::new(5, 0)).await;
                 };
-                let client = Mutex::new(client);
-                let mut client_long_live = client.lock().await;
-                let mut stats_stream = client_long_live.stats(container.id.as_str()).await;
-                let mut last_update = Utc::now();
-                while let Some(stat) = stats_stream.next().await {
+                loop {
+                    let stat = client.stats_single(container.id.as_str()).await;
                     let stat = match stat {
                         Ok(stat) => stat,
                         Err(e) => {
@@ -119,41 +116,37 @@ pub async fn metric_collector(settings: SystemSettings) {
                             continue
                         },
                     };
-                    let delta = stat.timestamp() - last_update;
-                    let num_quants = (delta.num_seconds() / settings.metrics_fetch_interval.num_seconds()) as i32;
-                    if num_quants >= 1 {
-                        last_update = last_update + settings.metrics_fetch_interval * num_quants;
-                        // TODO:
-                        let mut temp_client = client.lock().await;
-                        let process_stats = match temp_client.top(container.id.as_str(), "u").await {
-                            Ok(top) => ProcessStat::parse_top(top),
-                            Err(err) => {
-                                warn!(
-                                    warning = tracing::field::display(&err),
-                                    "failed to fetch top output from docker daemon",
-                                );
-                                vec![]
-                            }
-                        };
-                        let message = MetricMessage {
-                            container_stat: stat,
-                            process_stats,
-                        };
-                        let m = format!("{:?}", message);
-                        tracing::info!(metric_message = tracing::field::display(&m));
-                        let storage = settings.storage.metric();
-                        notify_and_store(message, storage, &mut monitor, &mut sender)
-                            .unwrap_or_else(|e|
-                                error!(
-                                    error = tracing::field::display(&e),
-                                    "failed to send notification and store metrics",
-                                )
+                    let process_stats = match client.top(container.id.as_str(), "u").await {
+                        Ok(top) => ProcessStat::parse_top(top),
+                        Err(err) => {
+                            warn!(
+                                warning = tracing::field::display(&err),
+                                "failed to fetch top output from docker daemon",
                             );
-                    }
+                            vec![]
+                        }
+                    };
+                    let message = MetricMessage {
+                        container_stat: stat,
+                        process_stats,
+                    };
+                    let storage = settings.storage.metric();
+                    notify_and_store(message, storage, &mut monitor, &mut sender)
+                        .unwrap_or_else(|e|
+                            error!(
+                                error = tracing::field::display(&e),
+                                "failed to send notification and store metrics",
+                            )
+                        );
+                    tokio::time::delay_for(settings.metrics_fetch_interval.to_std().unwrap()).await;
                 }
             },
             Err(e) => {
-                error!(error = tracing::field::display(&e), "failed to connect to docker socket");
+                error!(
+                    error = tracing::field::display(&e),
+                    address = tracing::field::display(&address),
+                    "failed to connect to docker socket",
+                );
             },
         }
     });

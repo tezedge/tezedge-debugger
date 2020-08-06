@@ -1,9 +1,9 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tokio::{net::UnixStream, io, stream::StreamExt};
+use tokio::{net::TcpStream, io, stream::StreamExt};
 use serde::de::DeserializeOwned;
-use std::path::Path;
+use std::net::SocketAddr;
 
 use super::{container::Container, stat::Stat, top::Top};
 
@@ -14,22 +14,15 @@ impl<'a, T: ?Sized> Captures<'a> for T {}
 /// Far from complete docker client
 /// https://docs.docker.com/engine/api/
 pub struct DockerClient {
-    inner: UnixStream,
+    inner: TcpStream,
 }
 
 impl DockerClient {
     const API_VERSION: &'static str = "v1.40";
 
-    pub async fn default() -> Result<Self, io::Error> {
-        Self::new("/var/run/docker.sock").await
-    }
-
-    pub async fn new<P>(path: P) -> Result<Self, io::Error>
-    where
-        P: AsRef<Path>,
-    {
+    pub async fn connect(addr: SocketAddr) -> Result<Self, io::Error> {
         Ok(DockerClient {
-            inner: UnixStream::connect(path).await?,
+            inner: TcpStream::connect(addr).await?,
         })
     }
 
@@ -117,6 +110,14 @@ impl DockerClient {
         container_id: &str,
     ) -> impl Captures<'a> + StreamExt<Item = Result<Stat, io::Error>> {
         self.stream::<Stat>(format!("/containers/{}/stats", container_id))
+            .await
+    }
+
+    pub async fn stats_single<'a>(
+        &'a mut self,
+        container_id: &str,
+    ) -> Result<Stat, io::Error> {
+        self.get::<Stat>(format!("/containers/{}/stats?stream=false", container_id))
             .await
     }
 }

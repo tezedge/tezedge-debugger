@@ -132,6 +132,7 @@ async fn main() -> Result<(), failure::Error> {
                 db_mount_point: "/tmp/volume".to_owned(),
             },
         },
+        docker_daemon_address: env::var("DOCKER_DAEMON_ADDRESS").ok().and_then(|a| a.parse().ok()),
     };
 
     // Create syslog server to capture logs from docker / syslogs

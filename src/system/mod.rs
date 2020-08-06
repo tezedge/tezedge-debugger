@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use chrono::Duration;
 use crate::utility::identity::Identity;
 use crate::storage::MessageStore;
@@ -39,6 +39,7 @@ pub struct SystemSettings {
     pub node_rpc_port: u16,
     pub metrics_fetch_interval: Duration,
     pub notification_cfg: NotificationConfig,
+    pub docker_daemon_address: Option<SocketAddr>,
 }
 
 #[derive(Clone)]
