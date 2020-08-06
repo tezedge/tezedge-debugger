@@ -17,7 +17,6 @@ services:
     volumes:
       - "ocaml-shared-data:/tmp/volume"
       - /var/run:/var/run:rw
-      - /proc:/proc:ro
     entrypoint: ./tezedge-debugger
 
   ocaml-node:

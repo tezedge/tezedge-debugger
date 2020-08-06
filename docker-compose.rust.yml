@@ -16,6 +16,7 @@ services:
       - SLACK_HOOKS_URL
     volumes:
       - "rust-shared-data:/tmp/volume"
+      - /var/run:/var/run:rw
     entrypoint: ./tezedge-debugger
 
   rust-node:

@@ -5,7 +5,7 @@ use crate::system::SystemSettings;
 
 /// infinitely performs http requests to cadvisor and put response into db
 pub async fn metric_collector(settings: SystemSettings) {
-    use tokio::stream::StreamExt;
+    use tokio::{stream::StreamExt, sync::Mutex};
     use tracing::{error, warn};
     use std::fmt;
     use chrono::Utc;
@@ -13,8 +13,8 @@ pub async fn metric_collector(settings: SystemSettings) {
         messages::metric_message::MetricMessage,
         storage::MetricStore,
         utility::{
-            docker::{DockerClient, Container, Stat},
-            stats::{CapacityMonitor, Sender, SendError, NotificationMessage, StatSource},
+            docker::{DockerClient, Container},
+            stats::{CapacityMonitor, Sender, SendError, NotificationMessage, StatSource, ProcessStat},
         },
     };
 
@@ -35,12 +35,12 @@ pub async fn metric_collector(settings: SystemSettings) {
     }
 
     fn notify_and_store(
-        stat: Stat,
+        message: MetricMessage,
         storage: &MetricStore,
         observer: &mut CapacityMonitor,
         notifier: &mut Option<Sender>,
     ) -> Result<(), MetricCollectionError> {
-        observer.observe(&stat);
+        observer.observe(&message.container_stat);
 
         // if observer has some alert and we have some notifier, send the notification
         if let Some(notifier) = notifier {
@@ -59,7 +59,7 @@ pub async fn metric_collector(settings: SystemSettings) {
         }
         // write into db
         storage
-            .store_message(MetricMessage(stat))
+            .store_message(message)
             .map_err(MetricCollectionError::StoreMessage)?;
         
         Ok(())
@@ -104,7 +104,9 @@ pub async fn metric_collector(settings: SystemSettings) {
                     warn!(warning = "tezos node still not run, will retry in 5 seconds");
                     delay_for(Duration::new(5, 0)).await;
                 };
-                let mut stats_stream = client.stats(container.id.as_str()).await;
+                let client = Mutex::new(client);
+                let mut client_long_live = client.lock().await;
+                let mut stats_stream = client_long_live.stats(container.id.as_str()).await;
                 let mut last_update = Utc::now();
                 while let Some(stat) = stats_stream.next().await {
                     let stat = match stat {
@@ -121,8 +123,26 @@ pub async fn metric_collector(settings: SystemSettings) {
                     let num_quants = (delta.num_seconds() / settings.metrics_fetch_interval.num_seconds()) as i32;
                     if num_quants >= 1 {
                         last_update = last_update + settings.metrics_fetch_interval * num_quants;
+                        // TODO:
+                        let mut temp_client = client.lock().await;
+                        let process_stats = match temp_client.top(container.id.as_str(), "u").await {
+                            Ok(top) => ProcessStat::parse_top(top),
+                            Err(err) => {
+                                warn!(
+                                    warning = tracing::field::display(&err),
+                                    "failed to fetch top output from docker daemon",
+                                );
+                                vec![]
+                            }
+                        };
+                        let message = MetricMessage {
+                            container_stat: stat,
+                            process_stats,
+                        };
+                        let m = format!("{:?}", message);
+                        tracing::info!(metric_message = tracing::field::display(&m));
                         let storage = settings.storage.metric();
-                        notify_and_store(stat, storage, &mut monitor, &mut sender)
+                        notify_and_store(message, storage, &mut monitor, &mut sender)
                             .unwrap_or_else(|e|
                                 error!(
                                     error = tracing::field::display(&e),

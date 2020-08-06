@@ -1,14 +1,17 @@
 use serde::{Serialize, Deserialize};
 use storage::persistent::{Decoder, Encoder, SchemaError};
 use chrono::{DateTime, Utc, TimeZone};
-use crate::utility::{docker::Stat, stats::StatSource};
+use crate::utility::{docker::Stat, stats::{StatSource, ProcessStat}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MetricMessage(pub Stat);
+pub struct MetricMessage {
+    pub container_stat: Stat,
+    pub process_stats: Vec<ProcessStat>,
+}
 
 impl MetricMessage {
     pub fn timestamp(&self) -> DateTime<Utc> {
-        self.0.timestamp()
+        self.container_stat.timestamp()
     }
 }
 

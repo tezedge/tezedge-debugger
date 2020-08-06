@@ -5,7 +5,7 @@ use tokio::{net::UnixStream, io, stream::StreamExt};
 use serde::de::DeserializeOwned;
 use std::path::Path;
 
-use super::{container::Container, stat::Stat};
+use super::{container::Container, stat::Stat, top::Top};
 
 pub trait Captures<'a> {}
 
@@ -105,7 +105,11 @@ impl DockerClient {
     }
 
     pub async fn list_containers(&mut self) -> Result<Vec<Container>, io::Error> {
-        self.get(format!("/containers/json?size=true")).await
+        self.get("/containers/json?size=true".to_owned()).await
+    }
+
+    pub async fn top(&mut self, container_id: &str, ps_args: &str) -> Result<Top, io::Error> {
+        self.get(format!("/containers/{}/top?ps_args={}", container_id, ps_args)).await
     }
 
     pub async fn stats<'a>(

@@ -15,8 +15,7 @@ pub trait StatSource {
 }
 
 pub trait ProcessStatSource {
-    fn timestamp(&self) -> DateTime<Utc>;
     fn process_cmd(&self) -> &str;
     fn memory_usage(&self) -> u64;
-    fn memory_cache(&self) -> u64;
+    fn cpu_usage(&self) -> f64;
 }
