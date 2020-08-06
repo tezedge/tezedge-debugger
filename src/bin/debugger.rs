@@ -7,6 +7,7 @@ use tezedge_debugger::{
     utility::{
         identity::Identity,
         ip_settings::get_local_ip,
+        stats::{AlertConfig, ChannelConfig},
     },
 };
 use std::process::exit;
@@ -19,13 +20,10 @@ use storage::persistent::open_kv;
 use tezedge_debugger::system::{
     SystemSettings,
     NotificationConfig,
-    metric_alert::AlertConfig,
-    notification::ChannelConfig,
     syslog_producer::syslog_producer,
     metric_collector::metric_collector,
 };
 use chrono::Duration;
-use reqwest::Url;
 
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
@@ -108,9 +106,6 @@ async fn main() -> Result<(), failure::Error> {
         }
     };
 
-    let cadvisor_url = env::var("CADVISOR_URL")
-        .ok()
-        .and_then(|s| Url::parse(s.as_str()).ok());
     // if there is no url, we have no config
     let channel_config = env::var("SLACK_HOOKS_URL")
         .ok()
@@ -129,7 +124,6 @@ async fn main() -> Result<(), failure::Error> {
         syslog_port: 13131,
         rpc_port: 13031,
         node_rpc_port: 18732,
-        cadvisor_url: cadvisor_url,
         metrics_fetch_interval: Duration::minutes(1),
         notification_cfg: NotificationConfig {
             minimal_interval: Duration::minutes(3),

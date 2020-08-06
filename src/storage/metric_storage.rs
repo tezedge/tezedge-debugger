@@ -38,11 +38,9 @@ impl MetricStore {
         }
     }
 
-    pub fn store_message_array(&self, messages: Vec<MetricMessage>) -> Result<(), StorageError> {
-        for message in messages {
-            self.kv.put(&MetricMessageKey(message.timestamp()), &message)?;
-        }
-        Ok(())
+    pub fn store_message(&self, message: MetricMessage) -> Result<(), StorageError> {
+        self.kv.put(&MetricMessageKey(message.timestamp()), &message)
+            .map_err(Into::into)
     }
 
     pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filters: MetricFilters) -> Result<Vec<MetricMessage>, StorageError> {

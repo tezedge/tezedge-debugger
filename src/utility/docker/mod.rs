@@ -1,8 +1,11 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 mod client;
 pub use self::client::DockerClient;
 
-mod stats;
-pub use self::stats::Stats;
+mod stat;
+pub use self::stat::Stat;
 
 mod container;
 pub use self::container::Container;

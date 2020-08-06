@@ -3,9 +3,9 @@
 
 use sysinfo::{System, SystemExt, DiskExt};
 use chrono::{DateTime, Utc, Duration};
-use crate::messages::metric_message::MetricMessage;
+use super::StatsSource;
 
-/// Configuration of alert, conditions that trigger the alert
+/// Configuration of alert appearing conditions and other information
 #[derive(Clone)]
 pub struct AlertConfig {
     /// mount point of disk where database stored
@@ -14,7 +14,7 @@ pub struct AlertConfig {
 }
 
 impl AlertConfig {
-    pub fn condition_checker(&self) -> SystemCapacityObserver {
+    pub fn monitor(&self) -> CapacityMonitor {
         let system = {
             use sysinfo::RefreshKind;
 
@@ -29,13 +29,12 @@ impl AlertConfig {
         let disk_index = system.get_disks().iter().enumerate()
             .find(|&d| d.1.get_mount_point().to_str() == Some(self.db_mount_point.as_str()))
             .map(|(x, _)| x);
-        SystemCapacityObserver {
+        CapacityMonitor {
             system: system,
-            memory: MemoryEstimator::new(),
             disk_index: disk_index,
-            _disk: DiskEstimator::new(),
-            cpu: CpuUsage::None,
-            cpu_usage_literal: None,
+            disk: DiskEstimator::new(),
+            memory: MemoryEstimator::new(),
+            cpu_usage: None,
         }
     }
 }
@@ -60,12 +59,12 @@ impl MemoryEstimator {
     }
 
     pub fn observe(&mut self, timestamp: DateTime<Utc>, usage: u64) {
-        // TODO:
+        // TODO(capacity estimation): 
         self.usage.push((timestamp, usage));
     }
 
     pub fn estimate(&self, _available: u64) -> Option<Duration> {
-        // TODO:
+        // TODO(capacity estimation): 
         None
     }
 
@@ -74,71 +73,26 @@ impl MemoryEstimator {
     }
 }
 
-pub enum CpuUsage {
-    None,
-    One((DateTime<Utc>, Duration)),
-    Two {
-        pre_last: (DateTime<Utc>, Duration),
-        last: (DateTime<Utc>, Duration),
-    },
-}
-
-impl CpuUsage {
-    pub fn observe(&mut self, timestamp: DateTime<Utc>, usage: Duration) {
-        *self = match *self {
-            CpuUsage::None => CpuUsage::One((timestamp, usage)),
-            CpuUsage::One(pre_last) => CpuUsage::Two {
-                pre_last,
-                last: (timestamp, usage),
-            },
-            CpuUsage::Two { pre_last: _, last} => CpuUsage::Two {
-                pre_last: last,
-                last: (timestamp, usage),
-            },
-        }
-    }
-
-    pub fn status(&self) -> Option<f64> {
-        match self {
-            &CpuUsage::None | &CpuUsage::One(..) => None,
-            &CpuUsage::Two {
-                pre_last: (fst_timestamp, fst_duration),
-                last: (scd_timestamp,scd_duration),
-            } => {
-                let duration_total = scd_timestamp - fst_timestamp;
-                let duration_used = scd_duration - fst_duration;
-                let nanoseconds = |d: Duration| -> f64 {
-                    d.num_nanoseconds().unwrap_or(1) as f64
-                };
-                Some(nanoseconds(duration_used) / nanoseconds(duration_total))
-            },
-        }
-    }
-}
-
-pub struct SystemCapacityObserver {
+pub struct CapacityMonitor {
     system: System,
-    memory: MemoryEstimator,
     disk_index: Option<usize>,
-    _disk: DiskEstimator,
-    cpu: CpuUsage,
-    cpu_usage_literal: Option<f64>,
+    disk: DiskEstimator,
+    memory: MemoryEstimator,
+    cpu_usage: Option<f64>,
 }
 
-impl SystemCapacityObserver {
-    pub fn observe(&mut self, message: &MetricMessage) {
-        let timestamp = message.timestamp();
-        self.memory.observe(timestamp, message.memory_used());
-        match message {
-            &MetricMessage::Cadvisor(ref stats) => {
-                self.cpu.observe(timestamp, Duration::nanoseconds(stats.cpu.usage.total.clone() as i64));        
-            },
-            &MetricMessage::Docker(ref stats) => {
-                let cpu_delta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
-                let system_cpu_delta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
-                self.cpu_usage_literal = Some((cpu_delta as f64 / system_cpu_delta as f64) * stats.cpu_stats.online_cpus as f64);
-            },
-        }
+impl CapacityMonitor {
+    pub fn observe<S>(&mut self, stats: &S)
+    where
+        S: StatsSource,
+    {
+        let timestamp = stats.timestamp();
+        self.memory.observe(timestamp, stats.memory_usage() - stats.memory_cache());
+        let c_cpu_delta = stats.container_cpu_usage() - stats.last_container_cpu_usage();
+        let c_cpu_delta = c_cpu_delta.num_nanoseconds().unwrap_or(1) as f64;
+        let t_cpu_delta = stats.total_cpu_usage() - stats.last_total_cpu_usage();
+        let t_cpu_delta = t_cpu_delta.num_nanoseconds().unwrap_or(1) as f64;
+        self.cpu_usage = Some((c_cpu_delta / t_cpu_delta) * (stats.num_processors() as f64));
         self.system.refresh_disks();
         self.system.refresh_memory();
         self.system.refresh_cpu();
@@ -151,6 +105,9 @@ impl SystemCapacityObserver {
                 alerts.push(format!("Warning, memory will exhaust estimated in {}", estimate));
             }
         }
+
+        // TODO(capacity estimation): 
+        let _ = &self.disk;
 
         alerts
     }
@@ -184,11 +141,7 @@ impl SystemCapacityObserver {
             }
         }
 
-        if let Some(cpu_usage) = self.cpu.status() {
-            v.push(format!("CPU usage: {:.1}%", cpu_usage * 100.0))
-        }
-
-        if let Some(cpu_usage) = self.cpu_usage_literal {
+        if let Some(cpu_usage) = self.cpu_usage {
             v.push(format!("CPU usage: {:.1}%", cpu_usage * 100.0))
         }
 

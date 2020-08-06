@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 use std::net::IpAddr;
-use reqwest::Url;
 use chrono::Duration;
 use crate::utility::identity::Identity;
 use crate::storage::MessageStore;
+use crate::utility::stats::{AlertConfig, ChannelConfig};
 
 pub mod orchestrator;
 pub mod p2p_parser;
@@ -15,8 +15,6 @@ pub mod syslog_producer;
 pub mod rpc_parser;
 pub mod replayer;
 pub mod metric_collector;
-pub mod metric_alert;
-pub mod notification;
 
 pub mod prelude {
     pub use super::p2p_parser::spawn_p2p_parser;
@@ -39,7 +37,6 @@ pub struct SystemSettings {
     pub syslog_port: u16,
     pub rpc_port: u16,
     pub node_rpc_port: u16,
-    pub cadvisor_url: Option<Url>,
     pub metrics_fetch_interval: Duration,
     pub notification_cfg: NotificationConfig,
 }
@@ -48,6 +45,6 @@ pub struct SystemSettings {
 pub struct NotificationConfig {
     /// minimal interval between notifications
     pub minimal_interval: Duration,
-    pub channel: Option<notification::ChannelConfig>,
-    pub alert_config: metric_alert::AlertConfig,
+    pub channel: Option<ChannelConfig>,
+    pub alert_config: AlertConfig,
 }

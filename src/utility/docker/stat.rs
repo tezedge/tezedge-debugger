@@ -1,9 +1,47 @@
-use chrono::{DateTime, Utc};
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
+use chrono::{DateTime, Utc, Duration};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
+use crate::utility::stats::StatsSource;
+
+impl StatsSource for Stat {
+    fn timestamp(&self) -> DateTime<Utc> {
+        self.read.clone()
+    }
+
+    fn memory_usage(&self) -> u64 {
+        self.memory_stats.usage
+    }
+
+    fn memory_cache(&self) -> u64 {
+        self.memory_stats.stats.cache
+    }
+
+    fn container_cpu_usage(&self) -> Duration {
+        Duration::nanoseconds(self.cpu_stats.cpu_usage.total_usage as i64)
+    }
+
+    fn total_cpu_usage(&self) -> Duration {
+        Duration::nanoseconds(self.cpu_stats.system_cpu_usage as i64)
+    }
+
+    fn last_container_cpu_usage(&self) -> Duration {
+        Duration::nanoseconds(self.precpu_stats.cpu_usage.total_usage as i64)
+    }
+
+    fn last_total_cpu_usage(&self) -> Duration {
+        Duration::nanoseconds(self.precpu_stats.system_cpu_usage as i64)
+    }
+
+    fn num_processors(&self) -> usize {
+        self.cpu_stats.online_cpus as usize
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Stats {
+pub struct Stat {
     pub read: DateTime<Utc>,
     pub preread: DateTime<Utc>,
     pub name: String,

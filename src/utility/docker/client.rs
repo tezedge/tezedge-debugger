@@ -1,10 +1,13 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use tokio::{net::UnixStream, io, stream::StreamExt};
 use serde::de::DeserializeOwned;
 use std::path::Path;
 
 use super::{
     container::Container,
-    stats::Stats,
+    stat::Stat,
 };
 
 pub trait Captures<'a> {}
@@ -101,7 +104,7 @@ impl DockerClient {
     pub async fn stats<'a>(
         &'a mut self,
         container_id: &str,
-    ) -> impl Captures<'a> + StreamExt<Item = Result<Stats, io::Error>> {
-        self.stream::<Stats>(format!("/containers/{}/stats", container_id)).await
+    ) -> impl Captures<'a> + StreamExt<Item = Result<Stat, io::Error>> {
+        self.stream::<Stat>(format!("/containers/{}/stats", container_id)).await
     }
 }
