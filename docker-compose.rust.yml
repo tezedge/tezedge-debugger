@@ -13,8 +13,6 @@ services:
     volumes:
       - "rust-shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger
-    depends_on:
-      - cadvisor
 
   rust-node:
     image: simplestakingcom/tezedge:v0.2.0

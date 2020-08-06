@@ -15,8 +15,6 @@ services:
       - /var/run:/var/run:rw
       - /proc:/proc:ro
     entrypoint: ./tezedge-debugger
-    depends_on:
-      - cadvisor
 
   ocaml-node:
     image: tezos/tezos:carthagenet
