@@ -93,7 +93,7 @@ impl ProcessStat {
                 });
             ProcessStat {
                 cmd,
-                memory_usage: rss * 4096,
+                memory_usage: rss * 1024,
                 cpu_usage,
             }
         }).collect()
