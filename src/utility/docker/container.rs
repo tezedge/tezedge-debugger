@@ -13,6 +13,6 @@ pub struct Container {
 
 impl Container {
     pub fn tezos_node(&self) -> bool {
-        self.image.starts_with("tezos/tezos")
+        self.image.starts_with("tezos/tezos") || self.image.starts_with("simplestakingcom/tezedge")
     }
 }
