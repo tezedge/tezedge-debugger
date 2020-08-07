@@ -11,14 +11,14 @@ services:
       # WARNING: it is not secure to use docker such way,
       # adversary might take root access of the server through docker daemon.
       # Consider to use https: https://docs.docker.com/engine/security/https/
-      - DOCKER_DAEMON_ADDRESS=172.17.0.1:2375
+      - DOCKER_DAEMON_ADDRESS=116.202.246.107:2375
       # Replace this placeholder with the actual slack webhooks URL.
       # The URL should not be stored in public VCS.
       # Create a script secrets.sh with the secrets and
       # use `./patch_yml.sh insert_secret` to do it automatically
       # do not forget to run `./patch_yml.sh remove_secret` before push.
       - SLACK_HOOKS_URL
-      - NODE_IMAGE_NAME="tezos/tezos:carthagenet"
+      - NODE_IMAGE_NAME=tezos/tezos:carthagenet
     volumes:
       - "ocaml-shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger
