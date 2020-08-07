@@ -80,11 +80,17 @@ pub async fn metric_collector(settings: SystemSettings) {
         });
     let mut sender = messenger.map(|m| m.sender(settings.notification_cfg.minimal_interval));
     let mut monitor = settings.notification_cfg.alert_config.monitor();
+
     let address = settings.docker_daemon_address.clone()
         .unwrap_or(SocketAddr::new(settings.local_address.clone(), 2375));
 
+    let client = match &settings.docker_daemon_address {
+        &Some(ref addr) => DockerClient::connect(addr).await,
+        &None => DockerClient::path("/var/run/docker.sock").await,
+    };
+
     tokio::spawn(async move {
-        match DockerClient::connect(address.clone()).await {
+        match client {
             Ok(mut client) => {
                 let container = loop {
                     use tokio::time::delay_for;

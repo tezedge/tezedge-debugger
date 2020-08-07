@@ -8,10 +8,10 @@ services:
     network_mode: "service:rust-network"
     environment:
       - RUST_BACKTRACE=1
-      # WARNING: it is not secure to use docker such way,
+      # WARNING: it is not secure to use docker such way without https,
       # adversary might take root access of the server through docker daemon.
       # Consider to use https: https://docs.docker.com/engine/security/https/
-      - DOCKER_DAEMON_ADDRESS=172.17.0.1:2375
+      - DOCKER_DAEMON_ADDRESS
       # Replace this placeholder with the actual slack webhooks URL.
       # The URL should not be stored in public VCS.
       # Create a script secrets.sh with the secrets and
@@ -21,6 +21,9 @@ services:
       - NODE_IMAGE_NAME=simplestakingcom/tezedge:v0.2.0
     volumes:
       - "rust-shared-data:/tmp/volume"
+      # works only if run on the same machine where docker engine run,
+      # use DOCKER_DAEMON_ADDRESS otherwise
+      - "/var/run:/var/run:rw"
     entrypoint: ./tezedge-debugger
 
   rust-node:
