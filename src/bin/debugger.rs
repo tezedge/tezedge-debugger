@@ -124,9 +124,9 @@ async fn main() -> Result<(), failure::Error> {
         syslog_port: 13131,
         rpc_port: 13031,
         node_rpc_port: 18732,
-        metrics_fetch_interval: Duration::minutes(1),
+        metrics_fetch_interval: Duration::minutes(5),
         notification_cfg: NotificationConfig {
-            minimal_interval: Duration::minutes(3),
+            minimal_interval: Duration::minutes(15),
             channel: channel_config,
             alert_config: AlertConfig {
                 db_mount_point: "/tmp/volume".to_owned(),

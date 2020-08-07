@@ -33,6 +33,7 @@ pub async fn metric_collector(settings: SystemSettings) {
     }
 
     fn notify_and_store(
+        container: &Container,
         message: MetricMessage,
         storage: &MetricStore,
         observer: &mut CapacityMonitor,
@@ -42,15 +43,16 @@ pub async fn metric_collector(settings: SystemSettings) {
 
         // if observer has some alert and we have some notifier, send the notification
         if let Some(notifier) = notifier {
+            let container_info = format!("Container image: {}\n", container.image);
             let alert = observer.alert();
             if !alert.is_empty() {
-                let message = alert.into_iter().fold(String::new(), |s, item| format!("{}{}\n", s, item));
+                let message = alert.into_iter().fold(container_info.clone(), |s, item| format!("{}{}\n", s, item));
                 notifier.send(&NotificationMessage::Warning(message))
                     .map_err(MetricCollectionError::NotificationSend)?;
             }
             let status = observer.status();
             if !status.is_empty() {
-                let message = status.into_iter().fold(String::new(), |s, item| format!("{}{}\n", s, item));
+                let message = status.into_iter().fold(container_info, |s, item| format!("{}{}\n", s, item));
                 notifier.send(&NotificationMessage::Info(message))
                     .map_err(MetricCollectionError::NotificationSend)?;
             }
@@ -131,7 +133,7 @@ pub async fn metric_collector(settings: SystemSettings) {
                         process_stats,
                     };
                     let storage = settings.storage.metric();
-                    notify_and_store(message, storage, &mut monitor, &mut sender)
+                    notify_and_store(&container, message, storage, &mut monitor, &mut sender)
                         .unwrap_or_else(|e|
                             error!(
                                 error = tracing::field::display(&e),
