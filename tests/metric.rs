@@ -18,15 +18,24 @@ async fn test_metrics() {
 
     let mut last_time: Option<DateTime<Utc>> = None;
     for stat in response.as_array().unwrap() {
-        let stat = stat.as_object().unwrap();
-        let stat = stat.get("container_stat").unwrap().as_object().unwrap();
+        let stat_all = stat.as_object().unwrap();
+        let stat = stat_all.get("container_stat").unwrap().as_object().unwrap();
         let time = stat.get("read").unwrap().as_str().unwrap();
-        let this_time = Utc.datetime_from_str(&time, "%Y-%m-%dT%H:%M:%SZ").unwrap();
+        let this_time = Utc.datetime_from_str(&time, "%Y-%m-%dT%H:%M:%S.%fZ").unwrap();
         if let Some(last_time) = last_time {
             assert!(last_time >= this_time, "{} >= {}", last_time, this_time);
         }
         last_time = Some(this_time);
         let mem = stat.get("memory_stats").unwrap().as_object().unwrap();
-        let _ = mem.get("stats").unwrap().as_object().unwrap();
+        let usage = mem.get("usage").unwrap().as_u64().unwrap();
+        let cache = mem.get("stats").unwrap().as_object().unwrap().get("cache").unwrap().as_u64().unwrap();
+        
+        let process_stat = stat_all.get("process_stats").unwrap().as_array().unwrap();
+        let usage_sum = process_stat.iter()
+            .fold(0, |usage, process| {
+                usage + process.get("memory_usage").unwrap().as_u64().unwrap()
+            });
+        
+        let _ = (usage - cache, usage_sum);
     }
 }
