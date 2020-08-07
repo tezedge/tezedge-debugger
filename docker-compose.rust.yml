@@ -18,6 +18,7 @@ services:
       # use `./patch_yml.sh insert_secret` to do it automatically
       # do not forget to run `./patch_yml.sh remove_secret` before push.
       - SLACK_HOOKS_URL
+      - NODE_IMAGE_NAME="simplestakingcom/tezedge:v0.2.0"
     volumes:
       - "rust-shared-data:/tmp/volume"
     entrypoint: ./tezedge-debugger

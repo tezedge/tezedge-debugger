@@ -124,6 +124,7 @@ async fn main() -> Result<(), failure::Error> {
         syslog_port: 13131,
         rpc_port: 13031,
         node_rpc_port: 18732,
+        node_image_name: env::var("NODE_IMAGE_NAME").ok().unwrap_or("tezos/tezos:carthagenet".to_owned()),
         metrics_fetch_interval: Duration::minutes(5),
         notification_cfg: NotificationConfig {
             minimal_interval: Duration::minutes(15),

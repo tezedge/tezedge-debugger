@@ -100,7 +100,7 @@ pub async fn metric_collector(settings: SystemSettings) {
                             Vec::new()
                         },
                     };
-                    if let Some(container) = list.into_iter().find(Container::tezos_node) {
+                    if let Some(container) = list.into_iter().find(|c| c.image == settings.node_image_name) {
                         break container;
                     }
                     warn!(warning = "tezos node still not run, will retry in 5 seconds");

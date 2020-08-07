@@ -37,6 +37,7 @@ pub struct SystemSettings {
     pub syslog_port: u16,
     pub rpc_port: u16,
     pub node_rpc_port: u16,
+    pub node_image_name: String,
     pub metrics_fetch_interval: Duration,
     pub notification_cfg: NotificationConfig,
     pub docker_daemon_address: Option<SocketAddr>,
