@@ -49,7 +49,7 @@ impl DockerClient {
             match s {
                 Ok(s) => {
                     // TODO: fix it, need to ignore HTTP response header and fetch only json
-                    println!("{}", s);
+                    // println!("{}", s);
                     if s.starts_with("{") || s.starts_with('[') {
                         let t = serde_json::from_str(&s)
                             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e));
