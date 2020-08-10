@@ -14,11 +14,23 @@ the node and local identity, the Debugger is able to decode and deserialize the 
 Requirements
 ============
 * Docker
+* [Docker compose](https://docs.docker.com/compose/install/)
 * (**RECOMMENDED**)  Steps described in Docker [Post-Installation](https://docs.docker.com/engine/install/linux-postinstall/). 
 
 How to run
 ==========
-Easiest way to launch the Debugger is by running it with the included docker-compose files. There are two separate files: one
+
+First, you must clone this repo.
+```bash
+git clone https://github.com/simplestaking/tezedge-debugger.git
+```
+
+Then change into the cloned directory
+```bash
+cd tezedge-debugger
+```
+
+The easiest way to launch the Debugger is by running it with the included docker-compose files. There are two separate files: one
 for our Rust Tezedege Light Node (docker-compose.rust.yml) and the other for the original OCaml node (docker-compose.ocaml.yml).
 A guide on how to change ports is included inside the docker-compose files.
 ```bash
