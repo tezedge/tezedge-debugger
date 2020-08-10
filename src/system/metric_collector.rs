@@ -6,7 +6,7 @@ use crate::system::SystemSettings;
 /// infinitely performs http requests to cadvisor and put response into db
 pub async fn metric_collector(settings: SystemSettings) {
     use tracing::{error, warn};
-    use std::{fmt, net::SocketAddr};
+    use std::fmt;
     use crate::{
         messages::metric_message::MetricMessage,
         storage::MetricStore,
@@ -81,9 +81,6 @@ pub async fn metric_collector(settings: SystemSettings) {
     let mut sender = messenger.map(|m| m.sender(settings.notification_cfg.minimal_interval));
     let mut monitor = settings.notification_cfg.alert_config.monitor();
 
-    let address = settings.docker_daemon_address.clone()
-        .unwrap_or(SocketAddr::new(settings.local_address.clone(), 2375));
-
     let client = match &settings.docker_daemon_address {
         &Some(ref addr) => DockerClient::connect(addr).await,
         &None => DockerClient::path("/var/run/docker.sock").await,
@@ -106,7 +103,7 @@ pub async fn metric_collector(settings: SystemSettings) {
                             Vec::new()
                         },
                     };
-                    if let Some(container) = list.into_iter().find(|c| c.image == settings.node_image_name) {
+                    if let Some(container) = list.into_iter().find(|c| c.image.starts_with(&settings.node_image_name)) {
                         break container;
                     }
                     warn!(warning = "tezos node still not run, will retry in 5 seconds");
@@ -152,7 +149,6 @@ pub async fn metric_collector(settings: SystemSettings) {
             Err(e) => {
                 error!(
                     error = tracing::field::display(&e),
-                    address = tracing::field::display(&address),
                     "failed to connect to docker socket",
                 );
             },

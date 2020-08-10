@@ -112,7 +112,7 @@ async fn main() -> Result<(), failure::Error> {
         .map(|url| {
             ChannelConfig::Slack {
                 url,
-                channel_id: "#tezedge".to_owned(),
+                channel_id: "#monitoring".to_owned(),
             }
         });
 
@@ -124,10 +124,10 @@ async fn main() -> Result<(), failure::Error> {
         syslog_port: 13131,
         rpc_port: 13031,
         node_rpc_port: 18732,
-        node_image_name: env::var("NODE_IMAGE_NAME").ok().unwrap_or("tezos/tezos:carthagenet".to_owned()),
-        metrics_fetch_interval: Duration::minutes(5),
+        node_image_name: env::var("NODE_IMAGE_NAME").ok().unwrap_or("tezos/tezos".to_owned()),
+        metrics_fetch_interval: Duration::minutes(10),
         notification_cfg: NotificationConfig {
-            minimal_interval: Duration::minutes(15),
+            minimal_interval: Duration::minutes(60),
             channel: channel_config,
             alert_config: AlertConfig {
                 db_mount_point: "/tmp/volume".to_owned(),

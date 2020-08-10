@@ -107,14 +107,14 @@ impl Sender {
                     NotificationMessage::Warning(ref msg) => slack_hook::PayloadBuilder::new()
                         .text(msg.as_str())
                         .channel(channel_id.as_str())
-                        .username("[e2e][error]")
+                        .username("[tezedge-debugger][metrics]")
                         .icon_emoji(":warning:")
                         .build()
                         .map_err(SendError::Slack)?,
                     NotificationMessage::Info(ref msg) => slack_hook::PayloadBuilder::new()
                         .text(msg.as_str())
                         .channel(channel_id.as_str())
-                        .username("[e2e][info]")
+                        .username("[tezedge-debugger][metrics]")
                         .icon_emoji(":info:")
                         .build()
                         .map_err(SendError::Slack)?,

@@ -18,7 +18,7 @@ services:
       # use `./patch_yml.sh insert_secret` to do it automatically
       # do not forget to run `./patch_yml.sh remove_secret` before push.
       - SLACK_HOOKS_URL
-      - NODE_IMAGE_NAME=tezos/tezos:carthagenet
+      - NODE_IMAGE_NAME=tezos/tezos:v7.3
     volumes:
       - "ocaml-shared-data:/tmp/volume"
       # works only if run on the same machine where docker engine run,
@@ -27,7 +27,7 @@ services:
     entrypoint: ./tezedge-debugger
 
   ocaml-node:
-    image: tezos/tezos:carthagenet
+    image: tezos/tezos:v7.3
     network_mode: "service:ocaml-network"
     depends_on:
       - ocaml-debugger
