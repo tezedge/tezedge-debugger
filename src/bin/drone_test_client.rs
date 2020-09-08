@@ -22,7 +22,7 @@ use std::net::{SocketAddr, IpAddr};
 use std::convert::TryFrom;
 use tezos_messages::p2p::encoding::metadata::MetadataMessage;
 use tezos_messages::p2p::encoding::ack::AckMessage;
-use tezos_messages::p2p::encoding::version::Version;
+use tezos_messages::p2p::encoding::version::NetworkVersion as Version;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {

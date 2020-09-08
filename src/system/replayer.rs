@@ -16,7 +16,7 @@ use tezos_messages::p2p::encoding::prelude::{PeerMessageResponse, PeerMessage as
 use crate::messages::prelude::PeerMessage;
 use tracing::{error, info, field::{display, debug}};
 use crate::messages::p2p_message::P2pMessage;
-use tezos_messages::p2p::encoding::version::Version;
+use tezos_messages::p2p::encoding::version::NetworkVersion as Version;
 
 lazy_static! {
     static ref IDENTITY: Identity = Identity {

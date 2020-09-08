@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 use tezos_messages::p2p::encoding::{
     prelude::*,
     prelude::PeerMessage as TezosPeerMessage,
-    version::Version,
+    version::NetworkVersion as Version,
     operation_hashes_for_blocks::OperationHashesForBlock,
 };
 use std::net::SocketAddr;
