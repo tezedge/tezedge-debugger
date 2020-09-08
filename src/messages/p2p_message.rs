@@ -70,6 +70,7 @@ pub struct P2pMessage {
     pub incoming: bool,
     pub source_type: SourceType,
     pub message: Vec<PeerMessage>,
+    pub raw_bytes: Vec<u8>,
 }
 
 impl Decoder for P2pMessage {
@@ -93,7 +94,7 @@ impl P2pMessage {
     }
 
     /// Make new P2pMessage from parts
-    pub fn new<T: Into<PeerMessage>>(remote_addr: SocketAddr, incoming: bool, values: Vec<T>) -> Self {
+    pub fn new<T: Into<PeerMessage>>(remote_addr: SocketAddr, incoming: bool, values: Vec<T>, raw_bytes: Vec<u8>) -> Self {
         let payload = values.into_iter().map(|x| x.into()).collect::<Vec<PeerMessage>>();
         let source_type = payload.first().map(|msg| SourceType::from_p2p_msg(msg, incoming))
             .unwrap_or(SourceType::from_incoming(incoming));
@@ -104,6 +105,7 @@ impl P2pMessage {
             remote_addr,
             incoming,
             message: payload,
+            raw_bytes,
         }
     }
 

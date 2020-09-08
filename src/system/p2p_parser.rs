@@ -201,6 +201,7 @@ impl ParserEncryption {
             self.process_encrypted(packet)
         } else {
             let chunk = BinaryChunk::try_from(packet.payload().to_vec())?;
+            let raw_bytes = chunk.content().to_vec();
             let conn_msg = ConnectionMessage::try_from(chunk)?;
             let mut upgrade = false;
             let (remote, incoming) = self.extract_remote(&packet);
@@ -227,7 +228,7 @@ impl ParserEncryption {
                 self.upgrade()?;
             }
 
-            Ok(Some(P2pMessage::new(remote, incoming, vec![conn_msg])))
+            Ok(Some(P2pMessage::new(remote, incoming, vec![conn_msg], raw_bytes)))
         }
     }
 
@@ -246,8 +247,8 @@ impl ParserEncryption {
                 tracing::trace!(incoming, "trying to decrypt message");
                 decrypter.recv_msg(&packet, incoming)
             }).flatten()
-            .map(|msgs| {
-                P2pMessage::new(remote, incoming, msgs)
+            .map(|(msgs, raw_bytes)| {
+                P2pMessage::new(remote, incoming, msgs, raw_bytes)
             }))
     }
 

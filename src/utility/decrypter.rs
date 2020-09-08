@@ -48,14 +48,15 @@ impl P2pDecrypter {
     }
 
     /// Try to decrypt message
-    pub fn recv_msg(&mut self, enc: &Packet, incoming: bool) -> Option<Vec<PeerMessage>> {
+    pub fn recv_msg(&mut self, enc: &Packet, incoming: bool) -> Option<(Vec<PeerMessage>, Vec<u8>)> {
         if enc.has_payload() {
             self.inc_buf.extend_from_slice(&enc.payload());
 
             if self.inc_buf.len() > 2 {
                 if let Some(decrypted) = self.try_decrypt(incoming) {
+                    let raw = decrypted.clone();
                     self.store.stat().decipher_data(decrypted.len());
-                    return self.try_deserialize(decrypted);
+                    return self.try_deserialize(decrypted).map(|m| (m, raw));
                 }
             }
         }
