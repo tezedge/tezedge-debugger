@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel, UnboundedReceiver};
-use tracing::{trace, info, error, field::{display, debug}};
+use tracing::{trace, info, error};
 use failure::Error;
 use crypto::{
     crypto_box::precompute,
@@ -81,7 +81,7 @@ impl Parser {
             // If internal parsers were able to deserialize message. Send it to the processor
             if let Some(p2p_msg) = p2p_msg {
                 if let Err(err) = self.processor_sender.send(p2p_msg) {
-                    error!(error = display(&err), "processor channel closed abruptly");
+                    error!(error = tracing::field::display(&err), "processor channel closed abruptly");
                 }
             }
         }
@@ -98,7 +98,11 @@ impl Parser {
                 result
             }
             Err(err) => {
-                trace!(addr = display(self.initializer), error = display(&err), "is not valid tezos p2p connection");
+                trace!(
+                    addr = tracing::field::display(self.initializer),
+                    error = tracing::field::display(&err),
+                    "is not valid tezos p2p connection",
+                );
                 self.state = ParserState::Irrelevant;
                 None
             }
@@ -113,7 +117,11 @@ impl Parser {
             match self.encryption.process_encrypted(packet) {
                 Ok(result) => result,
                 Err(err) => {
-                    info!(addr = display(self.initializer), error = display(&err), "received invalid message");
+                    info!(
+                        addr = tracing::field::display(self.initializer),
+                        error = tracing::field::display(&err),
+                        "received invalid message",
+                    );
                     self.state = ParserState::Irrelevant;
                     None
                 }
@@ -138,7 +146,7 @@ pub fn spawn_p2p_parser(initializer: SocketAddr, processor_sender: UnboundedSend
     tokio::spawn(async move {
         let mut parser = Parser::new(initializer, receiver, processor_sender, settings.clone());
         while parser.parse_next().await {
-            trace!(addr = display(initializer), "parsed new message");
+            trace!(addr = tracing::field::display(initializer), "parsed new message");
         }
     });
     sender
@@ -209,9 +217,9 @@ impl ParserEncryption {
             let place = if let Some(_) = self.first_connection_message {
                 if packet.source_address() == self.initializer {
                     info!(
-                        initializer = display(self.initializer.clone()),
-                        src = display(packet.source_address()),
-                        dst = display(packet.destination_address()),
+                        initializer = tracing::field::display(self.initializer.clone()),
+                        src = tracing::field::display(packet.source_address()),
+                        dst = tracing::field::display(packet.destination_address()),
                         "received duplicate connection message"
                     );
                     return Ok(None);
@@ -278,11 +286,11 @@ impl ParserEncryption {
             )?;
 
             info!(
-                sent=debug(sent_data.raw()),
-                recv=debug(recv_data.raw()),
-                local=debug(&local),
-                remote=debug(&remote),
-                pk=display(hex::encode(precomputed_key.as_ref().as_ref())),
+                sent=tracing::field::debug(sent_data.raw()),
+                recv=tracing::field::debug(recv_data.raw()),
+                local=tracing::field::debug(&local),
+                remote=tracing::field::debug(&remote),
+                pk=tracing::field::display(hex::encode(precomputed_key.as_ref().as_ref())),
                 "upgrade",
             );
 
@@ -297,7 +305,7 @@ impl ParserEncryption {
             }
 
             info!(
-                initializer = display(self.initializer),
+                initializer = tracing::field::display(self.initializer),
                 "connection upgraded to encrypted"
             );
             Ok(())

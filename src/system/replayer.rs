@@ -14,7 +14,7 @@ use tezos_messages::p2p::encoding::ack::AckMessage;
 use tezos_messages::p2p::encoding::advertise::AdvertiseMessage;
 use tezos_messages::p2p::encoding::prelude::{PeerMessageResponse, PeerMessage as TezosPeerMessage};
 use crate::messages::prelude::PeerMessage;
-use tracing::{error, info, field::{display, debug}};
+use tracing::{error, info};
 use crate::messages::p2p_message::P2pMessage;
 use tezos_messages::p2p::encoding::version::NetworkVersion as Version;
 
@@ -91,7 +91,7 @@ async fn replay_incoming(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
                 info!(sending, encrypted, "Processing message");
                 if sending {
                     if encrypted {
-                        info!(msg = debug(&message), "Sending encrypted message message");
+                        info!(msg = tracing::field::debug(&message), "Sending encrypted message message");
                         match message {
                             PeerMessage::ConnectionMessage(_) => return Ok(()),
                             PeerMessage::AckMessage(ack) => {
@@ -114,7 +114,7 @@ async fn replay_incoming(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
                                 conn_msg.versions.push(Version::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1));
                                 let sent_chunk = BinaryChunk::from_content(&conn_msg.as_bytes()?)?;
                                 sent_connection_message = Some(conn_msg);
-                                info!(msg = debug(&sent_connection_message), "Sending connection message");
+                                info!(msg = tracing::field::debug(&sent_connection_message), "Sending connection message");
                                 writer.as_mut().unwrap().write_message(&sent_chunk)
                                     .await.unwrap();
                             }
@@ -127,20 +127,20 @@ async fn replay_incoming(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
                         if metadata_count < 2 {
                             let msg = reader.read_message::<MetadataMessage>().await?;
                             metadata_count += 1;
-                            info!(msg = debug(&msg), "Received metadata message");
+                            info!(msg = tracing::field::debug(&msg), "Received metadata message");
                         } else if ack_count < 2 {
                             let msg = reader.read_message::<AckMessage>().await?;
                             ack_count += 1;
-                            info!(msg = debug(&msg), "Received ack message");
+                            info!(msg = tracing::field::debug(&msg), "Received ack message");
                         } else {
                             let msg = reader.read_message::<PeerMessageResponse>().await?;
-                            info!(msg = debug(&msg), "Received encrypted message");
+                            info!(msg = tracing::field::debug(&msg), "Received encrypted message");
                         }
                     } else {
                         let recv_chunk = reader.as_mut().unwrap().read_message().await?;
                         let conn_msg = ConnectionMessage::try_from(recv_chunk)?;
                         received_connection_message = Some(conn_msg);
-                        info!(msg = debug(&received_connection_message), "Received connection message");
+                        info!(msg = tracing::field::debug(&received_connection_message), "Received connection message");
                     }
                 }
             }
@@ -148,7 +148,7 @@ async fn replay_incoming(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
             Ok(())
         }.await;
         if let Err(err) = err {
-            error!(err = display(&err), "failed to replay");
+            error!(err = tracing::field::display(&err), "failed to replay");
         }
     });
     Ok(())
@@ -235,7 +235,7 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
                                 conn_msg.versions.push(Version::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1));
                                 let sent_chunk = BinaryChunk::from_content(&conn_msg.as_bytes()?)?;
                                 sent_connection_message = Some(conn_msg);
-                                info!(msg = debug(&sent_connection_message), "Sending connection message");
+                                info!(msg = tracing::field::debug(&sent_connection_message), "Sending connection message");
                                 writer.as_mut().unwrap().write_message(&sent_chunk)
                                     .await.unwrap();
                             }
@@ -254,20 +254,20 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
                         if metadata_count < 2 {
                             let msg = reader.read_message::<MetadataMessage>().await?;
                             metadata_count += 1;
-                            info!(msg = debug(&msg), "Received metadata message");
+                            info!(msg = tracing::field::debug(&msg), "Received metadata message");
                         } else if ack_count < 2 {
                             let msg = reader.read_message::<AckMessage>().await?;
                             ack_count += 1;
-                            info!(msg = debug(&msg), "Received ack message");
+                            info!(msg = tracing::field::debug(&msg), "Received ack message");
                         } else {
                             let msg = reader.read_message::<PeerMessageResponse>().await?;
-                            info!(msg = debug(&msg), "Received encrypted message");
+                            info!(msg = tracing::field::debug(&msg), "Received encrypted message");
                         }
                     } else {
                         let recv_chunk = reader.as_mut().unwrap().read_message().await?;
                         let conn_msg = ConnectionMessage::try_from(recv_chunk)?;
                         received_connection_message = Some(conn_msg);
-                        info!(msg = debug(&received_connection_message), "Received connection message");
+                        info!(msg = tracing::field::debug(&received_connection_message), "Received connection message");
                     }
                 }
             }
@@ -275,7 +275,7 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
             Ok(())
         }.await;
         if let Err(err) = err {
-            error!(err = display(&err), "failed to replay");
+            error!(err = tracing::field::display(&err), "failed to replay");
         }
     });
 

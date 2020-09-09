@@ -6,7 +6,7 @@ use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
 use serde::{Serialize, Deserialize};
-use tracing::{trace, error, field::{display}};
+use tracing::{trace, error};
 use std::{
     collections::{HashMap, hash_map::Entry},
     sync::{Arc, RwLock}, net::SocketAddr,
@@ -63,8 +63,8 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
                     processor = entry.or_insert_with(move || {
                         // If processor does not exists, create new one
                         trace!(
-                            source = display(src),
-                            destination = display(dst),
+                            source = tracing::field::display(src),
+                            destination = tracing::field::display(dst),
                             "spawning p2p parser"
                         );
                         spawn_p2p_parser(src, message_processor, settings)
@@ -76,8 +76,8 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
                     } else {
                         if packet.payload().len() > 0 {
                             trace!(
-                                source = display(src),
-                                destination = display(dst),
+                                source = tracing::field::display(src),
+                                destination = tracing::field::display(dst),
                                 "processor does not exists"
                             );
                         }

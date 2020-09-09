@@ -4,7 +4,7 @@
 use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema};
 use std::sync::Arc;
 use rocksdb::{DB};
-use tracing::{info, error, field::{display}};
+use tracing::{info, error};
 use std::sync::atomic::{AtomicU64, Ordering};
 use crate::messages::log_message::LogMessage;
 use storage::{StorageError, IteratorMode, Direction};
@@ -165,7 +165,7 @@ impl LogStore {
                     None
                 }
                 Err(err) => {
-                    error!(index = index, error = display(&err), "failed to load value");
+                    error!(index = index, error = tracing::field::display(&err), "failed to load value");
                     None
                 }
             }
@@ -186,7 +186,7 @@ pub(crate) mod secondary_indexes {
         sync::Arc,
         str::FromStr,
     };
-    use tracing::{warn, field::{display}};
+    use tracing::warn;
     use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
     use crate::storage::LogStore;
     use serde::{Serialize, Deserialize};
@@ -236,7 +236,7 @@ pub(crate) mod secondary_indexes {
             match value.level.parse() {
                 Ok(level) => Some(level),
                 Err(_) => {
-                    warn!(level = display(&value.level), "got invalid log level");
+                    warn!(level = tracing::field::display(&value.level), "got invalid log level");
                     None
                 }
             }
