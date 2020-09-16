@@ -231,8 +231,9 @@ pub(crate) mod secondary_indexes {
     use crate::storage::secondary_index::SecondaryIndex;
     use serde::{Serialize, Deserialize};
     use std::str::FromStr;
-    use failure::{Fail};
-    use crate::messages::p2p_message::{P2pMessage, PeerMessage};
+    use failure::Fail;
+    use tezos_messages::p2p::encoding::peer::PeerMessage;
+    use crate::messages::p2p_message::{P2pMessage, TezosPeerMessage, SourceType};
 
     pub type RemoteAddressIndexKV = dyn KeyValueStoreWithSchema<RemoteAddrIndex> + Sync + Send;
 
@@ -528,32 +529,31 @@ pub(crate) mod secondary_indexes {
 
     impl Type {
         pub fn extract(value: &P2pMessage) -> u32 {
-            if let Some(msg) = value.message.first() {
+            if let Some(msg) = value.decrypted_chunk.first().and_then(|m| m.message.as_ref().ok()) {
                 match msg {
-                    PeerMessage::Disconnect => Self::Disconnect as u32,
-                    PeerMessage::Bootstrap => Self::Advertise as u32,
-                    PeerMessage::Advertise(_) => Self::SwapRequest as u32,
-                    PeerMessage::SwapRequest(_) => Self::SwapAck as u32,
-                    PeerMessage::SwapAck(_) => Self::Bootstrap as u32,
-                    PeerMessage::GetCurrentBranch(_) => Self::GetCurrentBranch as u32,
-                    PeerMessage::CurrentBranch(_) => Self::CurrentBranch as u32,
-                    PeerMessage::Deactivate(_) => Self::Deactivate as u32,
-                    PeerMessage::GetCurrentHead(_) => Self::GetCurrentHead as u32,
-                    PeerMessage::CurrentHead(_) => Self::CurrentHead as u32,
-                    PeerMessage::GetBlockHeaders(_) => Self::GetBlockHeaders as u32,
-                    PeerMessage::BlockHeader(_) => Self::BlockHeader as u32,
-                    PeerMessage::GetOperations(_) => Self::GetOperations as u32,
-                    PeerMessage::Operation(_) => Self::Operation as u32,
-                    PeerMessage::GetProtocols(_) => Self::GetProtocols as u32,
-                    PeerMessage::Protocol(_) => Self::Protocol as u32,
-                    PeerMessage::GetOperationHashesForBlocks(_) => Self::GetOperationHashesForBlocks as u32,
-                    PeerMessage::OperationHashesForBlock(_) => Self::OperationHashesForBlock as u32,
-                    PeerMessage::GetOperationsForBlocks(_) => Self::GetOperationsForBlocks as u32,
-                    PeerMessage::OperationsForBlocks(_) => Self::OperationsForBlocks as u32,
-                    PeerMessage::ConnectionMessage(_) => Self::ConnectionMessage as u32,
-                    PeerMessage::MetadataMessage(_) => Self::Metadata as u32,
-                    PeerMessage::AckMessage(_) => Self::AckMessage as u32,
-                    PeerMessage::_Reserved => Self::P2PMessage as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::Disconnect) => Self::Disconnect as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::Bootstrap) => Self::Advertise as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::Advertise(_)) => Self::SwapRequest as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::SwapRequest(_)) => Self::SwapAck as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::SwapAck(_)) => Self::Bootstrap as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::GetCurrentBranch(_)) => Self::GetCurrentBranch as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::CurrentBranch(_)) => Self::CurrentBranch as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::Deactivate(_)) => Self::Deactivate as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::GetCurrentHead(_)) => Self::GetCurrentHead as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::CurrentHead(_)) => Self::CurrentHead as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::GetBlockHeaders(_)) => Self::GetBlockHeaders as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::BlockHeader(_)) => Self::BlockHeader as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::GetOperations(_)) => Self::GetOperations as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::Operation(_)) => Self::Operation as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::GetProtocols(_)) => Self::GetProtocols as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::Protocol(_)) => Self::Protocol as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::GetOperationHashesForBlocks(_)) => Self::GetOperationHashesForBlocks as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::OperationHashesForBlock(_)) => Self::OperationHashesForBlock as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::GetOperationsForBlocks(_)) => Self::GetOperationsForBlocks as u32,
+                    TezosPeerMessage::PeerMessage(PeerMessage::OperationsForBlocks(_)) => Self::OperationsForBlocks as u32,
+                    TezosPeerMessage::ConnectionMessage(_) => Self::ConnectionMessage as u32,
+                    TezosPeerMessage::MetadataMessage(_) => Self::Metadata as u32,
+                    TezosPeerMessage::AckMessage(_) => Self::AckMessage as u32,
                 }
             } else {
                 Self::P2PMessage as u32
@@ -764,7 +764,7 @@ pub(crate) mod secondary_indexes {
         type FieldType = bool;
 
         fn accessor(value: &<P2pStore as KeyValueSchema>::Value) -> Option<Self::FieldType> {
-            Some(value.source_type().as_bool())
+            Some(value.source_type() == SourceType::Remote)
         }
 
         fn make_index(key: &<P2pStore as KeyValueSchema>::Key, value: Self::FieldType) -> SourceTypeKey {

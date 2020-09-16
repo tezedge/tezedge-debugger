@@ -15,8 +15,7 @@ use warp::reply::{WithStatus, Json};
 use std::net::SocketAddr;
 use std::convert::TryInto;
 use itertools::Itertools;
-use crate::messages::p2p_message::{SourceType};
-use crate::messages::endpoint_message::EndpointMessage;
+use crate::messages::p2p_message::SourceType;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 /// Cursor structure mapped from the endpoint URI
@@ -76,7 +75,7 @@ pub fn p2p(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), E
             let cursor_id = cursor.cursor_id.clone();
             match cursor.try_into() {
                 Ok(filters) => match storage.p2p().get_cursor(cursor_id, limit, filters) {
-                    Ok(msgs) => with_status(json(&msgs.into_iter().map(|msg| EndpointMessage::from(msg)).collect_vec()), StatusCode::OK),
+                    Ok(msgs) => with_status(json(&msgs), StatusCode::OK),
                     Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
                 },
                 Err(type_err) => with_status(json(&format!("invalid type-name: {}", type_err)), StatusCode::BAD_REQUEST),

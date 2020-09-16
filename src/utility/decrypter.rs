@@ -11,12 +11,17 @@ use tezos_encoding::binary_reader::BinaryReaderError;
 use tezos_messages::p2p::{
     encoding::{
         metadata::MetadataMessage,
+        ack::AckMessage,
         peer::PeerMessageResponse,
     },
     binary_message::{BinaryMessage, BinaryChunk},
 };
+use serde::{Serialize, Deserialize};
 use std::convert::TryFrom;
-use crate::messages::prelude::*;
+use crate::messages::{
+    p2p_message::TezosPeerMessage,
+    prelude::*,
+};
 use crate::storage::MessageStore;
 
 /// Message decrypter
@@ -30,6 +35,13 @@ pub struct P2pDecrypter {
     input_remaining: usize,
     store: MessageStore,
 
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DecryptedChunk {
+    pub raw_bytes: Vec<u8>,
+    // TODO: add error
+    pub message: Result<TezosPeerMessage, ()>,
 }
 
 impl P2pDecrypter {
@@ -48,19 +60,36 @@ impl P2pDecrypter {
     }
 
     /// Try to decrypt message
-    pub fn recv_msg(&mut self, enc: &Packet, incoming: bool) -> Option<(Vec<PeerMessage>, Vec<u8>)> {
+    /// one packet might yield several chunks
+    pub fn recv_msg(&mut self, enc: &Packet, incoming: bool) -> Vec<DecryptedChunk> {
+        let mut chunks = Vec::new();
+
         if enc.has_payload() {
             self.inc_buf.extend_from_slice(&enc.payload());
 
             if self.inc_buf.len() > 2 {
-                if let Some(decrypted) = self.try_decrypt(incoming) {
-                    let raw = decrypted.clone();
+                while let Some(decrypted) = self.try_decrypt(incoming) {
+                    let raw_bytes = decrypted.clone();
                     self.store.stat().decipher_data(decrypted.len());
-                    return self.try_deserialize(decrypted).map(|m| (m, raw));
+                    let decrypted = match self.try_deserialize(decrypted) {
+                        None => DecryptedChunk {
+                            raw_bytes,
+                            message: Err(()),
+                        },
+                        Some(messages) => {
+                            // TODO: turn into error
+                            assert_eq!(messages.len(), 1);
+                            DecryptedChunk {
+                                raw_bytes,
+                                message: Ok(messages.first().unwrap().clone()),
+                            }
+                        },
+                    };
+                    chunks.push(decrypted);
                 }
             }
         }
-        None
+        chunks
     }
 
     /// Try to decrypt current buffer
@@ -109,7 +138,7 @@ impl P2pDecrypter {
     }
 
     /// Try to deserialize decrypted message
-    fn try_deserialize(&mut self, mut msg: Vec<u8>) -> Option<Vec<PeerMessage>> {
+    fn try_deserialize(&mut self, mut msg: Vec<u8>) -> Option<Vec<TezosPeerMessage>> {
         if !self.metadata {
             self.try_deserialize_meta(&mut msg)
         } else if !self.ack {
@@ -120,8 +149,7 @@ impl P2pDecrypter {
     }
 
     /// Try deserialize acknowledgment message only
-    fn try_deserialize_ack(&mut self, msg: &mut Vec<u8>) -> Option<Vec<PeerMessage>> {
-        use crate::messages::ack_message::AckMessage;
+    fn try_deserialize_ack(&mut self, msg: &mut Vec<u8>) -> Option<Vec<TezosPeerMessage>> {
         self.input_remaining = self.input_remaining.saturating_sub(msg.len());
         self.dec_buf.append(msg);
 
@@ -131,7 +159,7 @@ impl P2pDecrypter {
                     Ok(msg) => {
                         self.dec_buf.clear();
                         self.ack = true;
-                        return Some(vec![msg.into()]);
+                        return Some(vec![TezosPeerMessage::AckMessage(msg)]);
                     }
                     Err(BinaryReaderError::Underflow { bytes }) => {
                         self.input_remaining += bytes;
@@ -154,7 +182,7 @@ impl P2pDecrypter {
     }
 
     /// Try deserialize metadata message only
-    fn try_deserialize_meta(&mut self, msg: &mut Vec<u8>) -> Option<Vec<PeerMessage>> {
+    fn try_deserialize_meta(&mut self, msg: &mut Vec<u8>) -> Option<Vec<TezosPeerMessage>> {
         self.input_remaining = self.input_remaining.saturating_sub(msg.len());
         self.dec_buf.append(msg);
 
@@ -164,7 +192,7 @@ impl P2pDecrypter {
                     Ok(msg) => {
                         self.dec_buf.clear();
                         self.metadata = true;
-                        return Some(vec![msg.into()]);
+                        return Some(vec![TezosPeerMessage::MetadataMessage(msg)]);
                     }
                     Err(BinaryReaderError::Underflow { bytes }) => {
                         self.input_remaining += bytes;
@@ -187,7 +215,7 @@ impl P2pDecrypter {
     }
 
     /// Try deserialize rest of P2P messages
-    fn try_deserialize_p2p(&mut self, msg: &mut Vec<u8>) -> Option<Vec<PeerMessage>> {
+    fn try_deserialize_p2p(&mut self, msg: &mut Vec<u8>) -> Option<Vec<TezosPeerMessage>> {
         self.input_remaining = self.input_remaining.saturating_sub(msg.len());
         self.dec_buf.append(msg);
 
@@ -199,8 +227,7 @@ impl P2pDecrypter {
                         return if msg.messages().len() == 0 {
                             None
                         } else {
-                            // msg.messages().iter(|x| x.into()).collect()
-                            Some(msg.messages().iter().map(|x| x.clone().into()).collect())
+                            Some(msg.messages().iter().cloned().map(TezosPeerMessage::PeerMessage).collect())
                         };
                     }
                     Err(BinaryReaderError::Underflow { bytes }) => {

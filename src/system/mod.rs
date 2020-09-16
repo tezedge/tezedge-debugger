@@ -11,7 +11,9 @@ pub mod raw_socket_producer;
 pub mod processor;
 pub mod syslog_producer;
 pub mod rpc_parser;
-pub mod replayer;
+
+// TODO: replay
+// pub mod replayer;
 
 pub mod prelude {
     pub use super::p2p_parser::spawn_p2p_parser;

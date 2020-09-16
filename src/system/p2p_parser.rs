@@ -236,7 +236,17 @@ impl ParserEncryption {
                 self.upgrade()?;
             }
 
-            Ok(Some(P2pMessage::new(remote, incoming, vec![conn_msg], raw_bytes)))
+            let source_type = if remote == self.initializer {
+                SourceType::Remote
+            } else {
+                SourceType::Local
+            };
+    
+            let c = DecryptedChunk {
+                raw_bytes,
+                message: Ok(TezosPeerMessage::ConnectionMessage(conn_msg)),
+            };
+            Ok(Some(P2pMessage::new(remote, incoming, source_type, vec![c])))
         }
     }
 
@@ -250,13 +260,17 @@ impl ParserEncryption {
             &mut self.outgoing_decrypter
         };
 
+        let source_type = if remote == self.initializer {
+            SourceType::Remote
+        } else {
+            SourceType::Local
+        };
+
         Ok(decrypter.as_mut()
             .map(|decrypter| {
                 tracing::trace!(incoming, "trying to decrypt message");
-                decrypter.recv_msg(&packet, incoming)
-            }).flatten()
-            .map(|(msgs, raw_bytes)| {
-                P2pMessage::new(remote, incoming, msgs, raw_bytes)
+                let decrypted_chunk = decrypter.recv_msg(&packet, incoming);
+                P2pMessage::new(remote, incoming, source_type, decrypted_chunk)
             }))
     }
 
