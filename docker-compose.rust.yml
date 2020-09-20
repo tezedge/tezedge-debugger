@@ -13,7 +13,7 @@ services:
     entrypoint: ./tezedge-debugger
 
   rust-node:
-    image: simplestakingcom/tezedge:v0.2.0
+    image: simplestakingcom/tezedge:v0.4.0
     entrypoint: sh -c "sleep 5 && /home/appuser/tezedge/docker/compose/tezedge.sh"
     network_mode: "service:rust-network"
     depends_on:
