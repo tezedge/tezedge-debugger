@@ -5,7 +5,6 @@ use tracing::{info, error, Level, field::{display}};
 use tezedge_debugger::{
     system::build_raw_socket_system,
     utility::{
-        identity::Identity,
         ip_settings::get_local_ip,
     },
 };
@@ -15,24 +14,24 @@ use std::time::Instant;
 use tezedge_debugger::storage::{MessageStore, get_ts, cfs};
 use std::path::Path;
 use std::sync::Arc;
-use storage::persistent::open_kv;
+use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::system::syslog_producer::syslog_producer;
+use tezos_identity::Identity;
 
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
     let storage_path = format!("/tmp/volume/{}", get_ts());
     let path = Path::new(&storage_path);
     let schemas = cfs();
-    let rocksdb = Arc::new(open_kv(path, schemas)?);
+    let rocksdb = Arc::new(open_kv(path, schemas, &DbConfiguration::default())?);
     Ok(MessageStore::new(rocksdb))
 }
+
+
 
 /// Try to load identity from one of the well defined paths
 /// This method will block until, some identity is found
 async fn load_identity() -> Identity {
-    // Wait until identity appears
-    let mut last_try = Instant::now();
-
     let identity_paths = [
         "/tmp/volume/identity.json",
         "/tmp/volume/data/identity.json",
@@ -55,11 +54,17 @@ async fn load_identity() -> Identity {
                         }
                     }
                 }
-                Err(err) => {
-                    if last_try.elapsed().as_secs() >= 5 {
-                        last_try = Instant::now();
-                        info!(error = display(&err), "waiting for identity");
-                    }
+                Err(_) => {
+                    // if last_try.elapsed().as_secs() >= 5 {
+                    //     last_try = Instant::now();
+                    //     info!(error = display(&err), "waiting for identity");
+                    // }
+                    info!("Identity file not found, generating identity with POW: 26");
+                    let id = Identity::generate(26.0);
+                    // FIXME - unwarp
+                    let file = std::fs::File::create("/tmp/volume/identity.json").unwrap();
+                    serde_json::to_writer(&file, &id).unwrap();
+                    // file.write_all(id).await.unwrap();'
                 }
             }
         }

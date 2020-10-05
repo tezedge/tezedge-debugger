@@ -23,6 +23,7 @@ use crate::{
     storage::MessageStore,
 };
 use tezos_messages::p2p::binary_message::BinaryMessage;
+use tezos_identity::Identity;
 use crate::system::orchestrator::ConnectionState;
 
 /// P2P Message parser. Aggregates data, deciphers and deserializes.

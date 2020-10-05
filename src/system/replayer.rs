@@ -298,7 +298,7 @@ async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) ->
     let recv_chunk = reader.read_message().await?;
     let recv_conn_msg = ConnectionMessage::try_from(recv_chunk)?;
     let sent_data = chunk;
-    let recv_data = BinaryChunk::from_content(&recv_conn_msg.cache_reader().get().unwrap_or_default())?;
+    let recv_data = BinaryChunk::from_content(&recv_conn_msg.cache_reader().unwrap().get().unwrap_or_default())?;
     let pk = precompute(
         &hex::encode(recv_conn_msg.public_key),
         &IDENTITY.secret_key,

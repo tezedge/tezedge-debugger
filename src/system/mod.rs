@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use std::net::IpAddr;
-use crate::utility::identity::Identity;
+use tezos_identity::Identity;
 use crate::storage::MessageStore;
 
 pub mod orchestrator;
