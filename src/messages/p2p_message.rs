@@ -6,11 +6,13 @@ use tezos_messages::p2p::encoding::{
     connection::ConnectionMessage,
     metadata::MetadataMessage,
     ack::AckMessage,
-    peer::PeerMessage,
+    peer::{PeerMessage, PeerMessageResponse},
 };
+use tezos_encoding::encoding::{HasEncoding, Encoding};
 use std::net::SocketAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::persistent::{Decoder, SchemaError, Encoder};
+use std::str::FromStr;
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
 /// Determines, if message belongs to communication originated
@@ -104,6 +106,63 @@ pub enum TezosPeerMessage {
     MetadataMessage(MetadataMessage),
     AckMessage(AckMessage),
     PeerMessage(PeerMessage),
+    PartialPeerMessage(PartialPeerMessage),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, strum::EnumString)]
+pub enum PartialPeerMessage {
+    Disconnect,
+    Advertise,
+    SwapRequest,
+    SwapAck,
+    Bootstrap,
+    GetCurrentBranch,
+    CurrentBranch,
+    Deactivate,
+    GetCurrentHead,
+    CurrentHead,
+    GetBlockHeaders,
+    BlockHeader,
+    GetOperations,
+    Operation,
+    GetProtocols,
+    Protocol,
+    GetOperationHashesForBlocks,
+    OperationHashesForBlock,
+    GetOperationsForBlocks,
+    OperationsForBlocks,
+}
+
+impl PartialPeerMessage {
+    pub fn from_bytes(s: &[u8]) -> Option<Self> {
+        match PeerMessageResponse::encoding() {
+            Encoding::Obj(obj) => {
+                match obj.first() {
+                    Some(field) => match field.get_encoding() {
+                        // with box_patterns feature will be possible
+                        // Encoding::Dynamic(box Encoding::List(box Encoding::Tags(s, tags)))
+                        Encoding::Dynamic(encoding) => match &**encoding {
+                            Encoding::List(encoding) => match &**encoding {
+                                Encoding::Tags(2, tags) => {
+                                    let mut id = [0; 2];
+                                    id.clone_from_slice(&s[4..6]);
+                                    match tags.find_by_id(u16::from_be_bytes(id)) {
+                                        Some(tag) => Self::from_str(tag.get_variant().as_str()).ok(),
+                                        None => None,
+                                    }
+                                },
+                                _ => None,
+                            },
+                            _ => None,
+                        },
+                        _ => None,
+                    },
+                    None => None,
+                }
+            },
+            _ => None
+        }
+    }
 }
 
 impl Clone for TezosPeerMessage {
@@ -118,6 +177,7 @@ impl Clone for TezosPeerMessage {
                 TezosPeerMessage::AckMessage(m)
             },
             &TezosPeerMessage::PeerMessage(ref m) => TezosPeerMessage::PeerMessage(m.clone()),
+            &TezosPeerMessage::PartialPeerMessage(ref s) => TezosPeerMessage::PartialPeerMessage(s.clone()),
         }
     }
 }

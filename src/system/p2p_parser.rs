@@ -13,10 +13,11 @@ use tezos_messages::p2p::{
     },
     binary_message::BinaryMessage,
 };
+use tezos_encoding::binary_reader::BinaryReaderError;
 use tezos_conversation::{Conversation, Packet, ConsumeResult, Identity, ChunkInfoPair, ChunkMetadata, Sender};
 use crate::{
     system::SystemSettings,
-    messages::{tcp_packet::Packet as TcpPacket, p2p_message::{P2pMessage, SourceType, TezosPeerMessage}},
+    messages::{tcp_packet::Packet as TcpPacket, p2p_message::{P2pMessage, SourceType, TezosPeerMessage, PartialPeerMessage}},
 };
 
 /// Spawn new p2p parser, returning channel to send packets for processing
@@ -45,6 +46,7 @@ struct Parser {
     conversation: Conversation,
     chunk_counter: usize,
     packet_counter: u64,
+    buffer: Vec<u8>,
 }
 
 impl Parser {
@@ -64,6 +66,7 @@ impl Parser {
             conversation: Conversation::new(Self::DEFAULT_POW_TARGET),
             chunk_counter: 0,
             packet_counter: 0,
+            buffer: Vec::new(),
         }
     }
 
@@ -134,14 +137,25 @@ impl Parser {
                                         .map_err(|error| error.to_string()),
                                 _ => {
                                     warn!(hex = tracing::field::display(hex::encode(content)), "trying to deserialize");
-                                    PeerMessageResponse::from_bytes(content)
-                                        .map_err(|error| error.to_string())
-                                        .and_then(|r| {
+                                    self.buffer.extend_from_slice(content);
+                                    match PeerMessageResponse::from_bytes(self.buffer.as_slice()) {
+                                        Err(e) => match &e {
+                                            &BinaryReaderError::Underflow { .. } => {
+                                                match PartialPeerMessage::from_bytes(self.buffer.as_slice()) {
+                                                    Some(p) => Ok(TezosPeerMessage::PartialPeerMessage(p)),
+                                                    None => Err(e.to_string()),
+                                                }
+                                            },
+                                            _ => Err(e.to_string()),
+                                        },
+                                        Ok(r) => {
+                                            self.buffer.clear();
                                             r.messages()
                                                 .first()
                                                 .ok_or("empty".to_string())
                                                 .map(|m| TezosPeerMessage::PeerMessage(m.clone()))
-                                        })
+                                        },
+                                    }
                                 },
                             };
                             let p2p_msg = P2pMessage::new(

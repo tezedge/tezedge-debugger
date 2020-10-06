@@ -233,7 +233,7 @@ pub(crate) mod secondary_indexes {
     use std::str::FromStr;
     use failure::Fail;
     use tezos_messages::p2p::encoding::peer::PeerMessage;
-    use crate::messages::p2p_message::{P2pMessage, TezosPeerMessage, SourceType};
+    use crate::messages::p2p_message::{P2pMessage, TezosPeerMessage, SourceType, PartialPeerMessage};
 
     pub type RemoteAddressIndexKV = dyn KeyValueStoreWithSchema<RemoteAddrIndex> + Sync + Send;
 
@@ -531,25 +531,45 @@ pub(crate) mod secondary_indexes {
         pub fn extract(value: &P2pMessage) -> u32 {
             if let Some(msg) = value.message.as_ref().ok() {
                 match msg {
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Disconnect) |
                     TezosPeerMessage::PeerMessage(PeerMessage::Disconnect) => Self::Disconnect as u32,
-                    TezosPeerMessage::PeerMessage(PeerMessage::Bootstrap) => Self::Advertise as u32,
-                    TezosPeerMessage::PeerMessage(PeerMessage::Advertise(_)) => Self::SwapRequest as u32,
-                    TezosPeerMessage::PeerMessage(PeerMessage::SwapRequest(_)) => Self::SwapAck as u32,
-                    TezosPeerMessage::PeerMessage(PeerMessage::SwapAck(_)) => Self::Bootstrap as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Bootstrap) |
+                    TezosPeerMessage::PeerMessage(PeerMessage::Bootstrap) => Self::Bootstrap as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Advertise) |
+                    TezosPeerMessage::PeerMessage(PeerMessage::Advertise(_)) => Self::Advertise as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::SwapRequest) |
+                    TezosPeerMessage::PeerMessage(PeerMessage::SwapRequest(_)) => Self::SwapRequest as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::SwapAck) |
+                    TezosPeerMessage::PeerMessage(PeerMessage::SwapAck(_)) => Self::SwapAck as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetCurrentBranch) |
                     TezosPeerMessage::PeerMessage(PeerMessage::GetCurrentBranch(_)) => Self::GetCurrentBranch as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::CurrentBranch) |
                     TezosPeerMessage::PeerMessage(PeerMessage::CurrentBranch(_)) => Self::CurrentBranch as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Deactivate) |
                     TezosPeerMessage::PeerMessage(PeerMessage::Deactivate(_)) => Self::Deactivate as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetCurrentHead) |
                     TezosPeerMessage::PeerMessage(PeerMessage::GetCurrentHead(_)) => Self::GetCurrentHead as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::CurrentHead) |
                     TezosPeerMessage::PeerMessage(PeerMessage::CurrentHead(_)) => Self::CurrentHead as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetBlockHeaders) |
                     TezosPeerMessage::PeerMessage(PeerMessage::GetBlockHeaders(_)) => Self::GetBlockHeaders as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::BlockHeader) |
                     TezosPeerMessage::PeerMessage(PeerMessage::BlockHeader(_)) => Self::BlockHeader as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetOperations) |
                     TezosPeerMessage::PeerMessage(PeerMessage::GetOperations(_)) => Self::GetOperations as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Operation) |
                     TezosPeerMessage::PeerMessage(PeerMessage::Operation(_)) => Self::Operation as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetProtocols) |
                     TezosPeerMessage::PeerMessage(PeerMessage::GetProtocols(_)) => Self::GetProtocols as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Protocol) |
                     TezosPeerMessage::PeerMessage(PeerMessage::Protocol(_)) => Self::Protocol as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetOperationHashesForBlocks) |
                     TezosPeerMessage::PeerMessage(PeerMessage::GetOperationHashesForBlocks(_)) => Self::GetOperationHashesForBlocks as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::OperationHashesForBlock) |
                     TezosPeerMessage::PeerMessage(PeerMessage::OperationHashesForBlock(_)) => Self::OperationHashesForBlock as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetOperationsForBlocks) |
                     TezosPeerMessage::PeerMessage(PeerMessage::GetOperationsForBlocks(_)) => Self::GetOperationsForBlocks as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::OperationsForBlocks) |
                     TezosPeerMessage::PeerMessage(PeerMessage::OperationsForBlocks(_)) => Self::OperationsForBlocks as u32,
                     TezosPeerMessage::ConnectionMessage(_) => Self::ConnectionMessage as u32,
                     TezosPeerMessage::MetadataMessage(_) => Self::Metadata as u32,
