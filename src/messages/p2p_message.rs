@@ -6,7 +6,8 @@ use tezos_messages::p2p::encoding::{
     connection::ConnectionMessage,
     metadata::MetadataMessage,
     ack::AckMessage,
-    peer::{PeerMessage, PeerMessageResponse},
+    peer::PeerMessageResponse,
+    prelude::*,
 };
 use tezos_encoding::encoding::{HasEncoding, Encoding};
 use std::net::SocketAddr;
@@ -96,20 +97,79 @@ impl P2pMessage {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged)]
 /// Detailed representation of peer messages mapped from
 /// tezedge encoding, with difference, that most of
 /// binary data are cast to hex values
 pub enum TezosPeerMessage {
-    ConnectionMessage(ConnectionMessage),
-    MetadataMessage(MetadataMessage),
-    AckMessage(AckMessage),
-    PeerMessage(PeerMessage),
+    HandshakeMessage(HandshakeMessage),
+    PeerMessage(FullPeerMessage),
     PartialPeerMessage(PartialPeerMessage),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, strum::EnumString)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum HandshakeMessage {
+    ConnectionMessage(ConnectionMessage),
+    MetadataMessage(MetadataMessage),
+    AckMessage(AckMessage),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum FullPeerMessage {
+    Disconnect,
+    Advertise(AdvertiseMessage),
+    SwapRequest(SwapMessage),
+    SwapAck(SwapMessage),
+    Bootstrap,
+    GetCurrentBranch(GetCurrentBranchMessage),
+    CurrentBranch(CurrentBranchMessage),
+    Deactivate(DeactivateMessage),
+    GetCurrentHead(GetCurrentHeadMessage),
+    CurrentHead(CurrentHeadMessage),
+    GetBlockHeaders(GetBlockHeadersMessage),
+    BlockHeader(BlockHeaderMessage),
+    GetOperations(GetOperationsMessage),
+    Operation(OperationMessage),
+    GetProtocols(GetProtocolsMessage),
+    Protocol(ProtocolMessage),
+    GetOperationHashesForBlocks(GetOperationHashesForBlocksMessage),
+    OperationHashesForBlock(OperationHashesForBlocksMessage),
+    GetOperationsForBlocks(GetOperationsForBlocksMessage),
+    OperationsForBlocks(OperationsForBlocksMessage),
+}
+
+impl From<PeerMessage> for FullPeerMessage {
+    fn from(v: PeerMessage) -> Self {
+        match v {
+            PeerMessage::Disconnect => FullPeerMessage::Disconnect,
+            PeerMessage::Advertise(v) => FullPeerMessage::Advertise(v),
+            PeerMessage::SwapRequest(v) => FullPeerMessage::SwapRequest(v),
+            PeerMessage::SwapAck(v) => FullPeerMessage::SwapAck(v),
+            PeerMessage::Bootstrap => FullPeerMessage::Bootstrap,
+            PeerMessage::GetCurrentBranch(v) => FullPeerMessage::GetCurrentBranch(v),
+            PeerMessage::CurrentBranch(v) => FullPeerMessage::CurrentBranch(v),
+            PeerMessage::Deactivate(v) => FullPeerMessage::Deactivate(v),
+            PeerMessage::GetCurrentHead(v) => FullPeerMessage::GetCurrentHead(v),
+            PeerMessage::CurrentHead(v) => FullPeerMessage::CurrentHead(v),
+            PeerMessage::GetBlockHeaders(v) => FullPeerMessage::GetBlockHeaders(v),
+            PeerMessage::BlockHeader(v) => FullPeerMessage::BlockHeader(v),
+            PeerMessage::GetOperations(v) => FullPeerMessage::GetOperations(v),
+            PeerMessage::Operation(v) => FullPeerMessage::Operation(v),
+            PeerMessage::GetProtocols(v) => FullPeerMessage::GetProtocols(v),
+            PeerMessage::Protocol(v) => FullPeerMessage::Protocol(v),
+            PeerMessage::GetOperationHashesForBlocks(v) => FullPeerMessage::GetOperationHashesForBlocks(v),
+            PeerMessage::OperationHashesForBlock(v) => FullPeerMessage::OperationHashesForBlock(v),
+            PeerMessage::GetOperationsForBlocks(v) => FullPeerMessage::GetOperationsForBlocks(v),
+            PeerMessage::OperationsForBlocks(v) => FullPeerMessage::OperationsForBlocks(v),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::EnumString)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum PartialPeerMessage {
     Disconnect,
     Advertise,
@@ -165,19 +225,17 @@ impl PartialPeerMessage {
     }
 }
 
-impl Clone for TezosPeerMessage {
+impl Clone for HandshakeMessage {
     fn clone(&self) -> Self {
         match self {
-            &TezosPeerMessage::ConnectionMessage(ref m) => TezosPeerMessage::ConnectionMessage(m.clone()),
-            &TezosPeerMessage::MetadataMessage(ref m) => TezosPeerMessage::MetadataMessage(m.clone()),
-            &TezosPeerMessage::AckMessage(ref m) => {
+            &HandshakeMessage::ConnectionMessage(ref m) => HandshakeMessage::ConnectionMessage(m.clone()),
+            &HandshakeMessage::MetadataMessage(ref m) => HandshakeMessage::MetadataMessage(m.clone()),
+            &HandshakeMessage::AckMessage(ref m) => {
                 // `tezos_messages` does not provide `AckMessage::clone`, let's emulate it using serde
                 let j = serde_json::to_value(m).unwrap();
                 let m = serde_json::from_value(j).unwrap();
-                TezosPeerMessage::AckMessage(m)
+                HandshakeMessage::AckMessage(m)
             },
-            &TezosPeerMessage::PeerMessage(ref m) => TezosPeerMessage::PeerMessage(m.clone()),
-            &TezosPeerMessage::PartialPeerMessage(ref s) => TezosPeerMessage::PartialPeerMessage(s.clone()),
         }
     }
 }
