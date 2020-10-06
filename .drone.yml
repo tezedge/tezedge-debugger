@@ -49,7 +49,7 @@ steps:
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
     environment:
-      DEBUGGER_URL: "http://client:13031"
+      DEBUGGER_URL: "http://client:17732"
     volumes:
       - name: binaries
         path: /etc/bin
