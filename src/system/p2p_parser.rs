@@ -44,7 +44,8 @@ struct Parser {
     sender: mpsc::UnboundedSender<P2pMessage>,
     identity: Identity,
     conversation: Conversation,
-    chunk_counter: usize,
+    chunk_incoming_counter: usize,
+    chunk_outgoing_counter: usize,
     packet_counter: u64,
     buffer: Vec<u8>,
 }
@@ -64,9 +65,26 @@ impl Parser {
             sender,
             identity,
             conversation: Conversation::new(Self::DEFAULT_POW_TARGET),
-            chunk_counter: 0,
+            chunk_incoming_counter: 0,
+            chunk_outgoing_counter: 0,
             packet_counter: 0,
             buffer: Vec::new(),
+        }
+    }
+
+    pub fn inc(&mut self, incoming: bool) {
+        if incoming {
+            self.chunk_incoming_counter += 1;
+        } else {
+            self.chunk_outgoing_counter += 1;
+        }
+    }
+
+    pub fn chunk(&self, incoming: bool) -> usize {
+        if incoming {
+            self.chunk_incoming_counter
+        } else {
+            self.chunk_outgoing_counter
         }
     }
 
@@ -112,7 +130,7 @@ impl Parser {
                             error!(error = tracing::field::display(&err), "processor channel closed abruptly");
                             return false;
                         }
-                        self.chunk_counter += 1;
+                        self.inc(incoming);
                         true
                     },
                     ConsumeResult::Chunks { regular, failed_to_decrypt } => {
@@ -124,7 +142,7 @@ impl Parser {
                                 return false;
                             }
                             let content = &decrypted.data()[2..(length - 16)];
-                            let message = match self.chunk_counter {
+                            let message = match self.chunk(incoming) {
                                 0 => {
                                     error!("Connection message should not come here");
                                     return false;
@@ -170,7 +188,7 @@ impl Parser {
                                 error!(error = tracing::field::display(&err), "processor channel closed abruptly");
                                 return false;
                             }
-                            self.chunk_counter += 1;
+                            self.inc(incoming);
                         }
                         if !failed_to_decrypt.is_empty() {
                             warn!("some chunks are failed to decrypt");
@@ -188,7 +206,7 @@ impl Parser {
                                 error!(error = tracing::field::display(&err), "processor channel closed abruptly");
                                 return false;
                             }
-                            self.chunk_counter += 1;
+                            self.inc(incoming);
                         }
                         has_chunks
                     },
