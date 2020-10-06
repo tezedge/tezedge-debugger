@@ -15,7 +15,7 @@ use std::time::Instant;
 use tezedge_debugger::storage::{MessageStore, get_ts, cfs};
 use std::path::Path;
 use std::sync::Arc;
-use storage::persistent::open_kv;
+use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::system::syslog_producer::syslog_producer;
 
 /// Create new message store, from well defined path
@@ -23,7 +23,7 @@ fn open_database() -> Result<MessageStore, failure::Error> {
     let storage_path = format!("/tmp/volume/{}", get_ts());
     let path = Path::new(&storage_path);
     let schemas = cfs();
-    let rocksdb = Arc::new(open_kv(path, schemas)?);
+    let rocksdb = Arc::new(open_kv(path, schemas, &DbConfiguration::default())?);
     Ok(MessageStore::new(rocksdb))
 }
 
@@ -103,7 +103,7 @@ async fn main() -> Result<(), failure::Error> {
         local_address,
         storage: storage.clone(),
         syslog_port: 13131,
-        rpc_port: 13031,
+        rpc_port: 17732,
         node_rpc_port: 18732,
     };
 

@@ -529,7 +529,7 @@ pub(crate) mod secondary_indexes {
 
     impl Type {
         pub fn extract(value: &P2pMessage) -> u32 {
-            if let Some(msg) = value.decrypted_chunk.first().and_then(|m| m.message.as_ref().ok()) {
+            if let Some(msg) = value.message.as_ref().ok() {
                 match msg {
                     TezosPeerMessage::PeerMessage(PeerMessage::Disconnect) => Self::Disconnect as u32,
                     TezosPeerMessage::PeerMessage(PeerMessage::Bootstrap) => Self::Advertise as u32,

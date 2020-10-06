@@ -11,7 +11,6 @@ use tezos_messages::p2p::encoding::{
 use std::net::SocketAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::persistent::{Decoder, SchemaError, Encoder};
-use crate::utility::decrypter::DecryptedChunk;
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
 /// Determines, if message belongs to communication originated
@@ -31,7 +30,11 @@ pub struct P2pMessage {
     pub remote_addr: SocketAddr,
     pub incoming: bool,
     pub source_type: SourceType,
-    pub decrypted_chunk: Vec<DecryptedChunk>,
+    pub original_bytes: Vec<u8>,
+    // decrypted_bytes is the same as the original_bytes if it is ConnectionMessage
+    // it is empty if decryption failed
+    pub decrypted_bytes: Vec<u8>,
+    pub message: Result<TezosPeerMessage, String>,
 }
 
 impl Decoder for P2pMessage {
@@ -59,7 +62,9 @@ impl P2pMessage {
         remote_addr: SocketAddr,
         incoming: bool,
         source_type: SourceType,
-        decrypted_chunk: Vec<DecryptedChunk>,
+        original_bytes: Vec<u8>,
+        decrypted_bytes: Vec<u8>,
+        message: Result<TezosPeerMessage, String>,
     ) -> Self {
         Self {
             id: None,
@@ -67,7 +72,9 @@ impl P2pMessage {
             source_type,
             remote_addr,
             incoming,
-            decrypted_chunk,
+            original_bytes,
+            decrypted_bytes,
+            message,
         }
     }
 

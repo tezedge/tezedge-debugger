@@ -67,7 +67,7 @@ pub fn spawn_packet_orchestrator(settings: SystemSettings) -> UnboundedSender<Pa
                             destination = tracing::field::display(dst),
                             "spawning p2p parser"
                         );
-                        spawn_p2p_parser(src, message_processor, settings)
+                        spawn_p2p_parser(message_processor, settings)
                     });
                 } else {
                     if let Entry::Occupied(entry) = entry {

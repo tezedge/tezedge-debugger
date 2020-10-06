@@ -7,7 +7,7 @@ use tezedge_debugger::storage::{MessageStore, cfs};
 use structopt::StructOpt;
 use std::path::Path;
 use std::sync::Arc;
-use storage::persistent::open_kv;
+use storage::persistent::{open_kv, DbConfiguration};
 use std::net::SocketAddr;
 
 #[derive(StructOpt, Debug)]
@@ -27,7 +27,7 @@ struct Opt {
 
 fn open_snapshot<P: AsRef<Path>>(path: P) -> Result<MessageStore, failure::Error> {
     let schemas = cfs();
-    let db = Arc::new(open_kv(path, schemas)?);
+    let db = Arc::new(open_kv(path, schemas, &DbConfiguration::default())?);
     Ok(MessageStore::new(db))
 }
 
