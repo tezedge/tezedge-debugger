@@ -157,7 +157,6 @@ impl Parser {
                                         .map(TezosPeerMessage::HandshakeMessage)
                                         .map_err(|error| error.to_string()),
                                 _ => {
-                                    warn!(hex = tracing::field::display(hex::encode(content)), "trying to deserialize");
                                     self.buffer.extend_from_slice(content);
                                     match PeerMessageResponse::from_bytes(self.buffer.as_slice()) {
                                         Err(e) => match &e {
