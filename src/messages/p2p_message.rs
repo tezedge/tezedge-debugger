@@ -37,7 +37,8 @@ pub struct P2pMessage {
     // decrypted_bytes is the same as the original_bytes if it is ConnectionMessage
     // it is empty if decryption failed
     pub decrypted_bytes: Vec<u8>,
-    pub message: Result<TezosPeerMessage, String>,
+    pub error: Vec<String>,
+    pub message: Vec<TezosPeerMessage>,
 }
 
 impl Decoder for P2pMessage {
@@ -67,9 +68,15 @@ impl P2pMessage {
         source_type: SourceType,
         original_bytes: Vec<u8>,
         decrypted_bytes: Vec<u8>,
-        message: Result<TezosPeerMessage, String>,
+        message_result: Result<TezosPeerMessage, String>,
     ) -> Self {
-        Self {
+        let mut error = Vec::new();
+        let mut message = Vec::new();
+        match message_result {
+            Ok(m) => message.push(m),
+            Err(e) => error.push(e),
+        };
+        P2pMessage {
             id: None,
             timestamp: Self::make_ts(),
             source_type,
@@ -77,6 +84,7 @@ impl P2pMessage {
             incoming,
             original_bytes,
             decrypted_bytes,
+            error,
             message,
         }
     }

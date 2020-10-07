@@ -528,7 +528,7 @@ pub(crate) mod secondary_indexes {
 
     impl Type {
         pub fn extract(value: &P2pMessage) -> u32 {
-            if let Some(msg) = value.message.as_ref().ok() {
+            if let Some(msg) = value.message.first() {
                 match msg {
                     TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Disconnect) |
                     TezosPeerMessage::PeerMessage(FullPeerMessage::Disconnect) => Self::Disconnect as u32,
