@@ -55,16 +55,12 @@ async fn load_identity() -> Identity {
                     }
                 }
                 Err(_) => {
-                    // if last_try.elapsed().as_secs() >= 5 {
-                    //     last_try = Instant::now();
-                    //     info!(error = display(&err), "waiting for identity");
-                    // }
                     info!("Identity file not found, generating identity with POW: 26");
                     let id = Identity::generate(26.0);
                     // FIXME - unwarp
                     let file = std::fs::File::create("/tmp/volume/identity.json").unwrap();
                     serde_json::to_writer(&file, &id).unwrap();
-                    // file.write_all(id).await.unwrap();'
+                    return id;
                 }
             }
         }
