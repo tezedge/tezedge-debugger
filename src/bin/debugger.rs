@@ -46,7 +46,7 @@ async fn load_identity() -> Identity {
                 Ok(content) => {
                     match serde_json::from_str::<Identity>(&content) {
                         Ok(identity) => {
-                            info!(file_path = tracing::field::display(&path), "loaded identity");
+                            info!(file_path = tracing::field::display(&path), file_content = tracing::field::display(&content), "loaded identity");
                             return identity;
                         }
                         Err(err) => {

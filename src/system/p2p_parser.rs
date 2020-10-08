@@ -91,7 +91,9 @@ impl Parser {
     pub async fn parse_next(&mut self) -> bool {
         match self.receiver.recv().await {
             Some(packet) => {
-                trace!(process_length = packet.ip_buffer().len(), "processing packet");
+                if !packet.has_payload() {
+                    return true;
+                }
                 let packet = Packet {
                     source: packet.source_address(),
                     destination: packet.destination_address(),
@@ -108,6 +110,14 @@ impl Parser {
                     assert_eq!(packet.source.ip(), self.local_ip);
                     packet.destination.clone()
                 };
+                trace!(
+                    incoming = incoming,
+                    chunk = self.chunk(incoming),
+                    address = tracing::field::display(&remote_addr),
+                    process_length = packet.payload.len(),
+                    // payload = tracing::field::display(hex::encode(&packet.payload)),
+                    "processing packet",
+                );
                 let source_type = match sender {
                     Sender::Initiator => if incoming { SourceType::Remote } else { SourceType::Local },
                     Sender::Responder => if incoming { SourceType::Local } else { SourceType::Remote },
@@ -135,18 +145,20 @@ impl Parser {
                         true
                     },
                     ConsumeResult::Chunks { regular, failed_to_decrypt } => {
-                        let has_chunks = !regular.is_empty();
                         for ChunkInfoPair { encrypted, decrypted } in regular {
                             let length = decrypted.data().len();
                             if length < 18 {
                                 error!("the chunk is too small");
-                                return false;
+                                return true;
                             }
                             let content = &decrypted.data()[2..(length - 16)];
                             let message = match self.chunk(incoming) {
                                 0 => {
-                                    error!("Connection message should not come here");
-                                    return false;
+                                    warn!("Connection message should not come here");
+                                    ConnectionMessage::from_bytes(&decrypted.data()[2..])
+                                        .map(HandshakeMessage::ConnectionMessage)
+                                        .map(TezosPeerMessage::HandshakeMessage)
+                                        .map_err(|error| error.to_string())
                                 },
                                 1 => MetadataMessage::from_bytes(content)
                                         .map(HandshakeMessage::MetadataMessage)
@@ -192,9 +204,6 @@ impl Parser {
                             }
                             self.inc(incoming);
                         }
-                        if !failed_to_decrypt.is_empty() {
-                            warn!("some chunks are failed to decrypt");
-                        }
                         for chunk in failed_to_decrypt {
                             let p2p_msg = P2pMessage::new(
                                 remote_addr,
@@ -210,21 +219,19 @@ impl Parser {
                             }
                             self.inc(incoming);
                         }
-                        // TODO: return has_chunks
-                        let _ = has_chunks;
-                        // let's return true in order to make test work 
                         true
                     },
                     ConsumeResult::NoDecipher(_) => {
-                        false
+                        warn!("identity wrong");
+                        true
                     },
                     ConsumeResult::PowInvalid => {
                         warn!("received connection message with wrong pow, maybe foreign packet");
-                        false
+                        true
                     },
                     ConsumeResult::UnexpectedChunks | ConsumeResult::InvalidConversation => {
                         warn!("probably foreign packet");
-                        false
+                        true
                     },
                 }
             }
