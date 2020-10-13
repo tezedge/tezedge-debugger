@@ -13,7 +13,7 @@ use std::{
 };
 use crate::{
     system::prelude::*,
-    system::raw_socket_producer::TezosPacket as Packet,
+    system::raw_socket_producer::P2pPacket as Packet,
 };
 use crate::system::processor::spawn_processor;
 

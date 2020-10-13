@@ -6,19 +6,17 @@ use crate::system::orchestrator::spawn_packet_orchestrator;
 use crate::system::SystemSettings;
 use std::net::{SocketAddr, IpAddr};
 
-use pnet::{
-    datalink::{self, Channel, Config},
-    packet::{
-        Packet,
-        ethernet::*, // {EthernetPacket, EtherTypes}
-        ip::IpNextHeaderProtocols,
-        ipv4::*, // Ipv4Packet
-        ipv6::*, // Ipv6Packet
-        tcp::*, // {TcpPacket, TcpFlags}
-    },
+use pcap::Device;
+use pnet::packet::{
+    Packet,
+    ethernet::*, // {EthernetPacket, EtherTypes}
+    ip::IpNextHeaderProtocols,
+    ipv4::*, // Ipv4Packet
+    ipv6::*, // Ipv6Packet
+    tcp::*, // {TcpPacket, TcpFlags}
 };
 
-pub struct TezosPacket {
+pub struct P2pPacket {
     pub source_address: SocketAddr,
     pub destination_address: SocketAddr,
     pub is_closing: bool,
@@ -27,7 +25,7 @@ pub struct TezosPacket {
     pub counter: u64,
 }
 
-fn handle_tcp(counter: u64, settings: &SystemSettings, source: IpAddr, destination: IpAddr, payload: &[u8]) -> Option<TezosPacket> {
+fn handle_tcp(counter: u64, settings: &SystemSettings, source: IpAddr, destination: IpAddr, payload: &[u8]) -> Option<P2pPacket> {
     if let Some(tcp) = TcpPacket::new(payload) {
         let source_is_rcp_or_syslog = source == settings.local_address && (
             tcp.get_source() == settings.rpc_port ||
@@ -41,7 +39,7 @@ fn handle_tcp(counter: u64, settings: &SystemSettings, source: IpAddr, destinati
             // this is for local server, ignore
             return None;
         }
-        let packet = TezosPacket {
+        let packet = P2pPacket {
             source_address: SocketAddr::new(source, tcp.get_source()),
             destination_address: SocketAddr::new(destination, tcp.get_destination()),
             is_closing: (tcp.get_flags() & TcpFlags::FIN) != 0 || (tcp.get_flags() & TcpFlags::RST) != 0,
@@ -65,6 +63,51 @@ fn handle_tcp(counter: u64, settings: &SystemSettings, source: IpAddr, destinati
     }
 }
 
+fn handle_ethernet(counter: u64, settings: &SystemSettings, packet: &[u8]) -> Option<P2pPacket> {
+    let packet = EthernetPacket::new(packet).unwrap();
+    match packet.get_ethertype() {
+        EtherTypes::Ipv4 => {
+            if let Some(header) = Ipv4Packet::new(packet.payload()) {
+                match header.get_next_level_protocol() {
+                    IpNextHeaderProtocols::Tcp => {
+                        handle_tcp(
+                            counter,
+                            &settings,
+                            IpAddr::V4(header.get_source()),
+                            IpAddr::V4(header.get_destination()),
+                            header.payload(),
+                        )
+                    },
+                    _ => None, // silently ignore every not Tcp packet
+                }
+            } else {
+                tracing::warn!("bad Ipv4 header");
+                None
+            }
+        },
+        EtherTypes::Ipv6 => {
+            if let Some(header) = Ipv6Packet::new(packet.payload()) {
+                match header.get_next_header() {
+                    IpNextHeaderProtocols::Tcp => {
+                        handle_tcp(
+                            counter,
+                            &settings,
+                            IpAddr::V6(header.get_source()),
+                            IpAddr::V6(header.get_destination()),
+                            header.payload(),
+                        )
+                    },
+                    _ => None, // silently ignore every not Tcp packet
+                }
+            } else {
+                tracing::warn!("bad Ipv6 header");
+                None
+            }
+        },
+        _ => None, // silently ignore every not Ipv4 nor Ipv6 packet
+    }
+}
+
 /// Spawn new packet producer, which is driven by the raw socket
 pub fn raw_socket_producer(settings: SystemSettings) -> io::Result<()> {
     // Firstly, spawn the orchestrator for incoming messages
@@ -75,60 +118,26 @@ pub fn raw_socket_producer(settings: SystemSettings) -> io::Result<()> {
     std::thread::spawn(move || {
         // the overall packet counter starting from 1, like wireshark
         let mut counter = 1;
-        // Find the network interface with the provided name
-        if let Some(interface) = datalink::interfaces().into_iter().find(|i| i.name == ifname) {
-            // Create a channel to receive on
-            let mut config = Config::default();
-            config.read_buffer_size = 0x10000;
-            config.write_buffer_size = 0x10000;
-            match datalink::channel(&interface, config) {
-                Ok(Channel::Ethernet(_, mut rx)) => {
+        let device = Device::list()
+            .unwrap_or_else(|error| {
+                tracing::error!(error = tracing::field::display(&error), "pcap library error");
+                Vec::new()
+            })
+            .into_iter()
+            .find(|i| i.name == ifname);
+        if let Some(device) = device {
+            match device.open() {
+                Ok(mut cap) => {
+                    cap.filter("tcp").unwrap_or_else(|error| {
+                        tracing::error!(
+                            error = tracing::field::display(&error),
+                            "pcap library error, failed to filter",
+                        );
+                    });
                     loop {
-                        match rx.next() {
+                        match cap.next() {
                             Ok(packet) => {
-                                let packet = EthernetPacket::new(packet).unwrap();
-                                let tezos_packet = match packet.get_ethertype() {
-                                    EtherTypes::Ipv4 => {
-                                        if let Some(header) = Ipv4Packet::new(packet.payload()) {
-                                            match header.get_next_level_protocol() {
-                                                IpNextHeaderProtocols::Tcp => {
-                                                    handle_tcp(
-                                                        counter,
-                                                        &settings,
-                                                        IpAddr::V4(header.get_source()),
-                                                        IpAddr::V4(header.get_destination()),
-                                                        header.payload(),
-                                                    )
-                                                },
-                                                _ => None, // silently ignore every not Tcp packet
-                                            }
-                                        } else {
-                                            tracing::warn!("bad Ipv4 header");
-                                            None
-                                        }
-                                    },
-                                    EtherTypes::Ipv6 => {
-                                        if let Some(header) = Ipv6Packet::new(packet.payload()) {
-                                            match header.get_next_header() {
-                                                IpNextHeaderProtocols::Tcp => {
-                                                    handle_tcp(
-                                                        counter,
-                                                        &settings,
-                                                        IpAddr::V6(header.get_source()),
-                                                        IpAddr::V6(header.get_destination()),
-                                                        header.payload(),
-                                                    )
-                                                },
-                                                _ => None, // silently ignore every not Tcp packet
-                                            }
-                                        } else {
-                                            tracing::warn!("bad Ipv6 header");
-                                            None
-                                        }
-                                    },
-                                    _ => None, // silently ignore every not Ipv4 nor Ipv6 packet
-                                };
-                                if let Some(packet) = tezos_packet {
+                                if let Some(packet) = handle_ethernet(counter, &settings, packet.data) {
                                     counter += 1;
                                     // If so, send it to the orchestrator for further processing
                                     match orchestrator.send(packet) {
@@ -141,13 +150,22 @@ pub fn raw_socket_producer(settings: SystemSettings) -> io::Result<()> {
                                     }
                                 }
                             },
-                            Err(error) => tracing::error!(error = tracing::field::display(&error)),
+                            Err(error) => {
+                                tracing::error!(
+                                    error = tracing::field::display(&error),
+                                    "pcap library error, failed to capture",
+                                )
+                            },
                         }
                     }
                 },
-                Ok(_) => tracing::warn!("packetdump: unhandled channel type"),
-                Err(error) => tracing::error!(error = tracing::field::display(&error), "packetdump: unable to create channel"),
-            };
+                Err(error) => {
+                    tracing::error!(
+                        error = tracing::field::display(&error),
+                        "pcap library error, failed to open device",
+                    );
+                },
+            }
         } else {
             tracing::error!(ifname = tracing::field::display(&ifname), "no such interface");
         }

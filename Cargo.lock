@@ -1540,6 +1540,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pcap"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f912b9e56d1d4851a5175c118fc6503c9f69a8fe1a0649a51aff20b92c757491"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "peeking_take_while"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2561,6 +2570,7 @@ dependencies = [
  "itertools",
  "lazy_static",
  "networking",
+ "pcap",
  "pnet",
  "reqwest",
  "rocksdb",

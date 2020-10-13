@@ -16,7 +16,7 @@ use tezos_messages::p2p::{
 use tezos_encoding::binary_reader::BinaryReaderError;
 use tezos_conversation::{Conversation, Packet, ConsumeResult, Identity, ChunkInfoPair, ChunkMetadata, Sender};
 use crate::{
-    system::{SystemSettings, raw_socket_producer::TezosPacket},
+    system::{SystemSettings, raw_socket_producer::P2pPacket},
     messages::{p2p_message::{P2pMessage, SourceType, TezosPeerMessage, PartialPeerMessage, HandshakeMessage}},
 };
 
@@ -24,8 +24,8 @@ use crate::{
 pub fn spawn_p2p_parser(
     processor_sender: mpsc::UnboundedSender<P2pMessage>,
     settings: SystemSettings,
-) -> mpsc::UnboundedSender<TezosPacket> {
-    let (sender, receiver) = mpsc::unbounded_channel::<TezosPacket>();
+) -> mpsc::UnboundedSender<P2pPacket> {
+    let (sender, receiver) = mpsc::unbounded_channel::<P2pPacket>();
     tokio::spawn(async move {
         let identity_json = serde_json::to_string(&settings.identity).unwrap();
         let identity = Identity::from_json(&identity_json).unwrap();
@@ -40,7 +40,7 @@ pub fn spawn_p2p_parser(
 /// TezosPacket -> P2pMessage
 struct Parser {
     local_ip: IpAddr,
-    receiver: mpsc::UnboundedReceiver<TezosPacket>,
+    receiver: mpsc::UnboundedReceiver<P2pPacket>,
     sender: mpsc::UnboundedSender<P2pMessage>,
     identity: Identity,
     conversation: Conversation,
@@ -54,7 +54,7 @@ impl Parser {
 
     pub fn new(
         local_ip: IpAddr,
-        receiver: mpsc::UnboundedReceiver<TezosPacket>,
+        receiver: mpsc::UnboundedReceiver<P2pPacket>,
         sender: mpsc::UnboundedSender<P2pMessage>,
         identity: Identity,
     ) -> Self {
@@ -113,7 +113,6 @@ impl Parser {
                     chunk = self.chunk(incoming),
                     address = tracing::field::display(&remote_addr),
                     process_length = packet.payload.len(),
-                    // payload = tracing::field::display(hex::encode(&packet.payload)),
                     "processing packet",
                 );
                 let source_type = match sender {
