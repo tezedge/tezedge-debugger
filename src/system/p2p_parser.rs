@@ -16,16 +16,16 @@ use tezos_messages::p2p::{
 use tezos_encoding::binary_reader::BinaryReaderError;
 use tezos_conversation::{Conversation, Packet, ConsumeResult, Identity, ChunkInfoPair, ChunkMetadata, Sender};
 use crate::{
-    system::SystemSettings,
-    messages::{tcp_packet::Packet as TcpPacket, p2p_message::{P2pMessage, SourceType, TezosPeerMessage, PartialPeerMessage, HandshakeMessage}},
+    system::{SystemSettings, raw_socket_producer::TezosPacket},
+    messages::{p2p_message::{P2pMessage, SourceType, TezosPeerMessage, PartialPeerMessage, HandshakeMessage}},
 };
 
 /// Spawn new p2p parser, returning channel to send packets for processing
 pub fn spawn_p2p_parser(
     processor_sender: mpsc::UnboundedSender<P2pMessage>,
     settings: SystemSettings,
-) -> mpsc::UnboundedSender<TcpPacket> {
-    let (sender, receiver) = mpsc::unbounded_channel::<TcpPacket>();
+) -> mpsc::UnboundedSender<TezosPacket> {
+    let (sender, receiver) = mpsc::unbounded_channel::<TezosPacket>();
     tokio::spawn(async move {
         let identity_json = serde_json::to_string(&settings.identity).unwrap();
         let identity = Identity::from_json(&identity_json).unwrap();
@@ -37,16 +37,15 @@ pub fn spawn_p2p_parser(
     sender
 }
 
-/// TcpPacket -> P2pMessage
+/// TezosPacket -> P2pMessage
 struct Parser {
     local_ip: IpAddr,
-    receiver: mpsc::UnboundedReceiver<TcpPacket>,
+    receiver: mpsc::UnboundedReceiver<TezosPacket>,
     sender: mpsc::UnboundedSender<P2pMessage>,
     identity: Identity,
     conversation: Conversation,
     chunk_incoming_counter: usize,
     chunk_outgoing_counter: usize,
-    packet_counter: u64,
     buffer: Vec<u8>,
 }
 
@@ -55,7 +54,7 @@ impl Parser {
 
     pub fn new(
         local_ip: IpAddr,
-        receiver: mpsc::UnboundedReceiver<TcpPacket>,
+        receiver: mpsc::UnboundedReceiver<TezosPacket>,
         sender: mpsc::UnboundedSender<P2pMessage>,
         identity: Identity,
     ) -> Self {
@@ -67,7 +66,6 @@ impl Parser {
             conversation: Conversation::new(Self::DEFAULT_POW_TARGET),
             chunk_incoming_counter: 0,
             chunk_outgoing_counter: 0,
-            packet_counter: 0,
             buffer: Vec::new(),
         }
     }
@@ -91,16 +89,15 @@ impl Parser {
     pub async fn parse_next(&mut self) -> bool {
         match self.receiver.recv().await {
             Some(packet) => {
-                if !packet.has_payload() {
+                if packet.payload.is_empty() {
                     return true;
                 }
                 let packet = Packet {
-                    source: packet.source_address(),
-                    destination: packet.destination_address(),
-                    number: self.packet_counter,
-                    payload: packet.payload().to_vec(),
+                    source: packet.source_address,
+                    destination: packet.destination_address,
+                    number: packet.counter,
+                    payload: packet.payload.to_vec(),
                 };
-                self.packet_counter += 1;
                 let (result, sender, _) = self.conversation.add(Some(&self.identity), &packet);
                 let incoming = packet.source.ip() != self.local_ip;
                 let remote_addr = if incoming {
@@ -110,8 +107,9 @@ impl Parser {
                     assert_eq!(packet.source.ip(), self.local_ip);
                     packet.destination.clone()
                 };
-                trace!(
-                    incoming = incoming,
+                tracing::trace!(
+                    number = packet.number,
+                    sender = tracing::field::display(format!("{:?}", sender)),
                     chunk = self.chunk(incoming),
                     address = tracing::field::display(&remote_addr),
                     process_length = packet.payload.len(),
