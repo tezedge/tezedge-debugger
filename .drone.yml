@@ -31,6 +31,7 @@ steps:
       - name: binaries
         path: /tmp/binaries
     commands:
+      - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - cargo install --bins --path . --root .
       - cp ./bin/* /tmp/binaries
   - name: server
@@ -44,6 +45,7 @@ steps:
         path: /tmp/volume
       - name:
     commands:
+      - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - /etc/bin/drone-server
   - name: client
     image: simplestakingcom/tezedge-ci-builder:latest
@@ -58,6 +60,7 @@ steps:
       - name: snapshot
         path: /tmp/snapshot
     commands:
+      - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - /etc/bin/tezedge-debugger &
       - sleep 2
       - /etc/bin/drone-client --server server:13030
@@ -74,6 +77,7 @@ steps:
       - name: snapshot
         path: /tmp/snapshot
     commands:
+      - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - /etc/bin/drone-server &
       - sleep 1
       - /etc/bin/replayer --node-ip "0.0.0.0:13030" --path "/tmp/snapshot/snapshot" --last-message-id 6
@@ -88,6 +92,7 @@ steps:
       - name: snapshot
         path: /tmp/snapshot
     commands:
+      - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - mkdir /tmp/replay
       - cp -r /tmp/snapshot/snapshot /tmp/replay/
       - cd /home/appuser/tezedge
