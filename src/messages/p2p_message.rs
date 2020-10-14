@@ -116,6 +116,15 @@ pub enum TezosPeerMessage {
     PartialPeerMessage(PartialPeerMessage),
 }
 
+impl TezosPeerMessage {
+    pub fn as_connection_message(&self) -> Option<&ConnectionMessage> {
+        match self {
+            TezosPeerMessage::HandshakeMessage(HandshakeMessage::ConnectionMessage(m)) => Some(m),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HandshakeMessage {

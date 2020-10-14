@@ -17,7 +17,7 @@ struct Opt {
     #[structopt(short, long, default_value = "/tmp/snapshot/snapshot")]
     /// Path to the snapshot, to be replayed
     pub path: String,
-    #[structopt(short, long, default_value = "0.0.0.0:13030")]
+    #[structopt(short, long, default_value = "0.0.0.0:17732")]
     /// Address of the node to replay messages
     pub node_ip: SocketAddr,
     #[structopt(short, long)]

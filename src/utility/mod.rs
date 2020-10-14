@@ -4,6 +4,7 @@
 pub mod stream;
 pub mod identity;
 pub mod ip_settings;
+pub mod pcap_facade;
 
 pub mod prelude {
     pub use super::identity::Identity;

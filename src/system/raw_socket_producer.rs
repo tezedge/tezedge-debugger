@@ -1,12 +1,13 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{io, env};
-use crate::system::orchestrator::spawn_packet_orchestrator;
-use crate::system::SystemSettings;
-use std::net::{SocketAddr, IpAddr};
+use std::{io, env, net::{SocketAddr, IpAddr}};
+use crate::system::{
+    orchestrator::spawn_packet_orchestrator,
+    SystemSettings,
+};
+use crate::utility::pcap_facade;
 
-use pcap::Device;
 use pnet::packet::{
     Packet,
     ethernet::*, // {EthernetPacket, EtherTypes}
@@ -113,62 +114,42 @@ pub fn raw_socket_producer(settings: SystemSettings) -> io::Result<()> {
     // Firstly, spawn the orchestrator for incoming messages
     let orchestrator = spawn_packet_orchestrator(settings.clone());
     // Get the interface name
-    let ifname = env::args().nth(1)
-        .unwrap_or("eth0".to_string());
+    let ifname = env::args().nth(1);
     std::thread::spawn(move || {
         // the overall packet counter starting from 1, like wireshark
         let mut counter = 1;
-        let device = Device::list()
-            .unwrap_or_else(|error| {
-                tracing::error!(error = tracing::field::display(&error), "pcap library error");
-                Vec::new()
-            })
-            .into_iter()
-            .find(|i| i.name == ifname);
-        if let Some(device) = device {
-            match device.open() {
-                Ok(mut cap) => {
-                    cap.filter("tcp").unwrap_or_else(|error| {
+        pcap_facade::with_capture(ifname, |mut cap| {
+            cap.filter("tcp").unwrap_or_else(|error| {
+                tracing::error!(
+                    error = tracing::field::display(&error),
+                    "pcap library error, failed to filter",
+                );
+            });
+            loop {
+                match cap.next() {
+                    Ok(packet) => {
+                        if let Some(packet) = handle_ethernet(counter, &settings, packet.data) {
+                            counter += 1;
+                            // If so, send it to the orchestrator for further processing
+                            match orchestrator.send(packet) {
+                                Ok(_) => {
+                                    tracing::trace!("sent packet for processing");
+                                }
+                                Err(_) => {
+                                    tracing::error!("orchestrator channel closed abruptly");
+                                }
+                            }
+                        }
+                    },
+                    Err(error) => {
                         tracing::error!(
                             error = tracing::field::display(&error),
-                            "pcap library error, failed to filter",
-                        );
-                    });
-                    loop {
-                        match cap.next() {
-                            Ok(packet) => {
-                                if let Some(packet) = handle_ethernet(counter, &settings, packet.data) {
-                                    counter += 1;
-                                    // If so, send it to the orchestrator for further processing
-                                    match orchestrator.send(packet) {
-                                        Ok(_) => {
-                                            tracing::trace!("sent packet for processing");
-                                        }
-                                        Err(_) => {
-                                            tracing::error!("orchestrator channel closed abruptly");
-                                        }
-                                    }
-                                }
-                            },
-                            Err(error) => {
-                                tracing::error!(
-                                    error = tracing::field::display(&error),
-                                    "pcap library error, failed to capture",
-                                )
-                            },
-                        }
-                    }
-                },
-                Err(error) => {
-                    tracing::error!(
-                        error = tracing::field::display(&error),
-                        "pcap library error, failed to open device",
-                    );
-                },
+                            "pcap library error, failed to capture",
+                        )
+                    },
+                }
             }
-        } else {
-            tracing::error!(ifname = tracing::field::display(&ifname), "no such interface");
-        }
+        })
     });
 
     Ok(())
