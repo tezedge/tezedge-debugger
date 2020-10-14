@@ -117,7 +117,14 @@ pub enum TezosPeerMessage {
 }
 
 impl TezosPeerMessage {
-    pub fn as_connection_message(&self) -> Option<&ConnectionMessage> {
+    pub fn as_cm(&self) -> Option<&ConnectionMessage> {
+        match self {
+            TezosPeerMessage::HandshakeMessage(HandshakeMessage::ConnectionMessage(m)) => Some(m),
+            _ => None,
+        }
+    }
+
+    pub fn as_mut_cm(&mut self) -> Option<&mut ConnectionMessage> {
         match self {
             TezosPeerMessage::HandshakeMessage(HandshakeMessage::ConnectionMessage(m)) => Some(m),
             _ => None,
