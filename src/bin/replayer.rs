@@ -3,7 +3,10 @@
 
 use tracing::{Level};
 //use tezedge_debugger::system::replayer::replay;
-use tezedge_debugger::storage::{MessageStore, cfs};
+use tezedge_debugger::{
+    storage::{MessageStore, cfs},
+    system::replayer::replay,
+};
 use structopt::StructOpt;
 use std::path::Path;
 use std::sync::Arc;
@@ -41,8 +44,5 @@ async fn main() -> Result<(), failure::Error> {
     let addr = opts.node_ip;
     let storage = open_snapshot(path)?;
     let msgs = storage.p2p().get_cursor(Some(opts.last_message_id), (opts.last_message_id + 1) as usize, Default::default())?;
-    // TODO: replay
-    let _ = (addr, msgs);
-    unimplemented!()
-    // replay(addr, msgs).await
+    replay(addr, msgs.into_iter().rev()).await
 }

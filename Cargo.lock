@@ -2596,7 +2596,7 @@ dependencies = [
 [[package]]
 name = "tezos-conversation"
 version = "1.1.0"
-source = "git+https://github.com/simplestaking/tezos-dissector?branch=develop#637b182dd8a07ea6a4631f4406c68ea067fe6adc"
+source = "git+https://github.com/simplestaking/tezos-dissector?branch=develop"
 dependencies = [
  "bit-vec",
  "bytes 0.5.6",
@@ -3215,7 +3215,7 @@ dependencies = [
 [[package]]
 name = "wireshark-definitions"
 version = "0.1.0"
-source = "git+https://github.com/simplestaking/tezos-dissector?branch=develop#637b182dd8a07ea6a4631f4406c68ea067fe6adc"
+source = "git+https://github.com/simplestaking/tezos-dissector?branch=develop"
 dependencies = [
  "hex",
 ]

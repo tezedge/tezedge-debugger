@@ -1,7 +1,15 @@
-use std::{net::SocketAddr, iter::ExactSizeIterator, convert::TryFrom, io};
-use tezos_messages::p2p::binary_message::{BinaryMessage, BinaryChunk};
+use std::{net::{SocketAddr, IpAddr}, iter::ExactSizeIterator, convert::TryFrom, io};
+use tezos_messages::p2p::{
+    binary_message::{BinaryMessage, BinaryChunk},
+    encoding::{
+        metadata::MetadataMessage,
+        ack::AckMessage,
+        advertise::AdvertiseMessage,
+        peer::{PeerMessageResponse, PeerMessage},
+    }
+};
 use tezos_conversation::{Decipher, Identity, NonceAddition};
-use tokio::{net::TcpStream, io::{AsyncReadExt, AsyncWriteExt}};
+use tokio::{net::{TcpStream, TcpListener}, io::{AsyncReadExt, AsyncWriteExt}};
 use bytes::Buf;
 use crate::messages::p2p_message::P2pMessage;
 
@@ -24,26 +32,93 @@ where
 
     // TODO: error handling
     let init_connection_message = messages.next().unwrap();
+    let resp_connection_message = messages.next().unwrap();
+
+    let prepare_connection_message = |original: P2pMessage| -> Result<BinaryChunk, failure::Error> {
+        let mut cm = original;
+        let cm = cm.message.first_mut().unwrap().as_mut_cm().unwrap();
+        cm.port = 0; // TODO: ?
+        cm.public_key = identity.public_key();
+        cm.proof_of_work_stamp = identity.proof_of_work();
+        BinaryChunk::from_content(&cm.as_bytes()?)
+            .map_err(Into::into)
+    };
 
     let incoming = init_connection_message.incoming;
     tracing::info!(message_count = messages.len(), incoming, "starting replay of messages");
     if incoming {
-        let mut icm = init_connection_message;
-        let icm = icm.message.first_mut().unwrap().as_mut_cm().unwrap();
-        icm.public_key = identity.public_key();
-        let icm_chunk = BinaryChunk::from_content(&icm.as_bytes()?)?;
+        let cm_chunk = prepare_connection_message(init_connection_message)?;
         let mut stream = TcpStream::connect(node_address).await?;
-        stream.write_all(icm_chunk.raw()).await?;
-        let rcm_chunk = read_chunk(&mut stream).await?;
-        let decipher = identity.decipher(icm_chunk.raw(), rcm_chunk.raw()).ok().unwrap();
+        stream.write_all(cm_chunk.raw()).await?;
+        let respond_cm_chunk = read_chunk_data(&mut stream).await?;
+        let decipher = identity.decipher(cm_chunk.raw(), respond_cm_chunk.as_ref()).ok().unwrap();
         replay_messages(stream, messages, decipher, true).await
     } else {
-        // TODO:
-        Ok(())
+        // Prepare Tcp Listener for incoming connection
+        let mut listener = TcpListener::bind("0.0.0.0:0").await?;
+        // Extract assigned port of the newly established listening port
+        let listening_port = listener.local_addr()?.port();
+
+        let cm_chunk = prepare_connection_message(resp_connection_message)?;
+        let mut stream = TcpStream::connect(node_address).await?;
+        stream.write_all(cm_chunk.raw()).await?;
+        let respond_cm_chunk = read_chunk_data(&mut stream).await?;
+        let decipher = identity.decipher(cm_chunk.raw(), respond_cm_chunk.as_ref()).ok().unwrap();
+
+        let metadata = MetadataMessage::new(true, false);
+        write_small_message(&mut stream, NonceAddition::Initiator(0), &decipher, metadata).await?;
+        let _metadata = read_small_message::<_, MetadataMessage>(&mut stream, NonceAddition::Responder(0), &decipher).await?;
+
+        let ack = AckMessage::Ack;
+        write_small_message(&mut stream, NonceAddition::Initiator(1), &decipher, ack).await?;
+        let _ack = read_small_message::<_, AckMessage>(&mut stream, NonceAddition::Responder(1), &decipher).await?;
+
+        let advertise = PeerMessage::Advertise(AdvertiseMessage::new(&[
+            SocketAddr::new(IpAddr::from([0, 0, 0, 0]), listening_port),
+        ]));
+        let message = PeerMessageResponse::from(advertise);
+        write_small_message(&mut stream, NonceAddition::Initiator(2), &decipher, message).await?;
+
+        let (mut stream, _peer_addr) = listener.accept().await?;
+        let cm_chunk = read_chunk_data(&mut stream).await?;
+        let respond_cm_chunk = prepare_connection_message(init_connection_message)?;
+        stream.write_all(respond_cm_chunk.raw()).await?;
+        let decipher = identity.decipher(cm_chunk.as_ref(), respond_cm_chunk.raw()).ok().unwrap();
+        replay_messages(stream, messages, decipher, true).await
     }
 }
 
-pub async fn read_chunk<R>(stream: &mut R) -> Result<BinaryChunk, io::Error>
+async fn read_small_message<R, M>(
+    stream: &mut R,
+    adder: NonceAddition,
+    decipher: &Decipher,
+) -> Result<M, failure::Error>
+where
+    R: Unpin + AsyncReadExt,
+    M: BinaryMessage,
+{
+    let data = read_chunk_data(stream).await?;
+    let decrypted = decipher.decrypt(&data[2..], adder)?;
+    M::from_bytes(decrypted).map_err(Into::into)
+}
+
+async fn write_small_message<W, M>(
+    stream: &mut W,
+    adder: NonceAddition,
+    decipher: &Decipher,
+    message: M,
+) -> Result<(), failure::Error>
+where
+    W: Unpin + AsyncWriteExt,
+    M: BinaryMessage,
+{
+    let mut bytes = message.as_bytes()?;
+    let encrypted = decipher.encrypt(bytes.as_mut(), adder).unwrap();
+    let chunk = BinaryChunk::from_content(encrypted.as_ref())?;
+    stream.write_all(chunk.raw()).await.map_err(Into::into)
+}
+
+async fn read_chunk_data<R>(stream: &mut R) -> Result<Vec<u8>, io::Error>
 where
     R: Unpin + AsyncReadExt,
 {
@@ -51,8 +126,9 @@ where
     stream.read_exact(&mut chunk_buffer[0..2]).await?;
     let size = (&chunk_buffer[0..2]).get_u16() as usize;
     stream.read_exact(&mut chunk_buffer[2..(2 + size)]).await?;
+    chunk_buffer.drain((size + 2)..);
 
-    Ok(BinaryChunk::try_from(chunk_buffer).unwrap())
+    Ok(chunk_buffer)
 }
 
 async fn replay_messages<I>(
@@ -90,8 +166,10 @@ where
                     let chunk = BinaryChunk::try_from(encrypted).unwrap();
                     stream.write_all(chunk.raw()).await?;
                 } else {
-                    let chunk = read_chunk(&mut stream).await?;
-                    let decrypted = decipher.decrypt(chunk.content(), chunk_number).unwrap();
+                    let mut chunk = read_chunk_data(&mut stream).await?;
+                    let l = chunk.len();
+                    let decrypted = decipher.decrypt(&chunk[2..], chunk_number).unwrap();
+                    chunk[2..(l - 16)].clone_from_slice(decrypted.as_ref());
                     if decrypted != message.decrypted_bytes {
                         tracing::error!("unexpected chunk");
                     }
