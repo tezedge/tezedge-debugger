@@ -171,7 +171,7 @@ where
             let l = chunk.len();
             let decrypted = decipher.decrypt(&chunk[2..], chunk_number).unwrap();
             chunk[2..(l - 16)].clone_from_slice(decrypted.as_ref());
-            if decrypted != &message.decrypted_bytes[2..(l - 16)] {
+            if chunk != message.decrypted_bytes {
                 tracing::error!("unexpected chunk");
             }
         }
