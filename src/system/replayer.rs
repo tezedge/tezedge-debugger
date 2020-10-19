@@ -30,11 +30,21 @@ where
         }\
     ").unwrap();
 
+    // identity to advertise
+    let identity_advertiser = Identity::from_json("\
+        {\
+            \"peer_id\":\"idssJHDL1z8fkryZaYVF9fQRMktoWg\",\
+            \"public_key\":\"d8246d13d0270cbfff4046b6d94b05ab19920bc5ad9fb77f3e945c40b340e874\",\
+            \"secret_key\":\"8b4622bc512c8621a35fa19ff252129b208c8cdffb57e2d29c7974df718c7ff2\",\
+            \"proof_of_work_stamp\":\"d1d0ebd55784bc92852d913dbf0fb5152d505b567d930fb2\"\
+        }\
+    ").unwrap();
+
     // TODO: error handling
     let init_connection_message = messages.next().unwrap();
     let resp_connection_message = messages.next().unwrap();
 
-    let prepare_connection_message = |original: P2pMessage| -> Result<BinaryChunk, failure::Error> {
+    let prepare_connection_message = |original: P2pMessage, identity: &Identity| -> Result<BinaryChunk, failure::Error> {
         let mut cm = original;
         let cm = cm.message.first_mut().unwrap().as_mut_cm().unwrap();
         cm.port = 0; // TODO: ?
@@ -47,7 +57,7 @@ where
     let incoming = init_connection_message.incoming;
     tracing::info!(message_count = messages.len(), incoming, "starting replay of messages");
     if incoming {
-        let cm_chunk = prepare_connection_message(init_connection_message)?;
+        let cm_chunk = prepare_connection_message(init_connection_message, &identity)?;
         let mut stream = TcpStream::connect(node_address).await?;
         stream.write_all(cm_chunk.raw()).await?;
         let respond_cm_chunk = read_chunk_data(&mut stream).await?;
@@ -60,13 +70,13 @@ where
         // Extract assigned port of the newly established listening port
         let listening_port = listener.local_addr()?.port();
 
-        let cm_chunk = prepare_connection_message(resp_connection_message)?;
+        let cm_chunk = prepare_connection_message(resp_connection_message, &identity_advertiser)?;
         let mut stream = TcpStream::connect(node_address).await?;
         stream.write_all(cm_chunk.raw()).await?;
         let respond_cm_chunk = read_chunk_data(&mut stream).await?;
-        let decipher = identity.decipher(cm_chunk.raw(), respond_cm_chunk.as_ref()).ok().unwrap();
+        let decipher = identity_advertiser.decipher(cm_chunk.raw(), respond_cm_chunk.as_ref()).ok().unwrap();
 
-        let metadata = MetadataMessage::new(true, false);
+        let metadata = MetadataMessage::new(true, true);
         write_small_message(&mut stream, NonceAddition::Initiator(0), &decipher, metadata).await?;
         let _metadata = read_small_message::<_, MetadataMessage>(&mut stream, NonceAddition::Responder(0), &decipher).await?;
 
@@ -84,7 +94,7 @@ where
 
         let (mut stream, _peer_addr) = listener.accept().await?;
         let cm_chunk = read_chunk_data(&mut stream).await?;
-        let respond_cm_chunk = prepare_connection_message(init_connection_message)?;
+        let respond_cm_chunk = prepare_connection_message(init_connection_message, &identity)?;
         stream.write_all(respond_cm_chunk.raw()).await?;
         let decipher = identity.decipher(cm_chunk.as_ref(), respond_cm_chunk.raw()).ok().unwrap();
         tracing::info!("second handshake done");
@@ -171,8 +181,10 @@ where
             let l = chunk.len();
             let decrypted = decipher.decrypt(&chunk[2..], chunk_number).unwrap();
             chunk[2..(l - 16)].clone_from_slice(decrypted.as_ref());
-            if chunk != message.decrypted_bytes {
-                tracing::error!("unexpected chunk");
+            if decrypted.len() > 2 {
+                if decrypted != &message.decrypted_bytes[2..(message.decrypted_bytes.len() - 16)] {
+                    tracing::error!("unexpected chunk\nRECEIVED: {:?}\nEXPECTED: {:?}", PeerMessageResponse::from_bytes(decrypted.as_slice()), message.message[0]);
+                }
             }
         }
     }
