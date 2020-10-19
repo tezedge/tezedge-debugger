@@ -101,7 +101,7 @@ steps:
       - cd /home/appuser/tezedge
       - /home/appuser/tezedge/run.sh release --peers 127.0.0.1:9732 &
       - /etc/bin/wait_until.sh
-      - cp /etc/bin/libpcap.so /usr/lib/x86_64-linux-gnu
+      - cp /etc/bin/libpcap.so /etc/bin
       - /etc/bin/replayer --peer-ip 51.15.220.7:9732 --path "/tmp/replay/snapshot" --node-ip 127.0.0.1:9732
 
 volumes:
