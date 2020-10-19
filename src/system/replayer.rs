@@ -184,7 +184,7 @@ where
             chunk[2..(l - 16)].clone_from_slice(decrypted.as_ref());
             if decrypted.len() > 2 {
                 if decrypted != &message.decrypted_bytes[2..(message.decrypted_bytes.len() - 16)] {
-                    tracing::error!(
+                    tracing::warn!(
                         "unexpected chunk\nRECEIVED: {:x?}\nEXPECTED: {:x?}\nEXPECTED TYPE: {:?}",
                         PeerMessageResponse::from_bytes(decrypted.as_slice()),
                         message.message[0],
