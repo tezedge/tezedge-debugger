@@ -119,16 +119,10 @@ pub fn raw_socket_producer(settings: SystemSettings) -> io::Result<()> {
         // the overall packet counter starting from 1, like wireshark
         let mut counter = 1;
         pcap_facade::with_capture(ifname, |mut cap| {
-            cap.filter("tcp").unwrap_or_else(|error| {
-                tracing::error!(
-                    error = tracing::field::display(&error),
-                    "pcap library error, failed to filter",
-                );
-            });
             loop {
                 match cap.next() {
                     Ok(packet) => {
-                        if let Some(packet) = handle_ethernet(counter, &settings, packet.data) {
+                        if let Some(packet) = handle_ethernet(counter, &settings, packet) {
                             counter += 1;
                             // If so, send it to the orchestrator for further processing
                             match orchestrator.send(packet) {
