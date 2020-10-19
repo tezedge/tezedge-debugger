@@ -12,6 +12,7 @@ use tezos_conversation::{Decipher, Identity, NonceAddition};
 use tokio::{net::{TcpStream, TcpListener}, io::{AsyncReadExt, AsyncWriteExt}};
 use bytes::Buf;
 use crate::messages::p2p_message::P2pMessage;
+use crate::storage::P2pMessageType;
 
 /// Create an replay of given message onto the given address
 pub async fn replay<I>(node_address: SocketAddr, messages: I) -> Result<(), failure::Error>
@@ -183,7 +184,13 @@ where
             chunk[2..(l - 16)].clone_from_slice(decrypted.as_ref());
             if decrypted.len() > 2 {
                 if decrypted != &message.decrypted_bytes[2..(message.decrypted_bytes.len() - 16)] {
-                    tracing::error!("unexpected chunk\nRECEIVED: {:?}\nEXPECTED: {:?}", PeerMessageResponse::from_bytes(decrypted.as_slice()), message.message[0]);
+                    tracing::error!(
+                        "unexpected chunk\nRECEIVED: {:x?}\nEXPECTED: {:x?}\nEXPECTED TYPE: {:?}",
+                        PeerMessageResponse::from_bytes(decrypted.as_slice()),
+                        message.message[0],
+                        P2pMessageType::extract(&message),
+                    );
+                    
                 }
             }
         }

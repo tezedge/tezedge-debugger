@@ -7,7 +7,7 @@ mod rpc_storage;
 mod stat_storage;
 mod secondary_index;
 
-pub use p2p_storage::{P2pStore, P2pFilters};
+pub use p2p_storage::{P2pStore, P2pFilters, secondary_indexes::Type as P2pMessageType};
 pub use log_storage::{LogStore, LogFilters};
 pub use rpc_storage::{RpcStore, RpcFilters};
 pub(crate) use p2p_storage::secondary_indexes as p2p_indexes;

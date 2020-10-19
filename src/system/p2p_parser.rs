@@ -139,6 +139,7 @@ impl Parser {
                             return false;
                         }
                         self.inc(incoming);
+                        tracing::info!("connection message {}", remote_addr);
                         true
                     },
                     ConsumeResult::Chunks { regular, failed_to_decrypt } => {
@@ -201,7 +202,7 @@ impl Parser {
                             }
                             self.inc(incoming);
                         }
-                        for chunk in failed_to_decrypt {
+                        for chunk in &failed_to_decrypt {
                             let p2p_msg = P2pMessage::new(
                                 remote_addr,
                                 incoming,
