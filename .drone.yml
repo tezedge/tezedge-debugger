@@ -33,10 +33,8 @@ steps:
       - name: snapshot
         path: /tmp/snapshot
     commands:
-      - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - cargo install --bins --path . --root .
       - cp ./bin/* /tmp/binaries
-      - cp /usr/lib/x86_64-linux-gnu/libpcap.so /tmp/binaries/libpcap.so.0.8
       - cp -r ./tests/rust-node-record /tmp/snapshot/rust-node-record
   - name: server
     image: simplestakingcom/tezedge-ci-builder:latest
@@ -49,7 +47,6 @@ steps:
         path: /tmp/volume
       - name:
     commands:
-      - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - /etc/bin/drone-server
   - name: client
     image: simplestakingcom/tezedge-ci-builder:latest
@@ -64,7 +61,6 @@ steps:
       - name: snapshot
         path: /tmp/snapshot
     commands:
-      - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - /etc/bin/tezedge-debugger &
       - sleep 2
       - /etc/bin/drone-client --server server:13030
@@ -101,7 +97,7 @@ steps:
       - cd /home/appuser/tezedge
       - /home/appuser/tezedge/run.sh release --peers 127.0.0.1:9732 &
       - /etc/bin/wait_until.sh
-      - /etc/bin/replayer --peer-ip 51.15.220.7:9732 --path "/tmp/replay/snapshot" --node-ip 127.0.0.1:9732
+      - /etc/bin/replayer --peer-ip 51.15.220.7:9732 --path "/tmp/replay/rust-node-record" --node-ip 127.0.0.1:9732
 
 volumes:
   - name: binaries
