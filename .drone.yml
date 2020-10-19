@@ -36,6 +36,7 @@ steps:
       - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - cargo install --bins --path . --root .
       - cp ./bin/* /tmp/binaries
+      - cp /usr/lib/x86_64-linux-gnu/libpcap.so /tmp/binaries
       - cp -r ./tests/rust-node-record /tmp/snapshot/rust-node-record
   - name: server
     image: simplestakingcom/tezedge-ci-builder:latest
@@ -95,12 +96,12 @@ steps:
       - name: snapshot
         path: /tmp/snapshot
     commands:
-      - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - mkdir /tmp/replay
       - cp -r /tmp/snapshot/rust-node-record /tmp/replay/
       - cd /home/appuser/tezedge
       - /home/appuser/tezedge/run.sh release --peers 127.0.0.1:9732 &
       - /etc/bin/wait_until.sh
+      - cp /etc/bin/libpcap.so /usr/lib/x86_64-linux-gnu
       - /etc/bin/replayer --peer-ip 51.15.220.7:9732 --path "/tmp/replay/snapshot" --node-ip 127.0.0.1:9732
 
 volumes:
