@@ -17,15 +17,18 @@ use std::net::SocketAddr;
 #[structopt(name = "tezos message replayer")]
 /// Commandline arguments
 struct Opt {
-    #[structopt(long, default_value = "/tmp/volume")]
+    #[structopt(long, default_value = "tests/rust-node-record")]
     /// Path to the snapshot, to be replayed
     pub path: String,
-    #[structopt(short, long, default_value = "0.0.0.0:9732")]
+    #[structopt(short, long, default_value = "127.0.0.1:9732")]
     /// Address of the node to replay messages
     pub node_ip: SocketAddr,
-    #[structopt(short, long, default_value = "34.255.45.149:9732")]
+    #[structopt(short, long, default_value = "51.15.220.7:9732")]
     /// Address of the peer which conversation to be replayed
     pub peer_ip: SocketAddr,
+    #[structopt(short, long, default_value = "256")]
+    /// Number of chunks, to be replayed
+    pub limit: usize,
 }
 
 fn open_snapshot<P: AsRef<Path>>(path: P) -> Result<MessageStore, failure::Error> {
@@ -51,5 +54,5 @@ async fn main() -> Result<(), failure::Error> {
         source_type: None,
     };
     let msgs = storage.p2p().get_cursor(None, 0x10000, filter)?;
-    replay(addr, msgs.into_iter().rev()).await
+    replay(addr, msgs.into_iter().rev().take(0x100)).await
 }

@@ -34,6 +34,7 @@ steps:
       - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - cargo install --bins --path . --root .
       - cp ./bin/* /tmp/binaries
+      - cp -r ./tests/rust-node-record /tmp/snapshot/rust-node-record
   - name: server
     image: simplestakingcom/tezedge-ci-builder:latest
     pull: if-not-exists
@@ -66,21 +67,21 @@ steps:
       - /etc/bin/drone-client --server server:13030
       - cp -r $(find /tmp/volume/ -type d -name "[0-9]*") /tmp/snapshot/snapshot
       - cargo test
-  - name: drone-replay
-    image: simplestakingcom/tezedge-ci-builder:latest
-    pull: if-not-exists
-    volumes:
-      - name: binaries
-        path: /etc/bin
-      - name: client-identity
-        path: /tmp/volume
-      - name: snapshot
-        path: /tmp/snapshot
-    commands:
-      - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
-      - /etc/bin/drone-server &
-      - sleep 1
-      - /etc/bin/replayer --node-ip "0.0.0.0:13030" --path "/tmp/snapshot/snapshot" --last-message-id 6
+  #- name: drone-replay
+  #  image: simplestakingcom/tezedge-ci-builder:latest
+  #  pull: if-not-exists
+  #  volumes:
+  #    - name: binaries
+  #      path: /etc/bin
+  #    - name: client-identity
+  #      path: /tmp/volume
+  #    - name: snapshot
+  #      path: /tmp/snapshot
+  #  commands:
+  #    - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
+  #    - /etc/bin/drone-server &
+  #    - sleep 1
+  #    - /etc/bin/replayer --node-ip "0.0.0.0:13030" --path "/tmp/snapshot/snapshot" --last-message-id 6
   - name: live-replay
     image: simplestakingcom/tezedge:v0.2.0
     pull: if-not-exists
@@ -94,11 +95,11 @@ steps:
     commands:
       - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
       - mkdir /tmp/replay
-      - cp -r /tmp/snapshot/snapshot /tmp/replay/
+      - cp -r /tmp/snapshot/rust-node-record /tmp/replay/
       - cd /home/appuser/tezedge
-      - /home/appuser/tezedge/run.sh release --peers 1.1.1.1:1 & # Some random to prevent node from syncing
+      - /home/appuser/tezedge/run.sh release --peers 127.0.0.1:9732 &
       - /etc/bin/wait_until.sh
-      - /etc/bin/replayer --node-ip "0.0.0.0:9732" --path "/tmp/replay/snapshot" --last-message-id 6
+      - /etc/bin/replayer --peer-ip 51.15.220.7:9732 --path "/tmp/replay/snapshot" --node-ip 127.0.0.1:9732
 
 volumes:
   - name: binaries

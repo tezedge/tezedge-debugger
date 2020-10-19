@@ -175,7 +175,7 @@ where
             let encrypted = decipher.encrypt(&mut bytes[2..(l - 16)], chunk_number).unwrap();
             bytes[2..l].clone_from_slice(encrypted.as_ref());
             let chunk = BinaryChunk::try_from(bytes).unwrap();
-            tracing::info!("replay {:?}", message.message[0]);
+            tracing::info!("replay {:x?}", message.message[0]);
             stream.write_all(chunk.raw()).await?;
         } else {
             let mut chunk = read_chunk_data(&mut stream).await?;
