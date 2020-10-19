@@ -52,6 +52,7 @@ where
         stream.write_all(cm_chunk.raw()).await?;
         let respond_cm_chunk = read_chunk_data(&mut stream).await?;
         let decipher = identity.decipher(cm_chunk.raw(), respond_cm_chunk.as_ref()).ok().unwrap();
+        tracing::info!("handshake done");
         replay_messages(stream, messages, decipher, true).await
     } else {
         // Prepare Tcp Listener for incoming connection
@@ -71,19 +72,22 @@ where
 
         let ack = AckMessage::Ack;
         write_small_message(&mut stream, NonceAddition::Initiator(1), &decipher, ack).await?;
-        let _ack = read_small_message::<_, AckMessage>(&mut stream, NonceAddition::Responder(1), &decipher).await?;
+        let ack = read_small_message::<_, AckMessage>(&mut stream, NonceAddition::Responder(1), &decipher).await?;
+        tracing::info!("ack received {:#?}", ack);
 
         let advertise = PeerMessage::Advertise(AdvertiseMessage::new(&[
             SocketAddr::new(IpAddr::from([0, 0, 0, 0]), listening_port),
         ]));
         let message = PeerMessageResponse::from(advertise);
         write_small_message(&mut stream, NonceAddition::Initiator(2), &decipher, message).await?;
+        tracing::info!("advertise sent");
 
         let (mut stream, _peer_addr) = listener.accept().await?;
         let cm_chunk = read_chunk_data(&mut stream).await?;
         let respond_cm_chunk = prepare_connection_message(init_connection_message)?;
         stream.write_all(respond_cm_chunk.raw()).await?;
         let decipher = identity.decipher(cm_chunk.as_ref(), respond_cm_chunk.raw()).ok().unwrap();
+        tracing::info!("second handshake done");
         replay_messages(stream, messages, decipher, true).await
     }
 }
@@ -140,46 +144,37 @@ async fn replay_messages<I>(
 where
     I: Iterator<Item = P2pMessage> + Send + 'static,
 {
-    tokio::spawn(async move {
-        let err: Result<(), failure::Error> = async move {
-            tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
-            let mut initiators = 0;
-            let mut responders = 0;
-            let mut stream = stream;
-            for message in messages {
-                // if this message is incoming and first message is also incoming
-                // or this message is outgoing and first message is also outgoing
-                // then the message goes from initiator
-                let chunk_number = if message.incoming == incoming {
-                    let a = NonceAddition::Initiator(initiators);
-                    initiators += 1;
-                    a
-                } else {
-                    let a = NonceAddition::Responder(responders);
-                    responders += 1;
-                    a
-                };
-                if message.incoming {
-                    let mut bytes = message.decrypted_bytes;
-                    let l = bytes.len() - 16; // cut mac
-                    let encrypted = decipher.encrypt(&mut bytes[..l], chunk_number).unwrap();
-                    let chunk = BinaryChunk::try_from(encrypted).unwrap();
-                    stream.write_all(chunk.raw()).await?;
-                } else {
-                    let mut chunk = read_chunk_data(&mut stream).await?;
-                    let l = chunk.len();
-                    let decrypted = decipher.decrypt(&chunk[2..], chunk_number).unwrap();
-                    chunk[2..(l - 16)].clone_from_slice(decrypted.as_ref());
-                    if decrypted != message.decrypted_bytes {
-                        tracing::error!("unexpected chunk");
-                    }
-                }
+    tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
+    let mut initiators = 0;
+    let mut responders = 0;
+    let mut stream = stream;
+    for message in messages {
+        let chunk_number = if message.incoming != incoming {
+            let a = NonceAddition::Initiator(initiators);
+            initiators += 1;
+            a
+        } else {
+            let a = NonceAddition::Responder(responders);
+            responders += 1;
+            a
+        };
+        if message.incoming {
+            let mut bytes = message.decrypted_bytes;
+            let l = bytes.len();
+            let encrypted = decipher.encrypt(&mut bytes[2..(l - 16)], chunk_number).unwrap();
+            bytes[2..l].clone_from_slice(encrypted.as_ref());
+            let chunk = BinaryChunk::try_from(bytes).unwrap();
+            tracing::info!("replay {:?}", message.message[0]);
+            stream.write_all(chunk.raw()).await?;
+        } else {
+            let mut chunk = read_chunk_data(&mut stream).await?;
+            let l = chunk.len();
+            let decrypted = decipher.decrypt(&chunk[2..], chunk_number).unwrap();
+            chunk[2..(l - 16)].clone_from_slice(decrypted.as_ref());
+            if decrypted != &message.decrypted_bytes[2..(l - 16)] {
+                tracing::error!("unexpected chunk");
             }
-            Ok(())
-        }.await;
-        if let Err(err) = err {
-            tracing::error!(err = tracing::field::display(&err), "failed to replay");
         }
-    });
+    }
     Ok(())
 }

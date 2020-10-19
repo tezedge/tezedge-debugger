@@ -4,7 +4,7 @@
 use tracing::{Level};
 //use tezedge_debugger::system::replayer::replay;
 use tezedge_debugger::{
-    storage::{MessageStore, cfs},
+    storage::{MessageStore, cfs, P2pFilters},
     system::replayer::replay,
 };
 use structopt::StructOpt;
@@ -17,15 +17,15 @@ use std::net::SocketAddr;
 #[structopt(name = "tezos message replayer")]
 /// Commandline arguments
 struct Opt {
-    #[structopt(short, long, default_value = "/tmp/snapshot/snapshot")]
+    #[structopt(long, default_value = "/tmp/volume")]
     /// Path to the snapshot, to be replayed
     pub path: String,
-    #[structopt(short, long, default_value = "0.0.0.0:17732")]
+    #[structopt(short, long, default_value = "0.0.0.0:9732")]
     /// Address of the node to replay messages
     pub node_ip: SocketAddr,
-    #[structopt(short, long)]
-    /// ID of the last message to be replayed
-    pub last_message_id: u64,
+    #[structopt(short, long, default_value = "34.255.45.149:9732")]
+    /// Address of the peer which conversation to be replayed
+    pub peer_ip: SocketAddr,
 }
 
 fn open_snapshot<P: AsRef<Path>>(path: P) -> Result<MessageStore, failure::Error> {
@@ -43,6 +43,13 @@ async fn main() -> Result<(), failure::Error> {
     let path = &opts.path;
     let addr = opts.node_ip;
     let storage = open_snapshot(path)?;
-    let msgs = storage.p2p().get_cursor(Some(opts.last_message_id), (opts.last_message_id + 1) as usize, Default::default())?;
+    let filter = P2pFilters {
+        remote_addr: Some(opts.peer_ip),
+        types: None,
+        request_id: None,
+        incoming: None,
+        source_type: None,
+    };
+    let msgs = storage.p2p().get_cursor(None, 0x10000, filter)?;
     replay(addr, msgs.into_iter().rev()).await
 }
