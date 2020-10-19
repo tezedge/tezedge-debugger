@@ -34,8 +34,9 @@ async fn load_identity() -> Identity {
     let mut last_try = Instant::now();
 
     let identity_paths = [
-        "/tmp/volume/identity.json",
-        "/tmp/volume/data/identity.json",
+        "/tmp/volume/identity.json".to_string(),
+        "/tmp/volume/data/identity.json".to_string(),
+        format!("{}/.tezos-node/identity.json", std::env::var("HOME").unwrap()),
     ];
 
     loop {
@@ -46,7 +47,7 @@ async fn load_identity() -> Identity {
                 Ok(content) => {
                     match serde_json::from_str::<Identity>(&content) {
                         Ok(identity) => {
-                            info!(file_path = tracing::field::display(&path), file_content = tracing::field::display(&content), "loaded identity");
+                            info!(file_path = tracing::field::display(&path), "loaded identity");
                             return identity;
                         }
                         Err(err) => {
