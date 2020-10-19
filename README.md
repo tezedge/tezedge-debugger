@@ -101,7 +101,7 @@ Run the debugger on desired network interface and specify local IP to capture pa
 cargo run --bin tezedge-debugger enp4s0 192.168.0.103
 ```
 
-Run the tezedge node. The peer `51.15.220.7:9732` was chosen to bootstrap with. It is well known tezos node. it might be another peer.
+Run the tezedge node. The peer `51.15.220.7:9732` was chosen to bootstrap with. It is well known tezos node.
 
 ```
 ./run.sh release --peers 51.15.220.7:9732
