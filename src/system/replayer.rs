@@ -175,23 +175,24 @@ where
             let encrypted = decipher.encrypt(&mut bytes[2..(l - 16)], chunk_number).unwrap();
             bytes[2..l].clone_from_slice(encrypted.as_ref());
             let chunk = BinaryChunk::try_from(bytes).unwrap();
-            tracing::info!("replay {:x?}", message.message[0]);
+            tracing::info!("replay chunk\nSENT: {:x?}", message.message[0]);
             stream.write_all(chunk.raw()).await?;
         } else {
             let mut chunk = read_chunk_data(&mut stream).await?;
             let l = chunk.len();
             let decrypted = decipher.decrypt(&chunk[2..], chunk_number).unwrap();
             chunk[2..(l - 16)].clone_from_slice(decrypted.as_ref());
-            if decrypted.len() > 2 {
-                if decrypted != &message.decrypted_bytes[2..(message.decrypted_bytes.len() - 16)] {
+            if decrypted != &message.decrypted_bytes[2..(message.decrypted_bytes.len() - 16)] {
+                if decrypted.len() > 2 {
                     tracing::warn!(
                         "unexpected chunk\nRECEIVED: {:x?}\nEXPECTED: {:x?}\nEXPECTED TYPE: {:?}",
                         PeerMessageResponse::from_bytes(decrypted.as_slice()),
                         message.message[0],
                         P2pMessageType::extract(&message),
                     );
-                    
                 }
+            } else {
+                tracing::info!("expected chunk\nRECEIVED: {:x?}", message.message[0]);
             }
         }
     }
