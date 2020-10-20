@@ -54,5 +54,5 @@ async fn main() -> Result<(), failure::Error> {
         source_type: None,
     };
     let msgs = storage.p2p().get_cursor(None, 0x10000, filter)?;
-    replay(addr, msgs.into_iter().rev().take(0x100)).await
+    replay(addr, msgs.into_iter().rev().take(opts.limit)).await
 }

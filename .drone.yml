@@ -97,7 +97,7 @@ steps:
       - cd /home/appuser/tezedge
       - /home/appuser/tezedge/run.sh release --peers 127.0.0.1:9732 &
       - /etc/bin/wait_until.sh
-      - /etc/bin/replayer --peer-ip 51.15.220.7:9732 --path "/tmp/replay/rust-node-record" --node-ip 127.0.0.1:9732
+      - /etc/bin/replayer --peer-ip 51.15.220.7:9732 --path "/tmp/replay/rust-node-record" --node-ip 127.0.0.1:9732 --limit 256
 
 volumes:
   - name: binaries
