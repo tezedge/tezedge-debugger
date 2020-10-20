@@ -1,329 +1,200 @@
-use std::net::{SocketAddr, IpAddr};
-use tokio::net::{TcpListener, TcpStream};
-use lazy_static::lazy_static;
-use crate::utility::identity::Identity;
-use crate::utility::stream::{MessageStream, EncryptedMessageWriter, EncryptedMessageReader};
-use tezos_messages::p2p::encoding::connection::ConnectionMessage;
-use crypto::nonce::{Nonce, NoncePair, generate_nonces};
-use tezos_messages::p2p::binary_message::{BinaryChunk, BinaryMessage};
-use std::convert::TryFrom;
-use tezos_messages::p2p::binary_message::cache::CachedData;
-use crypto::crypto_box::precompute;
-use tezos_messages::p2p::encoding::metadata::MetadataMessage;
-use tezos_messages::p2p::encoding::ack::AckMessage;
-use tezos_messages::p2p::encoding::advertise::AdvertiseMessage;
-use tezos_messages::p2p::encoding::prelude::{PeerMessageResponse, PeerMessage as TezosPeerMessage};
-use crate::messages::prelude::PeerMessage;
-use tracing::{error, info, field::{display, debug}};
+use std::{net::{SocketAddr, IpAddr}, iter::ExactSizeIterator, convert::TryFrom, io};
+use tezos_messages::p2p::{
+    binary_message::{BinaryMessage, BinaryChunk},
+    encoding::{
+        metadata::MetadataMessage,
+        ack::AckMessage,
+        advertise::AdvertiseMessage,
+        peer::{PeerMessageResponse, PeerMessage},
+    }
+};
+use tezos_conversation::{Decipher, Identity, NonceAddition};
+use tokio::{net::{TcpStream, TcpListener}, io::{AsyncReadExt, AsyncWriteExt}};
+use bytes::Buf;
 use crate::messages::p2p_message::P2pMessage;
-use tezos_messages::p2p::encoding::version::NetworkVersion;
+use crate::storage::P2pMessageType;
 
-lazy_static! {
-    static ref IDENTITY: Identity = Identity {
-        peer_id: "idsscFHxXoeJjxQsQBeEveayLyvymA".to_string(),
-        public_key: "b41df26473332e7225fdad07045112b5ba6bf295a384785c535cf738575ee245".to_string(),
-        secret_key: "dc9640dbd8cf50a5475b6a6d65c96af943380a627cea198906a2a8d4fd37decc".to_string(),
-        proof_of_work_stamp: "d0e1945cb693c743e82b3e29750ebbc746c14dbc280c6ee6".to_string(),
-    };
-}
-
-#[allow(dead_code)]
 /// Create an replay of given message onto the given address
-pub async fn replay(node_address: SocketAddr, messages: Vec<P2pMessage>) -> Result<(), failure::Error> {
-    let incoming = if messages.len() > 0 {
-        let msg = messages.get(messages.len() - 1);
-        msg.unwrap().incoming
-    } else {
-        return Ok(());
+pub async fn replay<I>(node_address: SocketAddr, messages: I) -> Result<(), failure::Error>
+where
+    I: Iterator<Item = P2pMessage> + ExactSizeIterator + Send + 'static,
+{
+    let mut messages = messages;
+
+    // constant identity
+    let identity = Identity::from_json("\
+        {\
+            \"peer_id\":\"idtJunqYgD1M6r6o2qvGpiD5xKZWRu\",\
+            \"public_key\":\"7e8108e598b056b52cb430ee0e5e7ffd080b1b6bd9c9ad17dd9c44e2ced7fd75\",\
+            \"secret_key\":\"a9f36be41dd4cfec7ec1e4a134d660254006e0ce16ae272f10dbc19a3097adcf\",\
+            \"proof_of_work_stamp\":\"79eb7e72262e067a7e4e65fedacef484be52a35de686d1c8\"\
+        }\
+    ").unwrap();
+
+    // identity to advertise
+    let identity_advertiser = Identity::from_json("\
+        {\
+            \"peer_id\":\"idssJHDL1z8fkryZaYVF9fQRMktoWg\",\
+            \"public_key\":\"d8246d13d0270cbfff4046b6d94b05ab19920bc5ad9fb77f3e945c40b340e874\",\
+            \"secret_key\":\"8b4622bc512c8621a35fa19ff252129b208c8cdffb57e2d29c7974df718c7ff2\",\
+            \"proof_of_work_stamp\":\"d1d0ebd55784bc92852d913dbf0fb5152d505b567d930fb2\"\
+        }\
+    ").unwrap();
+
+    // TODO: error handling
+    let init_connection_message = messages.next().unwrap();
+    let resp_connection_message = messages.next().unwrap();
+
+    let prepare_connection_message = |original: P2pMessage, identity: &Identity| -> Result<BinaryChunk, failure::Error> {
+        let mut cm = original;
+        let cm = cm.message.first_mut().unwrap().as_mut_cm().unwrap();
+        cm.port = 0; // TODO: ?
+        cm.public_key = identity.public_key();
+        cm.proof_of_work_stamp = identity.proof_of_work();
+        BinaryChunk::from_content(&cm.as_bytes()?)
+            .map_err(Into::into)
     };
-    info!(message_count = messages.len(), incoming, "starting replay of messages");
+
+    let incoming = init_connection_message.incoming;
+    tracing::info!(message_count = messages.len(), incoming, "starting replay of messages");
     if incoming {
-        replay_incoming(node_address, messages).await
+        let cm_chunk = prepare_connection_message(init_connection_message, &identity)?;
+        let mut stream = TcpStream::connect(node_address).await?;
+        stream.write_all(cm_chunk.raw()).await?;
+        let respond_cm_chunk = read_chunk_data(&mut stream).await?;
+        let decipher = identity.decipher(cm_chunk.raw(), respond_cm_chunk.as_ref()).ok().unwrap();
+        tracing::info!("handshake done");
+        replay_messages(stream, messages, decipher, true).await
     } else {
-        replay_outgoing(node_address, messages).await
+        // Prepare Tcp Listener for incoming connection
+        let mut listener = TcpListener::bind("0.0.0.0:0").await?;
+        // Extract assigned port of the newly established listening port
+        let listening_port = listener.local_addr()?.port();
+
+        let cm_chunk = prepare_connection_message(resp_connection_message, &identity_advertiser)?;
+        let mut stream = TcpStream::connect(node_address).await?;
+        stream.write_all(cm_chunk.raw()).await?;
+        let respond_cm_chunk = read_chunk_data(&mut stream).await?;
+        let decipher = identity_advertiser.decipher(cm_chunk.raw(), respond_cm_chunk.as_ref()).ok().unwrap();
+
+        let metadata = MetadataMessage::new(true, true);
+        write_small_message(&mut stream, NonceAddition::Initiator(0), &decipher, metadata).await?;
+        let _metadata = read_small_message::<_, MetadataMessage>(&mut stream, NonceAddition::Responder(0), &decipher).await?;
+
+        let ack = AckMessage::Ack;
+        write_small_message(&mut stream, NonceAddition::Initiator(1), &decipher, ack).await?;
+        let ack = read_small_message::<_, AckMessage>(&mut stream, NonceAddition::Responder(1), &decipher).await?;
+        tracing::info!("ack received {:#?}", ack);
+
+        let advertise = PeerMessage::Advertise(AdvertiseMessage::new(&[
+            SocketAddr::new(IpAddr::from([0, 0, 0, 0]), listening_port),
+        ]));
+        let message = PeerMessageResponse::from(advertise);
+        write_small_message(&mut stream, NonceAddition::Initiator(2), &decipher, message).await?;
+        tracing::info!("advertise sent");
+
+        let (mut stream, _peer_addr) = listener.accept().await?;
+        let cm_chunk = read_chunk_data(&mut stream).await?;
+        let respond_cm_chunk = prepare_connection_message(init_connection_message, &identity)?;
+        stream.write_all(respond_cm_chunk.raw()).await?;
+        let decipher = identity.decipher(cm_chunk.as_ref(), respond_cm_chunk.raw()).ok().unwrap();
+        tracing::info!("second handshake done");
+        replay_messages(stream, messages, decipher, true).await
     }
 }
 
-#[allow(dead_code)]
-/// Replay given messages to the given address as if this replay is an actual node driven by
-/// the given message
-/// More datailed info in the Replay Outgoing function
-async fn replay_incoming(node_address: SocketAddr, messages: Vec<P2pMessage>) -> Result<(), failure::Error> {
-    tokio::spawn(async move {
-        let err: Result<(), failure::Error> = async move {
-            let stream = TcpStream::connect(node_address).await?;
-            let (reader, writer) = MessageStream::from(stream).split();
-            let (mut reader, mut writer) = (Some(reader), Some(writer));
-            let (mut enc_reader, mut enc_writer): (Option<EncryptedMessageReader>, Option<EncryptedMessageWriter>) = (None, None);
-            let messages = messages.into_iter();
-            let mut encrypted = false;
-            let mut metadata_count: usize = 0;
-            let mut ack_count: usize = 0;
-            let mut received_connection_message: Option<ConnectionMessage> = None;
-            let mut sent_connection_message: Option<ConnectionMessage> = None;
-
-            for mut message in messages.rev() {
-                if !encrypted && sent_connection_message.is_some() && received_connection_message.is_some() {
-                    let sent = sent_connection_message.clone().unwrap();
-                    let recv = received_connection_message.clone().unwrap();
-                    let sent_data = BinaryChunk::from_content(&sent.as_bytes()?)?;
-                    let recv_data = BinaryChunk::from_content(&recv.as_bytes()?)?;
-                    let pk = precompute(
-                        &hex::encode(&recv.public_key),
-                        &IDENTITY.secret_key,
-                    )?;
-                    let NoncePair { remote, local } = generate_nonces(
-                        sent_data.raw(),
-                        recv_data.raw(),
-                        false,
-                    );
-                    let writer = std::mem::replace(&mut writer, None);
-                    let reader = std::mem::replace(&mut reader, None);
-                    enc_writer = Some(EncryptedMessageWriter::new(writer.unwrap(), pk.clone(), local, IDENTITY.peer_id.clone()));
-                    enc_reader = Some(EncryptedMessageReader::new(reader.unwrap(), pk.clone(), remote, IDENTITY.peer_id.clone()));
-                    encrypted = true;
-                }
-                let sending = !message.incoming;
-                if message.message.len() < 1 {
-                    continue;
-                }
-                let message = message.message.pop().unwrap();
-                info!(sending, encrypted, "Processing message");
-                if sending {
-                    if encrypted {
-                        info!(msg = debug(&message), "Sending encrypted message message");
-                        match message {
-                            PeerMessage::ConnectionMessage(_) => return Ok(()),
-                            PeerMessage::AckMessage(ack) => {
-                                ack_count += 1;
-                                enc_writer.as_mut().unwrap().write_message(&ack).await?;
-                            }
-                            PeerMessage::MetadataMessage(metadata) => {
-                                metadata_count += 1;
-                                enc_writer.as_mut().unwrap().write_message(&metadata).await?;
-                            }
-                            message => {
-                                let message = PeerMessageResponse::from(message.inner().unwrap().clone());
-                                enc_writer.as_mut().unwrap().write_message(&message).await?;
-                            }
-                        }
-                    } else {
-                        match message {
-                            PeerMessage::ConnectionMessage(mut conn_msg) => {
-                                conn_msg.public_key = hex::decode(&IDENTITY.public_key)?;
-                                conn_msg.versions.push(NetworkVersion::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1));
-                                let sent_chunk = BinaryChunk::from_content(&conn_msg.as_bytes()?)?;
-                                sent_connection_message = Some(conn_msg);
-                                info!(msg = debug(&sent_connection_message), "Sending connection message");
-                                writer.as_mut().unwrap().write_message(&sent_chunk)
-                                    .await.unwrap();
-                            }
-                            _ => return Ok(()),
-                        }
-                    }
-                } else {
-                    if encrypted {
-                        let reader = enc_reader.as_mut().unwrap();
-                        if metadata_count < 2 {
-                            let msg = reader.read_message::<MetadataMessage>().await?;
-                            metadata_count += 1;
-                            info!(msg = debug(&msg), "Received metadata message");
-                        } else if ack_count < 2 {
-                            let msg = reader.read_message::<AckMessage>().await?;
-                            ack_count += 1;
-                            info!(msg = debug(&msg), "Received ack message");
-                        } else {
-                            let msg = reader.read_message::<PeerMessageResponse>().await?;
-                            info!(msg = debug(&msg), "Received encrypted message");
-                        }
-                    } else {
-                        let recv_chunk = reader.as_mut().unwrap().read_message().await?;
-                        let conn_msg = ConnectionMessage::try_from(recv_chunk)?;
-                        received_connection_message = Some(conn_msg);
-                        info!(msg = debug(&received_connection_message), "Received connection message");
-                    }
-                }
-            }
-            tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
-            Ok(())
-        }.await;
-        if let Err(err) = err {
-            error!(err = display(&err), "failed to replay");
-        }
-    });
-    Ok(())
+async fn read_small_message<R, M>(
+    stream: &mut R,
+    adder: NonceAddition,
+    decipher: &Decipher,
+) -> Result<M, failure::Error>
+where
+    R: Unpin + AsyncReadExt,
+    M: BinaryMessage,
+{
+    let data = read_chunk_data(stream).await?;
+    let decrypted = decipher.decrypt(&data[2..], adder)?;
+    M::from_bytes(decrypted).map_err(Into::into)
 }
 
-#[allow(dead_code)]
-/// Replay given messages into the given address, as if local node tried to connect to the some remote
-/// node specified by the given node address
-async fn replay_outgoing(node_address: SocketAddr, messages: Vec<P2pMessage>) -> Result<(), failure::Error> {
-    // Prepare Tcp Listener for incoming connection
-    let listener = TcpListener::bind("0.0.0.0:0").await?;
-    // Extract assigned port of the newly established listening port
-    let listening_port = listener.local_addr()?.port();
-    // Spawn replay handler
-    tokio::spawn(async move {
-        let err: Result<(), failure::Error> = async move {
-            let mut listener = listener;
-            // Await the node to establish connection with node
-            let (stream, _peer_addr) = listener.accept().await?;
-            let (reader, writer) = MessageStream::from(stream).split();
-            let (mut reader, mut writer) = (Some(reader), Some(writer));
-            let (mut enc_reader, mut enc_writer): (Option<EncryptedMessageReader>, Option<EncryptedMessageWriter>) = (None, None);
-            let messages = messages.into_iter();
-            let mut encrypted = false;
-            let mut metadata_count: usize = 0;
-            let mut ack_count: usize = 0;
-            let mut received_connection_message: Option<ConnectionMessage> = None;
-            let mut sent_connection_message: Option<ConnectionMessage> = None;
+async fn write_small_message<W, M>(
+    stream: &mut W,
+    adder: NonceAddition,
+    decipher: &Decipher,
+    message: M,
+) -> Result<(), failure::Error>
+where
+    W: Unpin + AsyncWriteExt,
+    M: BinaryMessage,
+{
+    let mut bytes = message.as_bytes()?;
+    let encrypted = decipher.encrypt(bytes.as_mut(), adder).unwrap();
+    let chunk = BinaryChunk::from_content(encrypted.as_ref())?;
+    stream.write_all(chunk.raw()).await.map_err(Into::into)
+}
 
-            // Drive replay by stored messages
-            for mut message in messages.rev() {
-                // If connection is not encrypted, but both connection messages has been exchange,
-                // Do network upgrade
-                if !encrypted && sent_connection_message.is_some() && received_connection_message.is_some() {
-                    let sent = sent_connection_message.clone().unwrap();
-                    let recv = received_connection_message.clone().unwrap();
-                    let sent_data = BinaryChunk::from_content(&sent.as_bytes()?)?;
-                    let recv_data = BinaryChunk::from_content(&recv.as_bytes()?)?;
-                    let pk = precompute(
-                        &hex::encode(&recv.public_key),
-                        &IDENTITY.secret_key,
-                    )?;
-                    let NoncePair { remote, local } = generate_nonces(
-                        sent_data.raw(),
-                        recv_data.raw(),
-                        true,
+async fn read_chunk_data<R>(stream: &mut R) -> Result<Vec<u8>, io::Error>
+where
+    R: Unpin + AsyncReadExt,
+{
+    let mut chunk_buffer = vec![0; 0x10000];
+    stream.read_exact(&mut chunk_buffer[0..2]).await?;
+    let size = (&chunk_buffer[0..2]).get_u16() as usize;
+    stream.read_exact(&mut chunk_buffer[2..(2 + size)]).await?;
+    chunk_buffer.drain((size + 2)..);
+
+    Ok(chunk_buffer)
+}
+
+async fn replay_messages<I>(
+    stream: TcpStream,
+    messages: I,
+    decipher: Decipher,
+    incoming: bool,
+) -> Result<(), failure::Error>
+where
+    I: Iterator<Item = P2pMessage> + Send + 'static,
+{
+    tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
+    let mut initiators = 0;
+    let mut responders = 0;
+    let mut stream = stream;
+    for message in messages {
+        let chunk_number = if message.incoming != incoming {
+            let a = NonceAddition::Initiator(initiators);
+            initiators += 1;
+            a
+        } else {
+            let a = NonceAddition::Responder(responders);
+            responders += 1;
+            a
+        };
+        if message.incoming {
+            let mut bytes = message.decrypted_bytes;
+            let l = bytes.len();
+            let encrypted = decipher.encrypt(&mut bytes[2..(l - 16)], chunk_number).unwrap();
+            bytes[2..l].clone_from_slice(encrypted.as_ref());
+            let chunk = BinaryChunk::try_from(bytes).unwrap();
+            tracing::info!("replay chunk\nSENT: {:x?}", message.message[0]);
+            stream.write_all(chunk.raw()).await?;
+        } else {
+            let mut chunk = read_chunk_data(&mut stream).await?;
+            let l = chunk.len();
+            let decrypted = decipher.decrypt(&chunk[2..], chunk_number).unwrap();
+            chunk[2..(l - 16)].clone_from_slice(decrypted.as_ref());
+            if decrypted != &message.decrypted_bytes[2..(message.decrypted_bytes.len() - 16)] {
+                if decrypted.len() > 2 {
+                    tracing::warn!(
+                        "unexpected chunk\nRECEIVED: {:x?}\nEXPECTED: {:x?}\nEXPECTED TYPE: {:?}",
+                        PeerMessageResponse::from_bytes(decrypted.as_slice()),
+                        message.message[0],
+                        P2pMessageType::extract(&message),
                     );
-                    let writer = std::mem::replace(&mut writer, None);
-                    let reader = std::mem::replace(&mut reader, None);
-                    enc_writer = Some(EncryptedMessageWriter::new(writer.unwrap(), pk.clone(), remote, IDENTITY.peer_id.clone()));
-                    enc_reader = Some(EncryptedMessageReader::new(reader.unwrap(), pk.clone(), local, IDENTITY.peer_id.clone()));
-                    encrypted = true;
                 }
-
-                // Check if the next message should be received or send
-                let sending = message.incoming;
-                if message.message.len() < 1 {
-                    continue;
-                }
-                let message = message.message.pop().unwrap();
-                info!(sending, encrypted, "Processing message");
-                if sending {
-                    if encrypted {
-                        match message {
-                            // Do not send connection message over encrypted connection
-                            PeerMessage::ConnectionMessage(_) => return Ok(()),
-                            PeerMessage::AckMessage(ack) => {
-                                ack_count += 1;
-                                enc_writer.as_mut().unwrap().write_message(&ack).await?;
-                            }
-                            PeerMessage::MetadataMessage(metadata) => {
-                                metadata_count += 1;
-                                enc_writer.as_mut().unwrap().write_message(&metadata).await?;
-                            }
-                            message => {
-                                let message = PeerMessageResponse::from(message.inner().unwrap().clone());
-                                enc_writer.as_mut().unwrap().write_message(&message).await?;
-                            }
-                        }
-                    } else {
-                        match message {
-                            PeerMessage::ConnectionMessage(mut conn_msg) => {
-                                conn_msg.public_key = hex::decode(&IDENTITY.public_key)?;
-                                conn_msg.versions.push(NetworkVersion::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1));
-                                let sent_chunk = BinaryChunk::from_content(&conn_msg.as_bytes()?)?;
-                                sent_connection_message = Some(conn_msg);
-                                info!(msg = debug(&sent_connection_message), "Sending connection message");
-                                writer.as_mut().unwrap().write_message(&sent_chunk)
-                                    .await.unwrap();
-                            }
-                            // Do not send any other message over un-encrypted connection, but ConnectionMessage
-                            _ => return Ok(()),
-                        }
-                    }
-                } else {
-                    if encrypted {
-                        let reader = enc_reader.as_mut().unwrap();
-                        // Tezos works, like that, it firstly exchanges:
-                        // - two unencrypted ConnectionMessages
-                        // - two encrypted MetadataMessages
-                        // - two encrypted Acknowledgements
-                        // - rest is encrypted communication
-                        if metadata_count < 2 {
-                            let msg = reader.read_message::<MetadataMessage>().await?;
-                            metadata_count += 1;
-                            info!(msg = debug(&msg), "Received metadata message");
-                        } else if ack_count < 2 {
-                            let msg = reader.read_message::<AckMessage>().await?;
-                            ack_count += 1;
-                            info!(msg = debug(&msg), "Received ack message");
-                        } else {
-                            let msg = reader.read_message::<PeerMessageResponse>().await?;
-                            info!(msg = debug(&msg), "Received encrypted message");
-                        }
-                    } else {
-                        let recv_chunk = reader.as_mut().unwrap().read_message().await?;
-                        let conn_msg = ConnectionMessage::try_from(recv_chunk)?;
-                        received_connection_message = Some(conn_msg);
-                        info!(msg = debug(&received_connection_message), "Received connection message");
-                    }
-                }
+            } else {
+                tracing::info!("expected chunk\nRECEIVED: {:x?}", message.message[0]);
             }
-            tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
-            Ok(())
-        }.await;
-        if let Err(err) = err {
-            error!(err = display(&err), "failed to replay");
         }
-    });
-
-    // Try to force local node to connect to the debugger to initialize the replay,
-    // by establishing encrypted connection (By exhange of Connection messages, Metadata and ACK)
-    // Then sending single advertise method, which point to the newly created listener
-    let connection = TcpStream::connect(node_address).await?;
-    let (mut reader, mut writer) = MessageStream::from(connection).split();
-    let sent_conn_msg = ConnectionMessage::new(
-        0,
-        &IDENTITY.public_key,
-        &IDENTITY.proof_of_work_stamp,
-        &Nonce::random().get_bytes(),
-        vec![NetworkVersion::new("TEZOS_ALPHANET_CARTHAGE_2019-11-28T13:02:13Z".to_string(), 0, 1)],
-    );
-    let chunk = BinaryChunk::from_content(&sent_conn_msg.as_bytes().unwrap()).unwrap();
-
-    // Follow same protocol as is in the handshake
-    writer.write_message(&chunk).await?;
-    let recv_chunk = reader.read_message().await?;
-    let recv_conn_msg = ConnectionMessage::try_from(recv_chunk)?;
-    let sent_data = chunk;
-    let recv_data = BinaryChunk::from_content(&recv_conn_msg.cache_reader().get().unwrap_or_default())?;
-    let pk = precompute(
-        &hex::encode(recv_conn_msg.public_key),
-        &IDENTITY.secret_key,
-    )?;
-
-    let NoncePair { remote, local } = generate_nonces(
-        sent_data.raw(),
-        recv_data.raw(),
-        false,
-    );
-
-    let mut writer = EncryptedMessageWriter::new(writer, pk.clone(), local, IDENTITY.peer_id.clone());
-    let mut reader = EncryptedMessageReader::new(reader, pk.clone(), remote, IDENTITY.peer_id.clone());
-    let sent_metadata = MetadataMessage::new(true, false);
-    writer.write_message(&sent_metadata).await?;
-    reader.read_message::<MetadataMessage>().await?;
-    writer.write_message(&AckMessage::Ack).await?;
-    reader.read_message::<AckMessage>().await?;
-    // And after handshake, send single advertise message, pointing to the local listening port
-    // created by the replayer
-    let advertise = TezosPeerMessage::Advertise(AdvertiseMessage::new(&[
-        SocketAddr::new(IpAddr::from([0, 0, 0, 0]), listening_port),
-    ]));
-    let message = PeerMessageResponse::from(advertise);
-    writer.write_message(&message).await?;
-
+    }
     Ok(())
 }

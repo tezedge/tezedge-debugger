@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use storage::{StorageError, persistent::{KeyValueSchema, KeyValueStoreWithSchema}, IteratorMode, Direction};
-use tracing::{info, warn, field::{display, debug}};
+use tracing::{info, warn};
 use rocksdb::DB;
 use std::{
     sync::{
@@ -231,8 +231,8 @@ pub(crate) mod secondary_indexes {
     use crate::storage::secondary_index::SecondaryIndex;
     use serde::{Serialize, Deserialize};
     use std::str::FromStr;
-    use failure::{Fail};
-    use crate::messages::p2p_message::{P2pMessage, PeerMessage};
+    use failure::Fail;
+    use crate::messages::p2p_message::{P2pMessage, TezosPeerMessage, SourceType, FullPeerMessage, PartialPeerMessage, HandshakeMessage};
 
     pub type RemoteAddressIndexKV = dyn KeyValueStoreWithSchema<RemoteAddrIndex> + Sync + Send;
 
@@ -412,7 +412,7 @@ pub(crate) mod secondary_indexes {
         type FieldType = u32;
 
         fn accessor(value: &<P2pStore as KeyValueSchema>::Value) -> Option<Self::FieldType> {
-            Some(Type::extract(value))
+            Some(Type::extract(value) as u32)
         }
 
         fn make_index(key: &<P2pStore as KeyValueSchema>::Key, value: Self::FieldType) -> <Self as KeyValueSchema>::Key {
@@ -495,6 +495,7 @@ pub(crate) mod secondary_indexes {
     }
 
     #[repr(u32)]
+    #[derive(Debug)]
     pub enum Type {
         // Base Types
         Tcp = 0x1 << 0,
@@ -527,36 +528,55 @@ pub(crate) mod secondary_indexes {
     }
 
     impl Type {
-        pub fn extract(value: &P2pMessage) -> u32 {
+        pub fn extract(value: &P2pMessage) -> Self {
             if let Some(msg) = value.message.first() {
                 match msg {
-                    PeerMessage::Disconnect => Self::Disconnect as u32,
-                    PeerMessage::Bootstrap => Self::Advertise as u32,
-                    PeerMessage::Advertise(_) => Self::SwapRequest as u32,
-                    PeerMessage::SwapRequest(_) => Self::SwapAck as u32,
-                    PeerMessage::SwapAck(_) => Self::Bootstrap as u32,
-                    PeerMessage::GetCurrentBranch(_) => Self::GetCurrentBranch as u32,
-                    PeerMessage::CurrentBranch(_) => Self::CurrentBranch as u32,
-                    PeerMessage::Deactivate(_) => Self::Deactivate as u32,
-                    PeerMessage::GetCurrentHead(_) => Self::GetCurrentHead as u32,
-                    PeerMessage::CurrentHead(_) => Self::CurrentHead as u32,
-                    PeerMessage::GetBlockHeaders(_) => Self::GetBlockHeaders as u32,
-                    PeerMessage::BlockHeader(_) => Self::BlockHeader as u32,
-                    PeerMessage::GetOperations(_) => Self::GetOperations as u32,
-                    PeerMessage::Operation(_) => Self::Operation as u32,
-                    PeerMessage::GetProtocols(_) => Self::GetProtocols as u32,
-                    PeerMessage::Protocol(_) => Self::Protocol as u32,
-                    PeerMessage::GetOperationHashesForBlocks(_) => Self::GetOperationHashesForBlocks as u32,
-                    PeerMessage::OperationHashesForBlock(_) => Self::OperationHashesForBlock as u32,
-                    PeerMessage::GetOperationsForBlocks(_) => Self::GetOperationsForBlocks as u32,
-                    PeerMessage::OperationsForBlocks(_) => Self::OperationsForBlocks as u32,
-                    PeerMessage::ConnectionMessage(_) => Self::ConnectionMessage as u32,
-                    PeerMessage::MetadataMessage(_) => Self::Metadata as u32,
-                    PeerMessage::AckMessage(_) => Self::AckMessage as u32,
-                    PeerMessage::_Reserved => Self::P2PMessage as u32,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Disconnect) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::Disconnect) => Self::Disconnect,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Bootstrap) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::Bootstrap) => Self::Bootstrap,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Advertise) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::Advertise(_)) => Self::Advertise,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::SwapRequest) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::SwapRequest(_)) => Self::SwapRequest,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::SwapAck) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::SwapAck(_)) => Self::SwapAck,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetCurrentBranch) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::GetCurrentBranch(_)) => Self::GetCurrentBranch,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::CurrentBranch) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::CurrentBranch(_)) => Self::CurrentBranch,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Deactivate) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::Deactivate(_)) => Self::Deactivate,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetCurrentHead) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::GetCurrentHead(_)) => Self::GetCurrentHead,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::CurrentHead) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::CurrentHead(_)) => Self::CurrentHead,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetBlockHeaders) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::GetBlockHeaders(_)) => Self::GetBlockHeaders,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::BlockHeader) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::BlockHeader(_)) => Self::BlockHeader,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetOperations) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::GetOperations(_)) => Self::GetOperations,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Operation) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::Operation(_)) => Self::Operation,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetProtocols) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::GetProtocols(_)) => Self::GetProtocols,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Protocol) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::Protocol(_)) => Self::Protocol,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetOperationHashesForBlocks) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::GetOperationHashesForBlocks(_)) => Self::GetOperationHashesForBlocks,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::OperationHashesForBlock) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::OperationHashesForBlock(_)) => Self::OperationHashesForBlock,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::GetOperationsForBlocks) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::GetOperationsForBlocks(_)) => Self::GetOperationsForBlocks,
+                    TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::OperationsForBlocks) |
+                    TezosPeerMessage::PeerMessage(FullPeerMessage::OperationsForBlocks(_)) => Self::OperationsForBlocks,
+                    TezosPeerMessage::HandshakeMessage(HandshakeMessage::ConnectionMessage(_)) => Self::ConnectionMessage,
+                    TezosPeerMessage::HandshakeMessage(HandshakeMessage::MetadataMessage(_)) => Self::Metadata,
+                    TezosPeerMessage::HandshakeMessage(HandshakeMessage::AckMessage(_)) => Self::AckMessage,
                 }
             } else {
-                Self::P2PMessage as u32
+                Self::P2PMessage
             }
         }
     }
@@ -602,6 +622,7 @@ pub(crate) mod secondary_indexes {
                 "operation_hashes_for_block" => Ok(Self::OperationHashesForBlock),
                 "get_operations_for_blocks" => Ok(Self::GetOperationsForBlocks),
                 "operations_for_blocks" => Ok(Self::OperationsForBlocks),
+                "ack_message" => Ok(Self::AckMessage),
                 s => Err(s.into())
             }
         }
@@ -764,7 +785,7 @@ pub(crate) mod secondary_indexes {
         type FieldType = bool;
 
         fn accessor(value: &<P2pStore as KeyValueSchema>::Value) -> Option<Self::FieldType> {
-            Some(value.source_type().as_bool())
+            Some(value.source_type() == SourceType::Remote)
         }
 
         fn make_index(key: &<P2pStore as KeyValueSchema>::Key, value: Self::FieldType) -> SourceTypeKey {

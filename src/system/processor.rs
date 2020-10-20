@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tracing::{error, trace, field::{display}};
+use tracing::{error, trace};
 use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
@@ -67,7 +67,7 @@ impl DatabaseProcessor {
                 if let Some(mut msg) = receiver.recv().await {
                     match store.p2p().store_message(&mut msg) {
                         Ok(id) => { trace!(id, "stored new message"); },
-                        Err(err) => { error!(error = display(&err), "failed to store message"); },
+                        Err(err) => { error!(error = tracing::field::display(&err), "failed to store message"); },
                     }
                 }
             }
@@ -81,7 +81,7 @@ impl Processor for DatabaseProcessor {
     async fn process(&mut self, mut msg: P2pMessage) {
         loop {
             if let Err(err) = self.sender.send(msg) {
-                error!(error = display(&err), "database channel closed abruptly");
+                error!(error = tracing::field::display(&err), "database channel closed abruptly");
                 msg = err.0;
                 self.sender = Self::start_database_task(self.store.clone());
             } else {

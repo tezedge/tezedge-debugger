@@ -13,7 +13,7 @@ services:
     entrypoint: ./tezedge-debugger
 
   rust-node:
-    image: simplestakingcom/tezedge:v0.4.0
+    image: simplestakingcom/tezedge:v0.5.0
     entrypoint: sh -c "sleep 5 && /home/appuser/tezedge/docker/compose/tezedge.sh"
     network_mode: "service:rust-network"
     depends_on:
@@ -30,7 +30,7 @@ services:
       - "rust-shared-data:/tmp/tezedge"
 
   rust-explorer:
-    image: simplestakingcom/tezedge-explorer:v0.1.6
+    image: simplestakingcom/tezedge-explorer:v0.5.0
     depends_on:
       - rust-debugger
     ports:
@@ -46,7 +46,7 @@ services:
       - "10100:18732"      # node RPC port
       # Debugger Ports must be specified on node service, because of debugger network_mode attaches
       # debugger's container to the node container, allowing it to analyze node's traffic
-      - "10000:13031"      # debugger RPC port
+      - "10000:17732"      # debugger RPC port
       - "10001:13131/udp"  # debugger syslog port
     entrypoint: sleep inf
 

@@ -30,9 +30,9 @@ services:
       - "ocaml-shared-data:/var/run/tezos/node"
   
   ocaml-explorer:
-    image: simplestakingcom/tezedge-explorer:v0.1.6
+    image: simplestakingcom/tezedge-explorer:v0.5.0
     depends_on:
-      - rust-debugger
+      - ocaml-debugger
     ports:
       - "8080:8080"
 
@@ -45,7 +45,7 @@ services:
       - "11100:8732"       # node RPC port
       # Debugger Ports must be specified on node service, because of debugger network_mode attaches
       # debugger's container to the node container, allowing it to analyze node's traffic
-      - "11000:13031"      # debugger RPC port
+      - "17732:17732"      # debugger RPC port
       - "11001:13131/udp"  # debugger syslog port
     entrypoint: sleep inf
 
