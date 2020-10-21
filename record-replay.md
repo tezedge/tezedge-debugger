@@ -35,9 +35,9 @@ The three primary functions of replay are:
 
 
 
-*   **Taking messages from the database**
-*   **Advertising the target node to talk with us.**
-*   **Replaying messages one-by-one and noticing any differences between the recorded and actual conversations.**
+*   Taking messages from the database
+*   Advertising the target node to talk with us.
+*   Replaying messages one-by-one and noticing any differences between the recorded and actual conversations.
 
 When we replay, we only take the communication from the database that is relevant (being just one conversation between two nodes). 
 
