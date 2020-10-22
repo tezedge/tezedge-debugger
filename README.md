@@ -82,69 +82,6 @@ Messages are always sorted from newest to oldest.
 ##### Example
 * `/v2/log?level=error` - Return all errors in last one hundred logs,
 
-Replay
-======
-
-Debugger records traffic between nodes. It can be used to replay the interaction between nodes.
-
-It is convenient to record the traffic on the host OS not using docker.
-
-Build the debugger and use script in order to debugger have capabilities to record traffic without superuser permissions.
-The script itself requires `sudo`.
-
-```
-cargo build --bin tezedge-debugger
-./setcap.sh
-```
-
-Also build the replayer.
-
-```
-cargo build --bin replayer
-```
-
-### Record
-
-It is required to replay only record made on 'clean' state of the node. The replayer also should work on clean tezedge node.
-
-Run the debugger on desired network interface and specify local IP to capture packets on. For example:
-
-```
-cargo run --bin tezedge-debugger enp4s0 192.168.0.103
-```
-
-Run the tezedge node. The peer `51.15.220.7:9732` was chosen to bootstrap with. It is well known tezos node.
-
-```
-./run.sh release --peers 51.15.220.7:9732
-```
-
-Current limitation is 0x10000 packets, do not record longer than a minute. Stop the tezedge first and then the debugger.
-
-Debugger store its database in `ls /tmp/volume/` directory in subdirectory named as a timestamp when it created.
-
-### Replay
-
-To replay the record, first run the node with local ip as a peer.
-
-```
-./run.sh release --peers 127.0.0.1:9732
-```
-
-And then run the replayer. Use the proper database path.
-
-```
-cargo run --bin replayer -- --peer-ip 51.15.220.7:9732 --path /tmp/volume/1603113392732618717/ --node-ip 127.0.0.1:9732
-```
-
-### Bundled record
-
-One recorded interaction is bundled in directory `tests/rust-node-record`, so it is not needed to record anything.
-
-```
-cargo run --bin replayer -- --peer-ip 51.15.220.7:9732 --path tests/rust-node-record --node-ip 127.0.0.1:9732
-```
-
 Detailed Architecture
 =====================
 #### Packets, Chunks and Messages
