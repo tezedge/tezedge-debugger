@@ -53,81 +53,143 @@ Either we avoid this randomness during communication or we can remove the source
 
 If you want to debug the TezEdge node, we can remove sources of randomness from the node, but with the OCaml node we cannot do the same. With the OCaml node, one of the solutions is to replace the randomness from the recorded messages with predetermined data.
 
-**How to build**
+## How to use
 
-Build the debugger and use this script in order for the debugger to have capabilities for recording traffic without superuser permissions. This script requires sudo.
+### Prepare the code and build
 
-`cargo build --bin tezedge-debugger`
+Two terminal sessions are needed. One for tezedge node, and another for the debugger and replayer.
 
-`./setcap.sh`
+#### Clone TezEdge repo.
 
-Also build the replayer.
+On the TezEdge terminal, clone the TezEdge repository, or change the directory into the repository if you have already done so.
 
-`cargo build --bin replayer`
+```
+git clone https://github.com/simplestaking/tezedge.git
+cd tezedge
+```
 
-**How to record**
+Optionally, checkout the version you want:
 
-**It is convenient to record the traffic on the host OS without using docker.**
+```
+git checkout tags/v0.6.0 -b v0.6.0
+```
+
+Build the TezEdge node. Please note that this might take a while.
+
+```
+cargo build --release
+```
+
+#### Clone the debugger repo
+
+On the debugger's terminal, clone the `tezedge-debugger` repository
+
+```
+git clone https://github.com/simplestaking/tezedge-debugger.git
+cd tezedge-debugger
+```
+
+Build the debugger and use this script to allow the debugger to record traffic without superuser permissions. This script requires sudo.
+
+```
+cargo build --bin tezedge-debugger
+./setcap.sh
+```
+
+Also, build the replayer.
+
+```
+cargo build --bin replayer
+```
+
+### Remove or rename the TezEdge database
+
+If you need to keep the TezEdge node database, rename it:
+
+```
+mv /tmp/tezedge /tmp/tezedge-backup
+```
+
+And at the end of replaying, take it back:
+
+```
+mv /tmp/tezedge-backup /tmp/tezedge
+```
+
+If you do not need it, you may remove the database.
+
+```
+rm -Rf /tmp/tezedge
+```
+
+You can perform these actions on any terminal.
+
+By default the database is located at `/tmp/tezedge`.
 
 
+### Record
 
-1. We launch the debugger in order to listen to the communication between nodes.
-2. We use a fully synced OCaml node that is already active. We chose 51.15.220.7:9732, a well known Tezos node.
-3. Now we launch an empty TezEdge node. This is the node we want to debug.
+#### Run Debugger and specify IP.
 
-In order to perform a bootstrap, the TezEdge node initiates an interaction by sending a connection message and several requests to the OCaml node.
-
-To read more about the bootstrapping process, please refer to our [past article about the P2P layer.](https://medium.com/simplestaking/tezos-rust-node-a-deep-dive-into-the-tezos-p2p-layer-98e3b3e3b704)
-
-Run the debugger on the desired network interface and specify the local IP from which you want to capture packets. This should be run from the directory where the debugger is 
-
-_For example:_
-
+On the Debugger's terminal, run the Debugger on the desired network interface and specify the local IP from which it should capture packets. For example:
 
 ```
 cargo run --bin tezedge-debugger enp4s0 192.168.0.103
 ```
 
-
-In which `192.168.0.103` is the local IP, but **not** local host (127.0.0.1)
-
-Run the TezEdge node. The peer `51.15.220.7:9732` was chosen for bootstrapping. It is a well-known Tezos node.
+You can determine your default interface and IP by using this command:
 
 ```
-./run.sh release --peers 51.15.220.7:9732
+ip route show
 ```
 
-The debugger stores its database in `/tmp/volume/&lt;timestamp>`, with the timestamp being the number of seconds since the 1st of January 1970.
-
-When you record, you should first run Debugger and then node. If you are replaying, then first launch the node and then the Replayer.
-
-**Replay**
-
-To replay, first run the node with local IP as a peer.
+For example, on my computer it shows:
 
 ```
-
-./run.sh release --peers 127.0.0.1:9732
-
+default via 192.168.0.1 dev enp4s0 proto dhcp metric 100 
+172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1 linkdown 
+172.18.0.0/16 dev br-209e9b70bdea proto kernel scope link src 172.18.0.1 linkdown 
+192.168.0.0/24 dev enp4s0 proto kernel scope link src 192.168.0.103 metric 100 
 ```
 
-Then run the replayer. Use the database directory with the proper timestamp.
+#### Run node and bootstrap
+
+On TezEdge's terminal, run the TezEdge node. The peer `51.15.220.7:9732` was chosen to bootstrap with. It is well known tezos node.
 
 ```
-
-cargo run --bin replayer -- --peer-ip 51.15.220.7:9732 --path /tmp/volume/&lt;timestamp>/ --node-ip 127.0.0.1:9732
-
+./run.sh release --peer-thresh-low=1 --peer-thresh-high=1 --peers 51.15.220.7:9732
 ```
 
-**Bundled record**
+The results of the recording is a database that is located at /tmp/volume/<timestamp>. It is used in the command line of the replay
 
-One recorded interaction has already been bundled in the directory `tests/rust-node-record`.
+**Important:** When you want to record, you should first launch the Debugger and then the node. When you want to replay, then first launch the node and then the Replayer.
+
+### Replay
+
+Once again, remove the database of the TezEdge node:
 
 ```
+rm -Rf /tmp/tezedge
+```
 
+Run this command on TezEdge's terminal:
+
+```
+./run.sh release --peer-thresh-low=1 --peer-thresh-high=2 --peers 127.0.0.1:9732
+```
+
+And then run the replayer. Use the proper database path.
+
+The debugger stores its database in `/tmp/volume/<timestamp>`, with the timestamp being the number of seconds since the 1st of January 1970.
+
+On the Debugger's terminal:
+
+```
+cargo run --bin replayer -- --peer-ip 51.15.220.7:9732 --path /tmp/volume/1603113392732618717/ --node-ip 127.0.0.1:9732
+```
+
+Also, it is possible to use the database from the repository. To replay without recording, run this command:
+
+```
 cargo run --bin replayer -- --peer-ip 51.15.220.7:9732 --path tests/rust-node-record --node-ip 127.0.0.1:9732
-
 ```
-
-
-
