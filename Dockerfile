@@ -2,7 +2,7 @@ FROM kyras/tezedge_base:latest as builder
 WORKDIR /home/appuser/
 RUN apt-get update && \
     DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev && \
-    rustup install nightly-2020-07-12 && rustup default nightly-2020-07-12
+    rustup install nightly-2020-10-24 && rustup default nightly-2020-10-24
 
 # https://blog.mgattozzi.dev/caching-rust-docker-builds/
 # Prepare empty binaries and all the dependencies that we have in Cargo.toml

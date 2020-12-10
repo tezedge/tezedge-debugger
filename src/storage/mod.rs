@@ -14,7 +14,7 @@ pub(crate) use p2p_storage::secondary_indexes as p2p_indexes;
 pub(crate) use log_storage::secondary_indexes as log_indexes;
 pub(crate) use rpc_storage::secondary_indexes as rpc_indexes;
 
-use rocksdb::{DB, ColumnFamilyDescriptor};
+use rocksdb::{DB, ColumnFamilyDescriptor, Cache};
 use std::{
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
@@ -70,17 +70,18 @@ impl MessageStore {
 
 /// Create list of all Column Family descriptors required for Message store
 pub fn cfs() -> Vec<ColumnFamilyDescriptor> {
+    let cache = Cache::new_lru_cache(1).unwrap();
     vec![
-        P2pStore::descriptor(),
-        LogStore::descriptor(),
-        RpcStore::descriptor(),
-        p2p_indexes::RemoteAddrIndex::descriptor(),
-        p2p_indexes::TypeIndex::descriptor(),
-        p2p_indexes::IncomingIndex::descriptor(),
-        p2p_indexes::SourceTypeIndex::descriptor(),
-        log_indexes::LevelIndex::descriptor(),
-        log_indexes::TimestampIndex::descriptor(),
-        rpc_indexes::RemoteAddrIndex::descriptor(),
+        P2pStore::descriptor(&cache),
+        LogStore::descriptor(&cache),
+        RpcStore::descriptor(&cache),
+        p2p_indexes::RemoteAddrIndex::descriptor(&cache),
+        p2p_indexes::TypeIndex::descriptor(&cache),
+        p2p_indexes::IncomingIndex::descriptor(&cache),
+        p2p_indexes::SourceTypeIndex::descriptor(&cache),
+        log_indexes::LevelIndex::descriptor(&cache),
+        log_indexes::TimestampIndex::descriptor(&cache),
+        rpc_indexes::RemoteAddrIndex::descriptor(&cache),
     ]
 }
 

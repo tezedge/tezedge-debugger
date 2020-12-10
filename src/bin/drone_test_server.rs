@@ -60,7 +60,7 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
     let recv_data = BinaryChunk::from_content(&recv_conn_msg.as_bytes().unwrap()).unwrap();
 
     let precomputed_key = precompute(
-        &hex::encode(recv_conn_msg.public_key),
+        &hex::encode(&recv_data.raw()[4..36]),
         &IDENTITY.secret_key,
     ).unwrap();
 
@@ -79,8 +79,8 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
         hex::encode(precomputed_key.as_ref().as_ref())
     );
 
-    let mut enc_writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
-    let mut enc_reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
+    let mut enc_writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), local);
+    let mut enc_reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), remote);
 
     let metadata = enc_reader.read_message::<MetadataMessage>().await.unwrap();
     println!("[{}] Decrypted metadata message", peer_addr);

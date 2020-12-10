@@ -88,7 +88,7 @@ async fn test_client(id: u32, messages: u32, server: String) {
 
     // Upgrade connection to the encrypted
     let precomputed_key = precompute(
-        &hex::encode(recv_conn_msg.public_key),
+        &hex::encode(&recv_data.raw()[4..36]),
         &IDENTITY.secret_key,
     ).unwrap();
 
@@ -98,8 +98,8 @@ async fn test_client(id: u32, messages: u32, server: String) {
         false,
     );
 
-    let mut writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), local, IDENTITY.peer_id.clone());
-    let mut reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), remote, IDENTITY.peer_id.clone());
+    let mut writer = EncryptedMessageWriter::new(writer, precomputed_key.clone(), local);
+    let mut reader = EncryptedMessageReader::new(reader, precomputed_key.clone(), remote);
 
     println!("[{}] Encrypted connection", id);
 

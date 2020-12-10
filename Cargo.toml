@@ -26,7 +26,7 @@ url = "2.1"
 hex = "0.4"
 warp = "0.2"
 bytes = "0.5"
-rocksdb = "0.14"
+rocksdb = "0.15"
 failure = "0.1"
 bincode = "1.2"
 itertools = "0.9"
@@ -50,9 +50,9 @@ serde = { version = "1.0", features = ["derive"] }
 
 smoltcp = { branch = "fix", git = "https://github.com/simplestaking/smoltcp" }
 
-crypto = { tag = "v0.5.0", git = "https://github.com/simplestaking/tezedge" }
-storage = { tag = "v0.5.0", git = "htps://github.com/simplestaking/tezedge" }
-tezos_encoding = { tag = "v0.5.0", git = "https://github.com/simplestaking/tezedge" }
-tezos_messages = { tag = "v0.5.0", git = "https://github.com/simplestaking/tezedge" }
-networking = { tag = "v0.5.0", git = "https://github.com/simplestaking/tezedge" }
+crypto = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezedge" }
+storage = { tag = "v0.8.0", git = "htps://github.com/simplestaking/tezedge" }
+tezos_encoding = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezedge" }
+tezos_messages = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezedge" }
+networking = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezedge" }
 tezos-conversation = { branch = "develop", git = "https://github.com/simplestaking/tezos-dissector" }

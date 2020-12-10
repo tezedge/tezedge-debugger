@@ -225,7 +225,7 @@ impl KeyValueSchema for P2pStore {
 pub(crate) mod secondary_indexes {
     use storage::persistent::{KeyValueStoreWithSchema, KeyValueSchema, Decoder, SchemaError, Encoder};
     use std::sync::Arc;
-    use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
+    use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform, Cache};
     use std::net::SocketAddr;
     use crate::storage::{encode_address, P2pStore};
     use crate::storage::secondary_index::SecondaryIndex;
@@ -259,7 +259,7 @@ pub(crate) mod secondary_indexes {
         type Key = RemoteKey;
         type Value = <P2pStore as KeyValueSchema>::Key;
 
-        fn descriptor() -> ColumnFamilyDescriptor {
+        fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
             cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(16 + 2));
             cf_opts.set_memtable_prefix_bloom_ratio(0.2);
@@ -396,7 +396,7 @@ pub(crate) mod secondary_indexes {
         type Key = TypeKey;
         type Value = <P2pStore as KeyValueSchema>::Key;
 
-        fn descriptor() -> ColumnFamilyDescriptor {
+        fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
             cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<u32>()));
             cf_opts.set_memtable_prefix_bloom_ratio(0.2);
@@ -652,7 +652,7 @@ pub(crate) mod secondary_indexes {
         type Key = IncomingKey;
         type Value = <P2pStore as KeyValueSchema>::Key;
 
-        fn descriptor() -> ColumnFamilyDescriptor {
+        fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
             cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<bool>()));
             cf_opts.set_memtable_prefix_bloom_ratio(0.2);
@@ -769,7 +769,7 @@ pub(crate) mod secondary_indexes {
         type Key = SourceTypeKey;
         type Value = <P2pStore as KeyValueSchema>::Key;
 
-        fn descriptor() -> ColumnFamilyDescriptor {
+        fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
             cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<bool>()));
             cf_opts.set_memtable_prefix_bloom_ratio(0.2);

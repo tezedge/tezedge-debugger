@@ -5,7 +5,6 @@ use tezos_messages::p2p::binary_message::BinaryChunk;
 use std::convert::TryFrom;
 use crypto::nonce::{generate_nonces, NoncePair};
 use crypto::crypto_box::{precompute, decrypt};
-use tezos_messages::p2p::encoding::prelude::ConnectionMessage;
 
 // {
 //      "peer_id":"idsQqW5E9mH3SNNd56uUnALb8RxvdM",
@@ -23,11 +22,6 @@ pub fn main() {
     let recv_data = BinaryChunk::try_from(recv.clone())
         .unwrap();
 
-    // let sent_cm = ConnectionMessage::try_from(BinaryChunk::try_from(sent.clone())
-    //     .unwrap()).unwrap();
-    let recv_cm = ConnectionMessage::try_from(BinaryChunk::try_from(recv.clone())
-        .unwrap()).unwrap();
-
     let NoncePair { local, remote } = generate_nonces(
         sent_data.raw(),
         recv_data.raw(),
@@ -36,7 +30,7 @@ pub fn main() {
     println!("remote: {:?}\nlocal: {:?}", remote, local);
 
     let pk = precompute(
-        &hex::encode(&recv_cm.public_key),
+        &hex::encode(&recv[4..36]),
         sk,
     ).unwrap();
 

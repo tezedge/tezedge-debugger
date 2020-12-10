@@ -167,6 +167,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
+name = "bitmaps"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "031043d04099746d8db04daf1fa424b2bc8bd69d92b25962dcde24da39ab64a2"
+dependencies = [
+ "typenum",
+]
+
+[[package]]
+name = "blake2"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10a5720225ef5daecf08657f23791354e1685a8c91a4c60c7f3d3b2892f978f4"
+dependencies = [
+ "crypto-mac",
+ "digest 0.9.0",
+ "opaque-debug 0.3.0",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -457,6 +477,37 @@ dependencies = [
  "rand 0.7.3",
  "sodiumoxide",
 ]
+
+[[package]]
+name = "crypto"
+version = "0.8.0"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
+dependencies = [
+ "base58",
+ "failure",
+ "failure_derive",
+ "hex",
+ "num-bigint",
+ "num-traits 0.2.12",
+ "rand 0.7.3",
+ "sodiumoxide",
+]
+
+[[package]]
+name = "crypto-mac"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b584a330336237c1eecd3e94266efb216c56ed91225d634cb2991c5f3fd1aeab"
+dependencies = [
+ "generic-array 0.14.4",
+ "subtle",
+]
+
+[[package]]
+name = "cty"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7313c0d620d0cb4dbd9d019e461a4beb501071ff46ec0ab933efb4daa76d73e3"
 
 [[package]]
 name = "darling"
@@ -1003,6 +1054,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "im"
+version = "15.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "111c1983f3c5bb72732df25cddacee9b546d08325fb584b5ebd38148be7b0246"
+dependencies = [
+ "bitmaps",
+ "rand_core 0.5.1",
+ "rand_xoshiro",
+ "serde 1.0.116",
+ "sized-chunks",
+ "typenum",
+ "version_check",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1389,18 +1455,18 @@ dependencies = [
 
 [[package]]
 name = "networking"
-version = "0.5.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.5.0#ec3b04268bdfb0af549ae70ccee443ea38cd7ec6"
+version = "0.8.0"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
 dependencies = [
  "bytes 0.5.6",
- "crypto",
+ "crypto 0.8.0",
  "failure",
  "futures",
  "hex",
  "riker",
  "slog",
- "tezos_encoding",
- "tezos_messages",
+ "tezos_encoding 0.8.0",
+ "tezos_messages 0.8.0",
  "tokio",
 ]
 
@@ -1474,9 +1540,21 @@ checksum = "1ab52be62400ca80aa00285d25253d7f7c437b7375c4de678f5405d3afe82ca5"
 
 [[package]]
 name = "ocaml-interop"
-version = "0.2.4"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c17addbe120afdcf0bf4b4f679b25ab7cd3817af327b07cbdbee88b3b240b39"
+checksum = "73f6eb1378c49deceaf7fec407633c1f9ca8317ec58992da8a91e2c2164cc628"
+dependencies = [
+ "ocaml-sys",
+]
+
+[[package]]
+name = "ocaml-sys"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b089ec551535569cbcf41bf8ada032ce80cee4cfaf6fab95da0b01e83aab31"
+dependencies = [
+ "cty",
+]
 
 [[package]]
 name = "once_cell"
@@ -1910,6 +1988,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_xoshiro"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9fcdd2e881d02f1d9390ae47ad8e5696a9e4be7b547a1da2afbc61973217004"
+dependencies = [
+ "rand_core 0.5.1",
+]
+
+[[package]]
 name = "rdrand"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2030,9 +2117,9 @@ dependencies = [
 
 [[package]]
 name = "rocksdb"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61aa17a99a2413cd71c1106691bf59dad7de0cd5099127f90e9d99c429c40d4a"
+checksum = "23d83c02c429044d58474eaf5ae31e062d0de894e21125b47437ec0edc1397e6"
 dependencies = [
  "libc",
  "librocksdb-sys",
@@ -2251,6 +2338,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sized-chunks"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ec31ceca5644fa6d444cc77548b88b67f46db6f7c71683b0f9336e671830d2f"
+dependencies = [
+ "bitmaps",
+ "typenum",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2334,26 +2431,27 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "storage"
-version = "0.5.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.5.0#ec3b04268bdfb0af549ae70ccee443ea38cd7ec6"
+version = "0.8.0"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
 dependencies = [
  "bincode",
+ "blake2",
  "bytes 0.5.6",
  "commitlog",
- "crypto",
+ "crypto 0.8.0",
  "derive_builder",
  "failure",
  "getset",
  "hex",
+ "im",
  "itertools",
- "lazy_static",
  "num_cpus",
  "rocksdb",
  "serde 1.0.116",
  "slog",
  "tezos_api",
  "tezos_context",
- "tezos_messages",
+ "tezos_messages 0.8.0",
 ]
 
 [[package]]
@@ -2412,6 +2510,12 @@ dependencies = [
  "quote 1.0.7",
  "syn 1.0.42",
 ]
+
+[[package]]
+name = "subtle"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "343f3f510c2915908f155e94f17220b19ccfacf2a64a2a5d8004f2c3e311e7fd"
 
 [[package]]
 name = "syn"
@@ -2555,7 +2659,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "bytes 0.5.6",
- "crypto",
+ "crypto 0.8.0",
  "failure",
  "hex",
  "itertools",
@@ -2573,8 +2677,8 @@ dependencies = [
  "strum",
  "syslog_loose",
  "tezos-conversation",
- "tezos_encoding",
- "tezos_messages",
+ "tezos_encoding 0.8.0",
+ "tezos_messages 0.8.0",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2591,40 +2695,38 @@ dependencies = [
  "bit-vec",
  "bytes 0.5.6",
  "chrono",
- "crypto",
+ "crypto 0.5.0",
  "failure",
  "hex",
  "log 0.4.11",
  "num-bigint",
  "serde 1.0.116",
  "serde_json",
- "tezos_encoding",
- "tezos_messages",
+ "tezos_encoding 0.5.0",
+ "tezos_messages 0.5.0",
  "wireshark-definitions",
 ]
 
 [[package]]
 name = "tezos_api"
-version = "0.5.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.5.0#ec3b04268bdfb0af549ae70ccee443ea38cd7ec6"
+version = "0.8.0"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
 dependencies = [
  "chrono",
- "crypto",
+ "crypto 0.8.0",
  "derive_builder",
  "enum-iterator",
  "failure",
  "lazy_static",
  "ocaml-interop",
  "serde 1.0.116",
- "serde_json",
- "slog",
- "tezos_messages",
+ "tezos_messages 0.8.0",
 ]
 
 [[package]]
 name = "tezos_context"
-version = "0.5.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.5.0#ec3b04268bdfb0af549ae70ccee443ea38cd7ec6"
+version = "0.8.0"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
 dependencies = [
  "crossbeam",
  "lazy_static",
@@ -2640,7 +2742,24 @@ dependencies = [
  "byteorder",
  "bytes 0.5.6",
  "chrono",
- "crypto",
+ "crypto 0.5.0",
+ "failure",
+ "hex",
+ "num-bigint",
+ "num-traits 0.2.12",
+ "serde 1.0.116",
+]
+
+[[package]]
+name = "tezos_encoding"
+version = "0.8.0"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
+dependencies = [
+ "bit-vec",
+ "byteorder",
+ "bytes 0.5.6",
+ "chrono",
+ "crypto 0.8.0",
  "failure",
  "hex",
  "num-bigint",
@@ -2655,7 +2774,7 @@ source = "git+https://github.com/simplestaking/tezedge?tag=v0.5.0#ec3b04268bdfb0
 dependencies = [
  "bytes 0.5.6",
  "chrono",
- "crypto",
+ "crypto 0.5.0",
  "derive_builder",
  "failure",
  "getset",
@@ -2665,7 +2784,26 @@ dependencies = [
  "num-traits 0.2.12",
  "serde 1.0.116",
  "serde_json",
- "tezos_encoding",
+ "tezos_encoding 0.5.0",
+]
+
+[[package]]
+name = "tezos_messages"
+version = "0.8.0"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
+dependencies = [
+ "bytes 0.5.6",
+ "chrono",
+ "crypto 0.8.0",
+ "derive_builder",
+ "failure",
+ "getset",
+ "hex",
+ "lazy_static",
+ "num-bigint",
+ "num-traits 0.2.12",
+ "serde 1.0.116",
+ "tezos_encoding 0.8.0",
 ]
 
 [[package]]

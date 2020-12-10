@@ -187,7 +187,7 @@ pub(crate) mod secondary_indexes {
         str::FromStr,
     };
     use tracing::warn;
-    use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform};
+    use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform, Cache};
     use crate::storage::LogStore;
     use serde::{Serialize, Deserialize};
     use failure::{Fail};
@@ -217,7 +217,7 @@ pub(crate) mod secondary_indexes {
         type Key = LogLevelKey;
         type Value = <LogStore as KeyValueSchema>::Key;
 
-        fn descriptor() -> ColumnFamilyDescriptor {
+        fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
             let mut cf_opts = Options::default();
             cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<LogLevel>()));
             cf_opts.set_memtable_prefix_bloom_ratio(0.2);

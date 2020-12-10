@@ -2,6 +2,8 @@ use std::{net::{SocketAddr, IpAddr}, iter::ExactSizeIterator, convert::TryFrom, 
 use tezos_messages::p2p::{
     binary_message::{BinaryMessage, BinaryChunk},
     encoding::{
+        version::NetworkVersion,
+        connection::ConnectionMessage,
         metadata::MetadataMessage,
         ack::AckMessage,
         advertise::AdvertiseMessage,
@@ -45,13 +47,10 @@ where
     let init_connection_message = messages.next().unwrap();
     let resp_connection_message = messages.next().unwrap();
 
-    let prepare_connection_message = |original: P2pMessage, identity: &Identity| -> Result<BinaryChunk, failure::Error> {
-        let mut cm = original;
-        let cm = cm.message.first_mut().unwrap().as_mut_cm().unwrap();
-        cm.port = 0; // TODO: ?
-        cm.public_key = identity.public_key();
-        cm.proof_of_work_stamp = identity.proof_of_work();
-        BinaryChunk::from_content(&cm.as_bytes()?)
+    let prepare_connection_message = |_original: P2pMessage, identity: &Identity| -> Result<BinaryChunk, failure::Error> {
+        let version = NetworkVersion::new("testnet".to_owned(), 0, 0);
+        let cm = ConnectionMessage::new(0, &hex::encode(identity.public_key()), &hex::encode(identity.proof_of_work()), [0; 24].as_ref(), vec![version]);
+        BinaryChunk::from_content(cm.as_bytes()?.as_ref())
             .map_err(Into::into)
     };
 

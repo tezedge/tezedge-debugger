@@ -16,8 +16,6 @@ use crypto::nonce::Nonce;
 use tezos_encoding::binary_reader::BinaryReaderError;
 use tezos_messages::p2p::binary_message::{BinaryChunk, BinaryChunkError, BinaryMessage, CONTENT_LENGTH_FIELD_BYTES};
 
-use networking::p2p::peer::PeerId;
-
 /// Max allowed content length in bytes when taking into account extra data added by encryption
 pub const CONTENT_LENGTH_MAX: usize = tezos_messages::p2p::binary_message::CONTENT_LENGTH_MAX - crypto::crypto_box::BOX_ZERO_BYTES;
 
@@ -167,7 +165,7 @@ pub struct EncryptedMessageWriter {
 }
 
 impl EncryptedMessageWriter {
-    pub fn new(tx: MessageWriter, precomputed_key: PrecomputedKey, nonce_local: Nonce, _peer_id: PeerId) -> Self {
+    pub fn new(tx: MessageWriter, precomputed_key: PrecomputedKey, nonce_local: Nonce) -> Self {
         EncryptedMessageWriter { tx, precomputed_key, nonce_local }
     }
 
@@ -210,7 +208,7 @@ pub struct EncryptedMessageReader {
 
 impl EncryptedMessageReader {
     /// Create new encrypted message from async reader and peer data
-    pub fn new(rx: MessageReader, precomputed_key: PrecomputedKey, nonce_remote: Nonce, _peer_id: PeerId) -> Self {
+    pub fn new(rx: MessageReader, precomputed_key: PrecomputedKey, nonce_remote: Nonce) -> Self {
         EncryptedMessageReader { rx, precomputed_key, nonce_remote }
     }
 

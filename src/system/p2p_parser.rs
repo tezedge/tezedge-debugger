@@ -217,7 +217,7 @@ impl Parser {
                             }
                             self.inc(incoming);
                         }
-                        true
+                        failed_to_decrypt.is_empty()
                     },
                     ConsumeResult::NoDecipher(_) => {
                         warn!("identity wrong");
