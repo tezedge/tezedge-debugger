@@ -15,7 +15,6 @@ pub async fn syslog_producer(settings: SystemSettings) -> io::Result<()> {
     let socket = UdpSocket::bind(("0.0.0.0", settings.syslog_port)).await?;
     info!(port = 13131, "started listening for syslog");
     tokio::spawn(async move {
-        let mut socket = socket;
         // Local packet buffer
         let mut buffer = [0u8; 64 * 1024];
         loop {
