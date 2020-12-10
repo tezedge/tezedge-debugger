@@ -3,7 +3,7 @@ version: "3"
 services:
 
   ocaml-debugger:
-    image: simplestakingcom/tezedge-debugger:v0.1.0
+    image: simplestakingcom/tezedge-debugger:v0.2.0
     build: .
     network_mode: "service:ocaml-network"
     environment:
@@ -37,7 +37,7 @@ services:
       - "8080:8080"
 
   ocaml-network:
-    image: simplestakingcom/tezedge-debugger:v0.1.0
+    image: simplestakingcom/tezedge-debugger:v0.2.0
     build: .
     ports:
       # Node specific ports
