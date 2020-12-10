@@ -4,7 +4,7 @@
         {
             "type": "shell",
             "label": "compose-up-rust",
-            "command": "docker-compose -f docker-compose.rust.yml up -d --build",
+            "command": "docker-compose -f docker-compose.rust.yml up --build --remove-orphans",
             "presentation": {
                 "reveal": "always",
                 "panel": "new"

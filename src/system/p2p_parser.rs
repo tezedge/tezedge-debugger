@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::IpAddr, string::ToString};
+use std::{net::IpAddr, string::ToString, net::SocketAddr};
 use tokio::sync::mpsc;
 use tracing::{trace, error, warn};
 use tezos_messages::p2p::{
@@ -47,6 +47,8 @@ struct Parser {
     chunk_incoming_counter: usize,
     chunk_outgoing_counter: usize,
     buffer: Vec<u8>,
+    reported_error: bool,
+    remote_addr: Option<SocketAddr>,
 }
 
 impl Parser {
@@ -67,6 +69,8 @@ impl Parser {
             chunk_incoming_counter: 0,
             chunk_outgoing_counter: 0,
             buffer: Vec::new(),
+            reported_error: false,
+            remote_addr: None,
         }
     }
 
@@ -107,6 +111,7 @@ impl Parser {
                     assert_eq!(packet.source.ip(), self.local_ip);
                     packet.destination.clone()
                 };
+                self.remote_addr = Some(remote_addr);
                 tracing::trace!(
                     number = packet.number,
                     sender = tracing::field::display(format!("{:?}", sender)),
@@ -217,7 +222,11 @@ impl Parser {
                             }
                             self.inc(incoming);
                         }
-                        failed_to_decrypt.is_empty()
+                        if !failed_to_decrypt.is_empty() && !self.reported_error {
+                            tracing::warn!("cannot decrypt: {}", remote_addr);
+                            self.reported_error = true;
+                        }
+                        true
                     },
                     ConsumeResult::NoDecipher(_) => {
                         warn!("identity wrong");
@@ -234,7 +243,11 @@ impl Parser {
                 }
             }
             None => {
-                error!("p2p parser channel closed abruptly");
+                if let Some(remote_addr) = self.remote_addr {
+                    error!("p2p parser channel closed abruptly, remote address: {}", remote_addr);
+                } else {
+                    error!("p2p parser channel closed abruptly");
+                }
                 false
             }
         }

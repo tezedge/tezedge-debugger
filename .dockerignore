@@ -23,3 +23,6 @@
 README.md
 bin/
 target/
+setcap.sh
+LICENSE
+rustfmt.toml
