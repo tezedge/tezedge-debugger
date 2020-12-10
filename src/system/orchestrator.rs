@@ -11,11 +11,12 @@ use std::{
     collections::{HashMap, hash_map::Entry},
     sync::{Arc, RwLock}, net::SocketAddr,
 };
-use crate::{
-    system::prelude::*,
-    system::raw_socket_producer::P2pPacket as Packet,
+use crate::system::{
+    SystemSettings,
+    raw_socket_producer::P2pPacket as Packet,
+    processor::spawn_processor,
+    p2p_parser::spawn_p2p_parser,
 };
-use crate::system::processor::spawn_processor;
 
 lazy_static! {
     pub static ref CONNECTIONS: Arc<RwLock<HashMap<SocketAddr, Option<ConnectionState>>>> = Default::default();

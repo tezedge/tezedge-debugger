@@ -2,7 +2,7 @@ use crate::storage::MessageStore;
 use warp::{Filter, Rejection};
 use warp::reply::{WithStatus, Json, with_status, json};
 use warp::http::StatusCode;
-use crate::system::orchestrator::{CONNECTIONS};
+use crate::system::CONNECTIONS;
 use itertools::Itertools;
 
 /// EXPERIMENTAL: Basic statistics endpoint
