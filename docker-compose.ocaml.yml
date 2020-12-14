@@ -10,8 +10,8 @@ services:
       - RUST_BACKTRACE=1
     volumes:
       - "ocaml-shared-data:/tmp/volume"
-    entrypoint: ./tezedge-debugger
-    
+    entrypoint: sh -c "./tezedge-debugger"
+
   ocaml-node:
     image: tezos/tezos:carthagenet
     network_mode: "service:ocaml-network"
@@ -28,7 +28,7 @@ services:
         syslog-format: "rfc5424micro"
     volumes:
       - "ocaml-shared-data:/var/run/tezos/node"
-  
+
   ocaml-explorer:
     image: simplestakingcom/tezedge-explorer:v0.6.0
     depends_on:

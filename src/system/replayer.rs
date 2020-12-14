@@ -66,7 +66,7 @@ where
         replay_messages(stream, messages, decipher, true).await
     } else {
         // Prepare Tcp Listener for incoming connection
-        let listener = TcpListener::bind("0.0.0.0:0").await?;
+        let mut listener = TcpListener::bind("0.0.0.0:0").await?;
         // Extract assigned port of the newly established listening port
         let listening_port = listener.local_addr()?.port();
 
@@ -154,7 +154,7 @@ async fn replay_messages<I>(
 where
     I: Iterator<Item = P2pMessage> + Send + 'static,
 {
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
     let mut initiators = 0;
     let mut responders = 0;
     let mut stream = stream;

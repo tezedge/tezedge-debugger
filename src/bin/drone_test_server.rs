@@ -125,7 +125,7 @@ async fn handle_stream(stream: TcpStream, peer_addr: SocketAddr) {
 /// Build trivial TCP server with ping handler
 pub async fn main() -> std::io::Result<()> {
     let server = "0.0.0.0:13030";
-    let listener = TcpListener::bind(server).await?;
+    let mut listener = TcpListener::bind(server).await?;
     println!("Started to listening on \"{}\"", server);
 
     loop {

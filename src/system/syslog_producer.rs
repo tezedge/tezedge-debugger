@@ -12,7 +12,7 @@ use crate::messages::log_message::LogMessage;
 /// Spawn new Syslog UDP server, for processing syslogs.
 pub async fn syslog_producer(settings: SystemSettings) -> io::Result<()> {
     // Create the server
-    let socket = UdpSocket::bind(("0.0.0.0", settings.syslog_port)).await?;
+    let mut socket = UdpSocket::bind(("0.0.0.0", settings.syslog_port)).await?;
     info!(port = 13131, "started listening for syslog");
     tokio::spawn(async move {
         // Local packet buffer
