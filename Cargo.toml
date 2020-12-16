@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "sniffer"]
+
 [package]
 name = "tezedge_debugger"
 version = "0.1.0"
@@ -54,3 +57,8 @@ tezos_encoding = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezed
 tezos_messages = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezedge" }
 networking = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezedge" }
 tezos-conversation = { branch = "develop", git = "https://github.com/simplestaking/tezos-dissector" }
+
+sniffer = { path = "sniffer", features = ["facade"] }
+
+[patch.crates-io]
+rocksdb = { git = "https://github.com/rust-rocksdb/rust-rocksdb", rev = "29802a4b71b8e96a3095b84aadbbea3e39e0d074" }

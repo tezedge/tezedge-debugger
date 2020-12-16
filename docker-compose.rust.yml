@@ -5,6 +5,7 @@ services:
   rust-debugger:
     image: simplestakingcom/tezedge-debugger:v0.2.0
     build: .
+    privileged: true
     network_mode: "service:rust-network"
     environment:
       - RUST_BACKTRACE=1

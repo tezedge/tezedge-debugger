@@ -18,6 +18,9 @@ use std::sync::Arc;
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::system::syslog_producer::syslog_producer;
 
+use tokio::stream::StreamExt;
+use sniffer::facade::Module;
+
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
     let storage_path = format!("/tmp/volume/{}", get_ts());
@@ -73,6 +76,15 @@ async fn main() -> Result<(), failure::Error> {
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
         .init();
+
+    tokio::spawn(async move {
+        let (_module, mut events) = Module::load();
+        while let Some(event) = events.next().await {
+            for e in event.items {
+                tracing::info!("intercept data: {:?}", e);
+            }
+        }
+    });
 
     // Identify the local address
     let local_address = if let Some(ip_addr) = get_local_ip() {

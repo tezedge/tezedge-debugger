@@ -5,6 +5,7 @@ services:
   ocaml-debugger:
     image: simplestakingcom/tezedge-debugger:v0.2.0
     build: .
+    privileged: true
     network_mode: "service:ocaml-network"
     environment:
       - RUST_BACKTRACE=1
@@ -13,7 +14,7 @@ services:
     entrypoint: sh -c "./tezedge-debugger"
 
   ocaml-node:
-    image: tezos/tezos:carthagenet
+    image: tezos/tezos:v8.0
     network_mode: "service:ocaml-network"
     depends_on:
       - ocaml-debugger
