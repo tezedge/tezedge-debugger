@@ -5,7 +5,9 @@
         "kprobe",
         "kprobes",
         "redbpf",
+        "regs",
         "repr",
+        "ringbuf",
         "sendto"
     ]
 }

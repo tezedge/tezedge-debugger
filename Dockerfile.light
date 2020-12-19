@@ -1,0 +1,8 @@
+# do manually 
+# cargo install --bins --debug --path . --root .
+# or 
+# cargo install --bins --path . --root .
+# before build
+FROM ubuntu:20.04
+WORKDIR /home/appuser/
+COPY bin ./

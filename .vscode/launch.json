@@ -7,17 +7,10 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Launch Debugger",
-            "cwd": "${workspaceRoot}",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=tezedge-debugger",
-                ]
-            },
-            "args": [
-                "enp0s3",
-            ],
+            "name": "Launch",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/target/debug/tezedge-debugger",
+            "args": ["enp4s0"]
         }
     ]
 }

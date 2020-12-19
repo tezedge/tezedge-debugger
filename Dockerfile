@@ -17,6 +17,7 @@ ENV LLVM_SYS_110_PREFIX=/usr/lib/llvm-11
 RUN wget -cq https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.8.18.tar.xz && \
     tar xf linux-5.8.18.tar.xz && cd linux-5.8.18 && make defconfig && make modules_prepare
 ENV KERNEL_SOURCE=/home/appuser/linux-5.8.18
+ENV KERNEL_VERSION=5.8.18
 
 # https://blog.mgattozzi.dev/caching-rust-docker-builds/
 # Prepare empty binaries and all the dependencies that we have in Cargo.toml
@@ -25,7 +26,7 @@ RUN mkdir -p {.,sniffer}/src/bin && \
     echo "fn main() {}" > ./src/bin/drone_test_server.rs && \
     echo "fn main() {}" > ./src/bin/drone_test_client.rs && \
     echo "fn main() {}" > ./sniffer/src/bin/kprobe.rs && \
-    echo "fn foo() {}" > ./sniffer/src/lib.rs
+    echo "pub fn foo() {}" > ./sniffer/src/lib.rs
 COPY Cargo.lock .
 COPY Cargo.toml .
 COPY sniffer/Cargo.toml sniffer

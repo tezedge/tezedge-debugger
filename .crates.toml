@@ -1,0 +1,2 @@
+[v1]
+"tezedge_debugger 0.1.0 (path+file:///home/vscode/workspace/simplestaking/tezedge-debugger)" = ["decrypt", "drone-client", "drone-server", "replayer", "tezedge-debugger"]
