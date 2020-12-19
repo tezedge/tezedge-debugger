@@ -2748,6 +2748,7 @@ dependencies = [
  "redbpf",
  "redbpf-macros",
  "redbpf-probes",
+ "typenum",
 ]
 
 [[package]]

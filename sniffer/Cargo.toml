@@ -17,6 +17,7 @@ cargo-bpf = { version = "1.3", default-features = false, optional = true }
 redbpf-macros = { version = "1.3", default-features = false, optional = true }
 redbpf-probes = { version = "1.3", default-features = false, optional = true }
 cty = { version = "0.2", optional = true }
+typenum = { version = "1.12", optional = true }
 # facade
 redbpf = { version = "1.3", default-features = false, optional = true }
 futures = { version = "0.3", optional = true }
@@ -24,4 +25,4 @@ hex = { version = "0.4", optional = true }
 
 [features]
 facade = ["cargo-bpf/build", "redbpf/load", "futures", "hex"]
-probes = ["cargo-bpf/bindings", "redbpf-macros", "redbpf-probes", "cty"]
+probes = ["cargo-bpf/bindings", "redbpf-macros", "redbpf-probes", "cty", "typenum"]
