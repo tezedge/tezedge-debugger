@@ -78,7 +78,8 @@ async fn main() -> Result<(), failure::Error> {
         .init();
 
     tokio::spawn(async move {
-        let (_module, mut events) = Module::load();
+        let (mut module, _events) = Module::load();
+        let mut events = module.rb_events();
         while let Some(event) = events.next().await {
             for e in event.items {
                 tracing::info!("intercept data: {:?}", e);

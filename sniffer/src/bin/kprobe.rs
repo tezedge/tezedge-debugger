@@ -14,7 +14,7 @@ program!(0xFFFFFFFE, "GPL");
 static mut events: PerfMap<u32> = PerfMap::with_max_entries(1);
 
 #[map]
-static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x80000000);
+static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x40000000);
 
 const DD: usize = mem::size_of::<DataDescriptor>();
 

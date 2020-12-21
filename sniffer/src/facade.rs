@@ -1,9 +1,9 @@
 use std::{convert::TryFrom, fmt, mem};
-use redbpf::{load::Loader, Module as RawModule};
+use redbpf::{load::Loader, Module as RawModule, ringbuf::{RingBufferManager, RingBufferItem}};
 use futures::stream::StreamExt;
 use super::DataDescriptor;
 
-pub struct Module(RawModule);
+pub struct Module(RawModule, RingBufferManager);
 
 impl TryFrom<&[u8]> for DataDescriptor {
     type Error = ();
@@ -18,6 +18,12 @@ impl TryFrom<&[u8]> for DataDescriptor {
     }
 }
 
+impl RingBufferItem for DataDescriptor {
+    fn consume(slice: &[u8]) -> Self {
+        Self::try_from(slice).unwrap()
+    }
+}
+
 impl fmt::Debug for DataDescriptor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SnifferItem")
@@ -25,6 +31,7 @@ impl fmt::Debug for DataDescriptor {
             .field("fd", &self.fd)
             .field("offset", &self.offset)
             .field("size", &self.size)
+            .field("overall_size", &self.overall_size)
             .finish()
     }
 }
@@ -60,6 +67,17 @@ impl Module {
                 items: items,
             }
         });
-        (Module(loaded.module), events)
+        (Module(loaded.module, RingBufferManager::new()), events)
+    }
+
+    pub fn rb_events(&mut self) -> impl StreamExt<Item = Event<DataDescriptor>> + '_ {
+        let rb_map = self.0.maps.iter().find(|m| m.kind == 27).unwrap();
+        let rb = self.1.add(rb_map.fd).unwrap();
+        rb.map(move |items| {
+            Event {
+                map_name: String::new(),
+                items: items,
+            }
+        })
     }
 }
