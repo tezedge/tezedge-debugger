@@ -3,7 +3,6 @@
 
 use tracing::{info, error, Level};
 use tezedge_debugger::{
-    system::build_raw_socket_system,
     utility::{
         identity::Identity,
         ip_settings::get_local_ip,
@@ -85,8 +84,14 @@ async fn main() -> Result<(), failure::Error> {
             let slice = event.as_ref();
             let descriptor = DataDescriptor::try_from(slice).unwrap();
 
-            tracing::info!("intercept data: {:?}", descriptor);
-            // TODO: use slice
+            if descriptor.size > 0 {
+                let data = &slice[12..(12 + (descriptor.size as usize))];
+                tracing::info!("intercept data: {:?}", descriptor);
+                tracing::info!("data: {:?}", hex::encode(data));
+                //let chunk_size = (data[0] as usize) * 256 + (data[1] as usize);
+                //if chunk_size + 2 == data.len() {
+                //}
+            }
         }
     });
 
@@ -131,23 +136,26 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     // Create actual system
-    match build_raw_socket_system(settings.clone()) {
-        Ok(_) => {
-            info!("system built");
-        }
-        Err(err) => {
-            error!(error = tracing::field::display(&err), "failed to build system");
-            exit(1);
-        }
-    }
+    /*{
+        use tezedge_debugger::system::build_raw_socket_system;
+        match build_raw_socket_system(settings.clone()) {
+            Ok(_) => {
+                info!("system built");
+            }
+            Err(err) => {
+                error!(error = tracing::field::display(&err), "failed to build system");
+                exit(1);
+            }
+        }    
+    }*/
 
     // Spawn warp RPC server
-    tokio::spawn(async move {
+    /*tokio::spawn(async move {
         use tezedge_debugger::endpoints::routes;
         warp::serve(routes(storage))
             .run(([0, 0, 0, 0], settings.rpc_port))
             .await;
-    });
+    });*/
 
     // Wait for SIGTERM signal
     if let Err(err) = tokio::signal::ctrl_c().await {
