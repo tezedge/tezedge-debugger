@@ -23,9 +23,7 @@ impl fmt::Debug for DataDescriptor {
         f.debug_struct("SnifferItem")
             .field("tag", &self.tag)
             .field("fd", &self.fd)
-            .field("offset", &self.offset)
             .field("size", &self.size)
-            .field("overall_size", &self.overall_size)
             .finish()
     }
 }

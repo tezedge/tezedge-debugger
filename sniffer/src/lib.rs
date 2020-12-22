@@ -8,9 +8,7 @@ pub mod bpf_code;
 
 #[repr(C)]
 pub struct DataDescriptor {
-    pub tag: i32,
+    pub tag: u32,
     pub fd: u32,
-    pub offset: u32,
-    pub size: u32,
-    pub overall_size: u32,
+    pub size: i32,
 }
