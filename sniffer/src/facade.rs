@@ -1,9 +1,9 @@
 use std::{convert::TryFrom, fmt, mem};
-use redbpf::{load::Loader, Module as RawModule, ringbuf::{RingBufferManager, RingBufferItem}};
+use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer};
 use futures::stream::StreamExt;
-use super::DataDescriptor;
+use super::{DataDescriptor, bpf_code::CODE};
 
-pub struct Module(RawModule, RingBufferManager);
+pub struct Module(RawModule);
 
 impl TryFrom<&[u8]> for DataDescriptor {
     type Error = ();
@@ -15,12 +15,6 @@ impl TryFrom<&[u8]> for DataDescriptor {
         } else {
             Err(())
         }
-    }
-}
-
-impl RingBufferItem for DataDescriptor {
-    fn consume(slice: &[u8]) -> Self {
-        Self::try_from(slice).unwrap()
     }
 }
 
@@ -44,15 +38,11 @@ pub struct Event<T> {
 impl Module {
     // TODO: handle error
     pub fn load() -> (Self, impl StreamExt<Item = Event<DataDescriptor>>) {
-        let code = include_bytes!(concat!(
-            env!("OUT_DIR"),
-            "/target/bpf/programs/kprobe/kprobe.elf"
-        ));
-        let mut loaded = Loader::load(code).expect("Error loading BPF program");
+        let mut loaded = Loader::load(CODE).expect("Error loading BPF program");
         for probe in loaded.kprobes_mut() {
             probe
                 .attach_kprobe(&probe.name(), 0)
-                .expect(&format!("Error attaching xdp program {}", probe.name()));
+                .expect(&format!("Error attaching kprobe program {}", probe.name()));
         }
         let events = loaded.events.map(|(map_name, items_bytes)| {
             let mut items = Vec::with_capacity(items_bytes.len());
@@ -67,17 +57,11 @@ impl Module {
                 items: items,
             }
         });
-        (Module(loaded.module, RingBufferManager::new()), events)
+        (Module(loaded.module), events)
     }
 
-    pub fn rb_events(&mut self) -> impl StreamExt<Item = Event<DataDescriptor>> + '_ {
-        let rb_map = self.0.maps.iter().find(|m| m.kind == 27).unwrap();
-        let rb = self.1.add(rb_map.fd).unwrap();
-        rb.map(move |items| {
-            Event {
-                map_name: String::new(),
-                items: items,
-            }
-        })
+    pub fn main_buffer(&self) -> RingBuffer {
+        let rb_map = self.0.maps.iter().find(|m| m.name == "main_buffer").unwrap();
+        RingBuffer::from_map(&rb_map).unwrap()
     }
 }

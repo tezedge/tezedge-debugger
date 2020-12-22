@@ -18,8 +18,9 @@ use std::sync::Arc;
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::system::syslog_producer::syslog_producer;
 
+use std::convert::TryFrom;
 use tokio::stream::StreamExt;
-use sniffer::facade::Module;
+use sniffer::{facade::Module, DataDescriptor};
 
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
@@ -78,12 +79,14 @@ async fn main() -> Result<(), failure::Error> {
         .init();
 
     tokio::spawn(async move {
-        let (mut module, _events) = Module::load();
-        let mut events = module.rb_events();
+        let (module, _events) = Module::load();
+        let mut events = module.main_buffer();
         while let Some(event) = events.next().await {
-            for e in event.items {
-                tracing::info!("intercept data: {:?}", e);
-            }
+            let slice = event.as_ref();
+            let descriptor = DataDescriptor::try_from(slice).unwrap();
+
+            tracing::info!("intercept data: {:?}", descriptor);
+            // TODO: use slice
         }
     });
 

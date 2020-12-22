@@ -3,6 +3,9 @@
 #[cfg(feature = "facade")]
 pub mod facade;
 
+#[cfg(feature = "facade")]
+pub mod bpf_code;
+
 #[repr(C)]
 pub struct DataDescriptor {
     pub tag: i32,

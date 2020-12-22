@@ -246,7 +246,7 @@ dependencies = [
 [[package]]
 name = "bpf-sys"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#db1879e1767ace5a7512164e9ecf36ab914c7f2d"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#3485ac1bd633b840c4d180b032012db87d693800"
 dependencies = [
  "bindgen",
  "cc",
@@ -302,7 +302,7 @@ checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
 [[package]]
 name = "cargo-bpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#db1879e1767ace5a7512164e9ecf36ab914c7f2d"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#3485ac1bd633b840c4d180b032012db87d693800"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -2226,7 +2226,7 @@ dependencies = [
 [[package]]
 name = "redbpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#db1879e1767ace5a7512164e9ecf36ab914c7f2d"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#3485ac1bd633b840c4d180b032012db87d693800"
 dependencies = [
  "bindgen",
  "bpf-sys",
@@ -2235,6 +2235,7 @@ dependencies = [
  "goblin",
  "lazy_static",
  "libc",
+ "log 0.4.11",
  "mio",
  "pin-project 1.0.2",
  "regex",
@@ -2245,7 +2246,7 @@ dependencies = [
 [[package]]
 name = "redbpf-macros"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#db1879e1767ace5a7512164e9ecf36ab914c7f2d"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#3485ac1bd633b840c4d180b032012db87d693800"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.7",
@@ -2256,7 +2257,7 @@ dependencies = [
 [[package]]
 name = "redbpf-probes"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#db1879e1767ace5a7512164e9ecf36ab914c7f2d"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#3485ac1bd633b840c4d180b032012db87d693800"
 dependencies = [
  "cargo-bpf",
  "cty",
