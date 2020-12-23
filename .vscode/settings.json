@@ -9,6 +9,7 @@
         "kprobes",
         "kretprobe",
         "ksys",
+        "recvfrom",
         "redbpf",
         "regs",
         "repr",

@@ -4,7 +4,7 @@
 
 use redbpf_probes::kprobe::prelude::*;
 use redbpf_probes::helpers::{gen, bpf_get_current_pid_tgid};
-use typenum::{Unsigned, Shleft};
+use typenum::{Unsigned, Bit, Shleft};
 use core::{mem, ptr, slice, convert::TryFrom};
 use sniffer::{DataDescriptor, DataTag, Address, SyscallRelevantContext};
 
@@ -27,9 +27,10 @@ static mut syscall_contexts: HashMap<u64, SyscallRelevantContext> = HashMap::wit
 static mut outgoing_connections: HashMap<u32, [u8; Address::RAW_SIZE]> = HashMap::with_max_entries(0x1000);
 
 #[inline(always)]
-fn send_sized<S, C>(data: &[u8], header_ctor: C)
+fn send_sized<S, K, C>(data: &[u8], header_ctor: C)
 where
     S: Unsigned,
+    K: Bit,
     C: FnOnce(i32) -> DataDescriptor,
 {
     match unsafe { main_buffer.reserve(S::U64, 0) } {
@@ -39,11 +40,19 @@ where
                 unsafe {
                     let source = data.as_ptr();
                     let destination = buffer.0.as_mut_ptr().offset(DD as isize);
-                    gen::bpf_probe_read_user(
-                        destination as *mut _,
-                        to_copy as u32,
-                        source as *const _,
-                    )
+                    if K::BOOL {
+                        gen::bpf_probe_read_kernel(
+                            destination as *mut _,
+                            to_copy as u32,
+                            source as *const _,
+                        )
+                    } else {
+                        gen::bpf_probe_read_user(
+                            destination as *mut _,
+                            to_copy as u32,
+                            source as *const _,
+                        )
+                    }
                 }
             } else {
                 0
@@ -74,55 +83,56 @@ where
 }
 
 #[inline(always)]
-fn send_data<C>(data: &[u8], header_ctor: C)
+fn send_data<K, C>(data: &[u8], header_ctor: C)
 where
+    K: Bit,
     C: FnOnce(i32) -> DataDescriptor,
 {
     let length_to_send = data.len() + DD;
     if length_to_send <= Shleft::<typenum::U1, typenum::U8>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U8>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U8>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U9>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U9>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U9>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U10>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U10>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U10>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U11>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U11>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U11>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U12>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U12>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U12>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U13>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U13>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U13>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U14>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U14>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U14>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U15>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U15>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U15>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U16>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U16>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U16>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U17>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U17>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U17>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U18>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U18>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U18>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U19>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U19>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U19>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U20>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U20>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U20>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U21>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U21>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U21>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U22>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U22>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U22>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U23>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U23>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U23>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U24>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U24>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U24>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U25>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U25>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U25>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U26>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U26>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U26>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U27>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U27>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U27>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U28>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U28>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U28>, K, _>(data, header_ctor)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U29>::USIZE {
-        send_sized::<Shleft<typenum::U1, typenum::U29>, _>(data, header_ctor)
+        send_sized::<Shleft<typenum::U1, typenum::U29>, K, _>(data, header_ctor)
     }
 }
 
@@ -159,7 +169,48 @@ fn kretprobe_write(regs: Registers) {
             let fd = fd.clone();
             let data = data.clone();
 
-            send_data(data, |size| DataDescriptor { tag: DataTag::Write, fd, size })
+            send_data::<typenum::B0, _>(data, |size| DataDescriptor { tag: DataTag::Write, fd, size })
+        },
+        _ => (),
+    }
+}
+
+#[kprobe("ksys_read")]
+fn kprobe_read(regs: Registers) {
+    let fd = regs.parm1() as u32;
+    let buf = regs.parm2() as *mut u8;
+
+    if unsafe { outgoing_connections.get(&fd).is_none() } {
+        return;
+    }
+
+    let id = bpf_get_current_pid_tgid();
+    let mut context = SyscallRelevantContext::empty();
+    context = SyscallRelevantContext::Read {
+        fd: fd,
+        data_ptr: buf as usize,
+    };
+    unsafe { syscall_contexts.set(&id, &context) }
+}
+
+#[kretprobe("ksys_read")]
+fn kretprobe_read(regs: Registers) {
+    if !regs.is_syscall_success() {
+        return;
+    }
+
+    let id = bpf_get_current_pid_tgid();
+    match unsafe { syscall_contexts.get(&id) } {
+        Some(SyscallRelevantContext::Read { ref fd, ref data_ptr }) => {
+            let fd = fd.clone();
+            let data_ptr = (*data_ptr) as *const u8;
+            let read = (unsafe { &*regs.ctx }).r8 as usize;
+
+            if read == 0 || (read as i64) < 0 {
+                return;
+            }
+            let data = unsafe { slice::from_raw_parts(data_ptr, read) };
+            send_data::<typenum::B0, _>(data, |size| DataDescriptor { tag: DataTag::Read, fd, size })
         },
         _ => (),
     }
@@ -176,7 +227,73 @@ fn kprobe_sendto(regs: Registers) {
     }
 
     let data = unsafe { slice::from_raw_parts(buf, size) };
-    send_data(data, |size| DataDescriptor { tag: DataTag::SendTo, fd, size })
+
+    let id = bpf_get_current_pid_tgid();
+    let mut context = SyscallRelevantContext::empty();
+    context = SyscallRelevantContext::SendTo {
+        fd: fd,
+        data: data,
+    };
+    unsafe { syscall_contexts.set(&id, &context) }
+}
+
+#[kretprobe("__sys_sendto")]
+fn kretprobe_sendto(regs: Registers) {
+    if !regs.is_syscall_success() {
+        return;
+    }
+
+    let id = bpf_get_current_pid_tgid();
+    match unsafe { syscall_contexts.get(&id) } {
+        Some(SyscallRelevantContext::SendTo { ref fd, ref data }) => {
+            let fd = fd.clone();
+            let data = data.clone();
+
+            send_data::<typenum::B0, _>(data, |size| DataDescriptor { tag: DataTag::SendTo, fd, size })
+        },
+        _ => (),
+    }
+}
+
+#[kprobe("__sys_recvfrom")]
+fn kprobe_recvfrom(regs: Registers) {
+    let fd = regs.parm1() as u32;
+    let buf = regs.parm2() as *mut u8;
+
+    if unsafe { outgoing_connections.get(&fd).is_none() } {
+        return;
+    }
+
+    let id = bpf_get_current_pid_tgid();
+    let mut context = SyscallRelevantContext::empty();
+    context = SyscallRelevantContext::RecvFrom {
+        fd: fd,
+        data_ptr: buf as usize,
+    };
+    unsafe { syscall_contexts.set(&id, &context) }
+}
+
+#[kretprobe("__sys_recvfrom")]
+fn kretprobe_recvfrom(regs: Registers) {
+    if !regs.is_syscall_success() {
+        return;
+    }
+
+    let id = bpf_get_current_pid_tgid();
+    match unsafe { syscall_contexts.get(&id) } {
+        Some(SyscallRelevantContext::RecvFrom { ref fd, ref data_ptr }) => {
+            let fd = fd.clone();
+            let data_ptr = (*data_ptr) as *const u8;
+            let read = (unsafe { &*regs.ctx }).r8 as usize;
+
+            if read == 0 || (read as i64) < 0 {
+                return;
+            }
+            let data = unsafe { slice::from_raw_parts(data_ptr, read) };
+            send_data::<typenum::B0, _>(data, |size| DataDescriptor { tag: DataTag::RecvFrom, fd, size })
+        },
+        _ => (),
+    }
 }
 
 #[repr(C)]
@@ -223,7 +340,7 @@ fn kprobe_sendmsg(regs: Registers) {
     };
 
     let data = unsafe { slice::from_raw_parts(message_header_.msg_control as *const u8, message_header_.msg_control_len as usize) };
-    send_data(data, |size| DataDescriptor { tag: DataTag::SendMsgAncillary, fd, size });
+    send_data::<typenum::B0, _>(data, |size| DataDescriptor { tag: DataTag::SendMsgAncillary, fd, size });
 
     let mut io_vec = IoVec {
         iov_base: ptr::null(),
@@ -243,7 +360,7 @@ fn kprobe_sendmsg(regs: Registers) {
         };
 
         let data = unsafe { slice::from_raw_parts(io_vec.iov_base as *const u8, io_vec.iov_len) };
-        send_data(data, |size| DataDescriptor { tag: DataTag::SendMsg, fd, size })
+        send_data::<typenum::B0, _>(data, |size| DataDescriptor { tag: DataTag::SendMsg, fd, size })
     }
 }
 
@@ -288,7 +405,7 @@ fn kretprobe_connect(regs: Registers) {
             if let Ok(_) = Address::try_from(tmp.as_ref()) {
                 unsafe { outgoing_connections.set(&fd, &tmp) };
                 // Address::RAW_SIZE + DD == 40
-                send_sized::<typenum::U40, _>(address.as_ref(), |size| DataDescriptor { tag: DataTag::Connect, fd, size })
+                send_sized::<typenum::U40, typenum::B0, _>(address.as_ref(), |size| DataDescriptor { tag: DataTag::Connect, fd, size })
             } else {
                 // ignore connection to other type of address
                 // track only ipv4 (af_inet) and ipv6 (af_inet6)
@@ -307,5 +424,5 @@ fn kprobe_close(regs: Registers) {
     }
 
     unsafe { outgoing_connections.delete(&fd) };
-    send_sized::<Dd, _>(&[], |size| DataDescriptor { tag: DataTag::Close, fd, size })
+    send_sized::<Dd, typenum::B0, _>(&[], |size| DataDescriptor { tag: DataTag::Close, fd, size })
 }

@@ -84,7 +84,7 @@ async fn main() -> Result<(), failure::Error> {
             let slice = event.as_ref();
             let descriptor = DataDescriptor::try_from(slice).unwrap();
 
-            if descriptor.size > 0 {
+            if descriptor.size >= 0 {
                 let data = &slice[12..(12 + (descriptor.size as usize))];
                 match descriptor.tag {
                     DataTag::Connect => {
@@ -96,16 +96,18 @@ async fn main() -> Result<(), failure::Error> {
                             Err(()) => tracing::warn!("Connect: fd: {}, unknown address format", descriptor.fd),
                         }
                     },
-                    DataTag::Write => {
+                    DataTag::Write | DataTag::SendTo | DataTag::Read | DataTag::RecvFrom => {
                         if data.len() > 1 {
                             let chunk_size = (data[0] as usize) * 256 + (data[1] as usize);
                             if chunk_size + 2 == data.len() {
-                                tracing::info!("Write: fd: {}, data: {:?}", descriptor.fd, hex::encode(data));
+                                tracing::info!("{:?}: fd: {}, data: {:?}", descriptor.tag, descriptor.fd, hex::encode(data));
                             }
                         }
-                    }
+                    },
                     _ => (),
                 }
+            } else {
+                //tracing::error!("{:?}", descriptor);
             }
         }
     });

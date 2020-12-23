@@ -22,6 +22,10 @@ pub enum DataTag {
     SendTo,
     SendMsg,
     SendMsgAncillary,
+
+    Read,
+    RecvFrom,
+
     Connect,
     Close,
 }
@@ -69,6 +73,7 @@ impl TryFrom<&[u8]> for Address {
 
 pub enum SyscallRelevantContext {
     Empty,
+
     Write {
         fd: u32,
         data: &'static [u8],
@@ -81,6 +86,16 @@ pub enum SyscallRelevantContext {
         fd: u32,
         message: &'static [u8],
     },
+
+    Read {
+        fd: u32,
+        data_ptr: usize,
+    },
+    RecvFrom {
+        fd: u32,
+        data_ptr: usize,
+    },
+
     Connect {
         fd: u32,
         address: &'static [u8],
