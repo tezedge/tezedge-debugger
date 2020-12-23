@@ -4,15 +4,16 @@ services:
 
   ocaml-debugger:
     image: simplestakingcom/tezedge-debugger:v0.2.0
-    #build:
-    #  context: .
-    #  dockerfile: Dockerfile.light
+    build:
+      context: .
+      dockerfile: Dockerfile.light
     privileged: true
     network_mode: "service:ocaml-network"
     environment:
       - RUST_BACKTRACE=1
     volumes:
       - "ocaml-shared-data:/tmp/volume"
+      - "/sys/kernel/debug:/sys/kernel/debug:rw"
     entrypoint: sh -c "./tezedge-debugger"
 
   ocaml-node:
@@ -41,9 +42,9 @@ services:
 
   ocaml-network:
     image: simplestakingcom/tezedge-debugger:v0.2.0
-    #build:
-    #  context: .
-    #  dockerfile: Dockerfile.light
+    build:
+      context: .
+      dockerfile: Dockerfile.light
     ports:
       # Node specific ports
       - "11200:9732"       # node P2P port

@@ -1,9 +1,18 @@
-use std::{convert::TryFrom, fmt, mem};
+use std::{convert::TryFrom, fmt, mem, net::{SocketAddr, IpAddr}};
 use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer};
 use futures::stream::StreamExt;
-use super::{DataDescriptor, bpf_code::CODE};
+use super::{DataDescriptor, Address, bpf_code::CODE};
 
 pub struct Module(RawModule);
+
+impl From<Address> for SocketAddr {
+    fn from(a: Address) -> Self {
+        match a {
+            Address::Inet { port, ip, .. } => SocketAddr::new(IpAddr::V4(ip.into()), port),
+            Address::Inet6 { port, ip, .. } => SocketAddr::new(IpAddr::V6(ip.into()), port),
+        }
+    }
+}
 
 impl TryFrom<&[u8]> for DataDescriptor {
     type Error = ();

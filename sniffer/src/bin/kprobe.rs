@@ -3,26 +3,28 @@
 #![cfg(feature = "probes")]
 
 use redbpf_probes::kprobe::prelude::*;
-use redbpf_probes::helpers::gen;
+use redbpf_probes::helpers::{gen, bpf_get_current_pid_tgid};
 use typenum::{Unsigned, Shleft};
-use core::{mem, ptr, slice};
-use sniffer::{DataDescriptor, DataTag};
+use core::{mem, ptr, slice, convert::TryFrom};
+use sniffer::{DataDescriptor, DataTag, Address, SyscallRelevantContext};
 
 program!(0xFFFFFFFE, "GPL");
 
-const ADDRESS_SIZE: usize = 28;
 const DD: usize = mem::size_of::<DataDescriptor>();
 type Dd = typenum::U12;
 
 #[map]
-static mut events: PerfMap<u32> = PerfMap::with_max_entries(1);
+static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x40000000); // 1GiB buffer
 
+// the key is (pid concat tgid) it identifies the single thread
+// one thread can do no more then one syscall simultaneously
+// max entries is the maximal number of processors on target machine, let's define 64
 #[map]
-static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x40000000);
+static mut syscall_contexts: HashMap<u64, SyscallRelevantContext> = HashMap::with_max_entries(64);
 
 // connected socket ipv6 ocaml
 #[map]
-static mut outgoing_connections: HashMap<u32, [u8; ADDRESS_SIZE]> = HashMap::with_max_entries(0x1000);
+static mut outgoing_connections: HashMap<u32, [u8; Address::RAW_SIZE]> = HashMap::with_max_entries(0x1000);
 
 #[inline(always)]
 fn send_sized<S, C>(data: &[u8], header_ctor: C)
@@ -124,6 +126,45 @@ where
     }
 }
 
+#[kprobe("ksys_write")]
+fn kprobe_write(regs: Registers) {
+    let fd = regs.parm1() as u32;
+    let buf = regs.parm2() as *const u8;
+    let size = regs.parm3() as usize;
+
+    if unsafe { outgoing_connections.get(&fd).is_none() } {
+        return;
+    }
+
+    let data = unsafe { slice::from_raw_parts(buf, size) };
+
+    let id = bpf_get_current_pid_tgid();
+    let mut context = SyscallRelevantContext::empty();
+    context = SyscallRelevantContext::Write {
+        fd: fd,
+        data: data,
+    };
+    unsafe { syscall_contexts.set(&id, &context) }
+}
+
+#[kretprobe("ksys_write")]
+fn kretprobe_write(regs: Registers) {
+    if !regs.is_syscall_success() {
+        return;
+    }
+
+    let id = bpf_get_current_pid_tgid();
+    match unsafe { syscall_contexts.get(&id) } {
+        Some(SyscallRelevantContext::Write { ref fd, ref data }) => {
+            let fd = fd.clone();
+            let data = data.clone();
+
+            send_data(data, |size| DataDescriptor { tag: DataTag::Write, fd, size })
+        },
+        _ => (),
+    }
+}
+
 #[kprobe("__sys_sendto")]
 fn kprobe_sendto(regs: Registers) {
     let fd = regs.parm1() as u32;
@@ -138,28 +179,14 @@ fn kprobe_sendto(regs: Registers) {
     send_data(data, |size| DataDescriptor { tag: DataTag::SendTo, fd, size })
 }
 
-#[kprobe("ksys_write")]
-fn kprobe_write(regs: Registers) {
-    let fd = regs.parm1() as u32;
-    let buf = regs.parm2() as *const u8;
-    let size = regs.parm3() as usize;
-
-    if unsafe { outgoing_connections.get(&fd).is_none() } {
-        return;
-    }
-
-    let data = unsafe { slice::from_raw_parts(buf, size) };
-    send_data(data, |size| DataDescriptor { tag: DataTag::Write, fd, size })
-}
-
 #[repr(C)]
 struct UserMessageHeader {
     msg_name: *mut cty::c_void,
-    msg_namelen: cty::c_int,
+    msg_name_len: cty::c_int,
     msg_iov: *mut IoVec,
-    msg_iovlen: cty::c_long,
+    msg_iov_len: cty::c_long,
     msg_control: *mut cty::c_void,
-    msg_controllen: cty::c_long,
+    msg_control_len: cty::c_long,
     msg_flags: cty::c_int,
 }
 
@@ -180,11 +207,11 @@ fn kprobe_sendmsg(regs: Registers) {
 
     let mut message_header_ = UserMessageHeader {
         msg_name: ptr::null_mut(),
-        msg_namelen: 0,
+        msg_name_len: 0,
         msg_iov: ptr::null_mut(),
-        msg_iovlen: 0,
+        msg_iov_len: 0,
         msg_control: ptr::null_mut(),
-        msg_controllen: 0,
+        msg_control_len: 0,
         msg_flags: 0,
     };
     let _ = unsafe {
@@ -195,15 +222,15 @@ fn kprobe_sendmsg(regs: Registers) {
         )
     };
 
-    let data = unsafe { slice::from_raw_parts(message_header_.msg_control as *const u8, message_header_.msg_controllen as usize) };
-    send_data(data, |size| DataDescriptor { tag: DataTag::Ancillary, fd, size });
+    let data = unsafe { slice::from_raw_parts(message_header_.msg_control as *const u8, message_header_.msg_control_len as usize) };
+    send_data(data, |size| DataDescriptor { tag: DataTag::SendMsgAncillary, fd, size });
 
     let mut io_vec = IoVec {
         iov_base: ptr::null(),
         iov_len: 0,
     };
     for i in 0..4 {
-        if i >= message_header_.msg_iovlen {
+        if i >= message_header_.msg_iov_len {
             break;
         }
 
@@ -226,16 +253,48 @@ fn kprobe_connect(regs: Registers) {
     let buf = regs.parm2() as *const u8;
     let size = regs.parm3() as usize;
 
-    let data = unsafe { slice::from_raw_parts(buf, size) };
-    let mut address = [0; ADDRESS_SIZE];
-    unsafe { 
-        gen::bpf_probe_read_user(address.as_mut_ptr() as _, ADDRESS_SIZE as u32, data.as_ptr() as _);
+    let address = unsafe { slice::from_raw_parts(buf, size) };
+
+    let id = bpf_get_current_pid_tgid();
+    let mut context = SyscallRelevantContext::empty();
+    context = SyscallRelevantContext::Connect {
+        fd: fd,
+        address: address,
+    };
+    unsafe { syscall_contexts.set(&id, &context) }
+}
+
+#[kretprobe("__sys_connect")]
+fn kretprobe_connect(regs: Registers) {
+    if !regs.is_syscall_success() {
+        return;
     }
-    // AF_INET || AF_INET6
-    if (address[0] == 2 || address[0] == 10) && address[1] == 0 {
-        unsafe { outgoing_connections.set(&fd, &address) };
-        // 28 + 12
-        send_sized::<typenum::U40, _>(data, |size| DataDescriptor { tag: DataTag::Connect, fd, size })
+
+    let id = bpf_get_current_pid_tgid();
+    match unsafe { syscall_contexts.get(&id) } {
+        Some(&SyscallRelevantContext::Connect { ref fd, ref address }) => {
+            let fd = fd.clone();
+            let address = address.clone();
+
+            let mut tmp = [0; Address::RAW_SIZE];
+            let read = unsafe { 
+                gen::bpf_probe_read_user(
+                    tmp.as_mut_ptr() as _,
+                    tmp.len().min(address.len()) as u32,
+                    address.as_ptr() as _,
+                )
+            };
+
+            if let Ok(_) = Address::try_from(tmp.as_ref()) {
+                unsafe { outgoing_connections.set(&fd, &tmp) };
+                // Address::RAW_SIZE + DD == 40
+                send_sized::<typenum::U40, _>(address.as_ref(), |size| DataDescriptor { tag: DataTag::Connect, fd, size })
+            } else {
+                // ignore connection to other type of address
+                // track only ipv4 (af_inet) and ipv6 (af_inet6)
+            }
+        },
+        _ => (),
     }
 }
 

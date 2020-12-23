@@ -17,9 +17,9 @@ use std::sync::Arc;
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::system::syslog_producer::syslog_producer;
 
-use std::convert::TryFrom;
+use std::{convert::TryFrom, net::SocketAddr};
 use tokio::stream::StreamExt;
-use sniffer::{facade::Module, DataDescriptor};
+use sniffer::{facade::Module, DataDescriptor, DataTag, Address};
 
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
@@ -86,11 +86,26 @@ async fn main() -> Result<(), failure::Error> {
 
             if descriptor.size > 0 {
                 let data = &slice[12..(12 + (descriptor.size as usize))];
-                tracing::info!("intercept data: {:?}", descriptor);
-                tracing::info!("data: {:?}", hex::encode(data));
-                //let chunk_size = (data[0] as usize) * 256 + (data[1] as usize);
-                //if chunk_size + 2 == data.len() {
-                //}
+                match descriptor.tag {
+                    DataTag::Connect => {
+                        match Address::try_from(data) {
+                            Ok(address) => {
+                                let address = SocketAddr::from(address);
+                                tracing::info!("Connect: fd: {}, address: {}", descriptor.fd, address)
+                            },
+                            Err(()) => tracing::warn!("Connect: fd: {}, unknown address format", descriptor.fd),
+                        }
+                    },
+                    DataTag::Write => {
+                        if data.len() > 1 {
+                            let chunk_size = (data[0] as usize) * 256 + (data[1] as usize);
+                            if chunk_size + 2 == data.len() {
+                                tracing::info!("Write: fd: {}, data: {:?}", descriptor.fd, hex::encode(data));
+                            }
+                        }
+                    }
+                    _ => (),
+                }
             }
         }
     });

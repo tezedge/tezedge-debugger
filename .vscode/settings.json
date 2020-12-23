@@ -1,16 +1,21 @@
 {
     "cSpell.words": [
         "EMSGSIZE",
+        "Inet",
         "Shleft",
+        "Syscall",
         "concat",
         "kprobe",
         "kprobes",
+        "kretprobe",
+        "ksys",
         "redbpf",
         "regs",
         "repr",
         "ringbuf",
         "sendmsg",
         "sendto",
+        "tgid",
         "typenum"
     ]
 }
