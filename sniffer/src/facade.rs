@@ -1,4 +1,8 @@
-use std::{convert::TryFrom, fmt, mem, net::{SocketAddr, IpAddr}};
+use std::{
+    convert::TryFrom,
+    fmt, mem,
+    net::{SocketAddr, IpAddr},
+};
 use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer};
 use futures::stream::StreamExt;
 use super::{DataDescriptor, Address, bpf_code::CODE};
@@ -68,7 +72,12 @@ impl Module {
     }
 
     pub fn main_buffer(&self) -> RingBuffer {
-        let rb_map = self.0.maps.iter().find(|m| m.name == "main_buffer").unwrap();
+        let rb_map = self
+            .0
+            .maps
+            .iter()
+            .find(|m| m.name == "main_buffer")
+            .unwrap();
         RingBuffer::from_map(&rb_map).unwrap()
     }
 }

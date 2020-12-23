@@ -15,6 +15,16 @@ pub struct DataDescriptor {
     pub size: i32,
 }
 
+impl DataDescriptor {
+    pub fn ctor(fd: u32, tag: DataTag) -> impl FnOnce(i32) -> Self {
+        move |size| DataDescriptor {
+            tag: tag,
+            fd: fd,
+            size: size,
+        }
+    }
+}
+
 #[repr(u32)]
 #[derive(Debug)]
 pub enum DataTag {
@@ -74,32 +84,14 @@ impl TryFrom<&[u8]> for Address {
 pub enum SyscallRelevantContext {
     Empty,
 
-    Write {
-        fd: u32,
-        data: &'static [u8],
-    },
-    SendTo {
-        fd: u32,
-        data: &'static [u8],
-    },
-    SendMsg {
-        fd: u32,
-        message: &'static [u8],
-    },
+    Write { fd: u32, data: &'static [u8] },
+    SendTo { fd: u32, data: &'static [u8] },
+    SendMsg { fd: u32, message: &'static [u8] },
 
-    Read {
-        fd: u32,
-        data_ptr: usize,
-    },
-    RecvFrom {
-        fd: u32,
-        data_ptr: usize,
-    },
+    Read { fd: u32, data_ptr: usize },
+    RecvFrom { fd: u32, data_ptr: usize },
 
-    Connect {
-        fd: u32,
-        address: &'static [u8],
-    },
+    Connect { fd: u32, address: &'static [u8] },
 }
 
 impl SyscallRelevantContext {
