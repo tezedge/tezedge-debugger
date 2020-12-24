@@ -5,6 +5,10 @@ pub mod syslog_producer;
 pub mod rpc_parser;
 pub mod replayer;
 
+// new socket capturing system
+mod bpf_sniffer;
+pub use self::bpf_sniffer::build_bpf_sniffing_system;
+
 // old socket capturing system
 mod orchestrator;
 mod p2p_parser;

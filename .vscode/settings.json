@@ -5,6 +5,7 @@
         "Shleft",
         "Syscall",
         "concat",
+        "hashset",
         "kprobe",
         "kprobes",
         "kretprobe",

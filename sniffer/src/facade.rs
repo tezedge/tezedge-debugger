@@ -1,11 +1,11 @@
 use std::{
     convert::TryFrom,
-    fmt, mem,
+    mem,
     net::{SocketAddr, IpAddr},
 };
-use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer};
+use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, HashMap};
 use futures::stream::StreamExt;
-use super::{DataDescriptor, Address, bpf_code::CODE};
+use super::{DataDescriptor, DataTag, Address, bpf_code::CODE};
 
 pub struct Module(RawModule);
 
@@ -18,26 +18,98 @@ impl From<Address> for SocketAddr {
     }
 }
 
-impl TryFrom<&[u8]> for DataDescriptor {
-    type Error = ();
+pub enum SnifferEvent<'a> {
+    Write {
+        fd: u32,
+        data: &'a [u8],
+    },
+    Read {
+        fd: u32,
+        data: &'a [u8],
+    },
+    Connect {
+        fd: u32,
+        address: SocketAddr,
+    },
+    Close {
+        fd: u32,
+    },
+}
 
-    // TODO: rewrite safe
-    fn try_from(v: &[u8]) -> Result<Self, Self::Error> {
-        if v.len() >= mem::size_of::<DataDescriptor>() {
-            Ok(unsafe { std::ptr::read(v.as_ptr() as *const Self) })
-        } else {
-            Err(())
+#[derive(Debug)]
+pub enum SnifferError {
+    SliceTooShort(usize),
+    Write {
+        fd: u32,
+        code: SnifferErrorCode,
+    },
+    Read {
+        fd: u32,
+        code: SnifferErrorCode,
+    },
+    Connect {
+        fd: u32,
+    },
+}
+
+impl SnifferError {
+    fn code(fd: u32, code: i32, actual_length: usize) -> Result<u32, SnifferErrorCode> {
+        match code {
+            -14 => Err(SnifferErrorCode::Fault),
+            e if e < 0 => Err(SnifferErrorCode::Unknown(e)),
+            e if actual_length < (e as usize) =>
+                Err(SnifferErrorCode::SliceTooShort(actual_length, e as usize)),
+            _ => return Ok(fd),
         }
+    }
+
+    fn write(fd: u32, code: i32, actual_length: usize) -> Result<u32, Self> {
+        Self::code(fd, code, actual_length)
+            .map_err(|code| SnifferError::Write { fd, code })
+    }
+
+    fn read(fd: u32, code: i32, actual_length: usize) -> Result<u32, Self> {
+        Self::code(fd, code, actual_length)
+            .map_err(|code| SnifferError::Read { fd, code })
     }
 }
 
-impl fmt::Debug for DataDescriptor {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SnifferItem")
-            .field("tag", &self.tag)
-            .field("fd", &self.fd)
-            .field("size", &self.size)
-            .finish()
+#[derive(Debug)]
+pub enum SnifferErrorCode {
+    SliceTooShort(usize, usize),
+    Unknown(i32),
+    Fault,
+}
+
+impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
+    type Error = SnifferError;
+
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let descriptor = DataDescriptor::try_from(value)
+            .map_err(|()| SnifferError::SliceTooShort(value.len()))?;
+        let data = &value[mem::size_of::<DataDescriptor>()..];
+        match descriptor.tag {
+            DataTag::Write | DataTag::SendTo | DataTag::SendMsg => {
+                SnifferError::write(descriptor.fd, descriptor.size, data.len())
+                    .map(|fd| SnifferEvent::Write { fd, data })
+            },
+            DataTag::Read | DataTag::RecvFrom => {
+                SnifferError::read(descriptor.fd, descriptor.size, data.len())
+                    .map(|fd| SnifferEvent::Read { fd, data })
+            },
+            DataTag::Connect => {
+                Ok(SnifferEvent::Connect {
+                    fd: descriptor.fd,
+                    // should not fail, already checked inside bpf code
+                    address: Address::try_from(data).unwrap().into(),
+                })
+            },
+            DataTag::Close => {
+                Ok(SnifferEvent::Close {
+                    fd: descriptor.fd,
+                })
+            }
+        }
     }
 }
 
@@ -79,5 +151,14 @@ impl Module {
             .find(|m| m.name == "main_buffer")
             .unwrap();
         RingBuffer::from_map(&rb_map).unwrap()
+    }
+
+    fn outgoing_connections_map(&self) -> HashMap<u32, [u8; Address::RAW_SIZE]> {
+        let map = self.0.maps.iter().find(|m| m.name == "outgoing_connections").unwrap();
+        HashMap::new(map).unwrap()
+    }
+
+    pub fn ignore(&self, fd: u32) {
+        self.outgoing_connections_map().delete(fd);
     }
 }

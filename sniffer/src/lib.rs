@@ -1,12 +1,15 @@
 #![cfg_attr(feature = "probes", no_std)]
 
-use core::{convert::TryFrom, mem};
+use core::{convert::TryFrom, mem, ptr};
 
 #[cfg(feature = "facade")]
 pub mod facade;
 
 #[cfg(feature = "facade")]
 pub mod bpf_code;
+
+#[cfg(feature = "probes")]
+pub mod syscall_context;
 
 #[repr(C)]
 pub struct DataDescriptor {
@@ -25,13 +28,25 @@ impl DataDescriptor {
     }
 }
 
+impl TryFrom<&[u8]> for DataDescriptor {
+    type Error = ();
+
+    // TODO: rewrite safe
+    fn try_from(v: &[u8]) -> Result<Self, Self::Error> {
+        if v.len() >= mem::size_of::<Self>() {
+            Ok(unsafe { ptr::read(v.as_ptr() as *const Self) })
+        } else {
+            Err(())
+        }
+    }
+}
+
 #[repr(u32)]
 #[derive(Debug)]
 pub enum DataTag {
     Write,
     SendTo,
     SendMsg,
-    SendMsgAncillary,
 
     Read,
     RecvFrom,
@@ -78,25 +93,5 @@ impl TryFrom<&[u8]> for Address {
             }),
             _ => Err(()),
         }
-    }
-}
-
-pub enum SyscallRelevantContext {
-    Empty,
-
-    Write { fd: u32, data: &'static [u8] },
-    SendTo { fd: u32, data: &'static [u8] },
-    SendMsg { fd: u32, message: &'static [u8] },
-
-    Read { fd: u32, data_ptr: usize },
-    RecvFrom { fd: u32, data_ptr: usize },
-
-    Connect { fd: u32, address: &'static [u8] },
-}
-
-impl SyscallRelevantContext {
-    pub fn empty() -> Self {
-        let a = [0u8; mem::size_of::<Self>()];
-        unsafe { mem::transmute(a) }
     }
 }

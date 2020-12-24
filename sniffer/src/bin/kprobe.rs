@@ -3,14 +3,17 @@
 #![cfg(feature = "probes")]
 
 use redbpf_probes::kprobe::prelude::*;
-use redbpf_probes::helpers::{gen, bpf_get_current_pid_tgid};
+use redbpf_probes::helpers::gen;
 use typenum::{Unsigned, Bit, Shleft};
 use core::{mem, ptr, slice, convert::TryFrom};
-use sniffer::{DataDescriptor, DataTag, Address, SyscallRelevantContext};
+use sniffer::{DataDescriptor, DataTag, Address, syscall_context::SyscallContext};
 
 program!(0xFFFFFFFE, "GPL");
 
 const DD: usize = mem::size_of::<DataDescriptor>();
+
+// HashMap need to store something
+type HashSet<T> = HashMap<T, u32>;
 
 #[map]
 static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x40000000); // 1GiB buffer
@@ -19,12 +22,17 @@ static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x40000000); //
 // one thread can do no more then one syscall simultaneously
 // max entries is the maximal number of processors on target machine, let's define 64
 #[map]
-static mut syscall_contexts: HashMap<u64, SyscallRelevantContext> = HashMap::with_max_entries(64);
+static mut syscall_contexts: HashMap<u64, SyscallContext> = HashMap::with_max_entries(64);
 
 // connected socket ipv6 ocaml
 #[map]
 static mut outgoing_connections: HashMap<u32, [u8; Address::RAW_SIZE]> =
     HashMap::with_max_entries(0x1000);
+
+// each bpf map is safe to access from multiple threads
+fn syscall_contexts_map() -> &'static mut HashMap<u64, SyscallContext> {
+    unsafe { &mut syscall_contexts }
+}
 
 #[inline(always)]
 fn send_sized<S, K, C>(data: &[u8], header_ctor: C)
@@ -139,161 +147,113 @@ where
 #[kprobe("ksys_write")]
 fn kprobe_write(regs: Registers) {
     let fd = regs.parm1() as u32;
-    let buf = regs.parm2() as *const u8;
-    let size = regs.parm3() as usize;
+    let data_ptr = regs.parm2() as usize;
 
     if unsafe { outgoing_connections.get(&fd).is_none() } {
         return;
     }
 
-    let data = unsafe { slice::from_raw_parts(buf, size) };
-
-    let id = bpf_get_current_pid_tgid();
-    let mut context = SyscallRelevantContext::empty();
-    context = SyscallRelevantContext::Write { fd: fd, data: data };
-    unsafe { syscall_contexts.set(&id, &context) }
+    let mut context = SyscallContext::empty();
+    context = SyscallContext::Write { fd, data_ptr };
+    context.push(syscall_contexts_map())
 }
 
 #[kretprobe("ksys_write")]
 fn kretprobe_write(regs: Registers) {
-    if !regs.is_syscall_success() {
-        return;
-    }
-
-    let id = bpf_get_current_pid_tgid();
-    match unsafe { syscall_contexts.get(&id) } {
-        Some(SyscallRelevantContext::Write { ref fd, ref data }) => {
-            let fd = fd.clone();
-            let data = data.clone();
-
-            send_data::<typenum::B0, _>(data, DataDescriptor::ctor(fd, DataTag::Write))
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+        SyscallContext::Write { fd, data_ptr } => {
+            let written = (unsafe { &*regs.ctx }).ax as usize;
+            if regs.is_syscall_success() && written as i64 > 0 {
+                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written) };
+                send_data::<typenum::B0, _>(data, DataDescriptor::ctor(fd, DataTag::Write))
+            }
         },
         _ => (),
-    }
+    });
 }
 
 #[kprobe("ksys_read")]
 fn kprobe_read(regs: Registers) {
     let fd = regs.parm1() as u32;
-    let buf = regs.parm2() as *mut u8;
+    let data_ptr = regs.parm2() as usize;
 
     if unsafe { outgoing_connections.get(&fd).is_none() } {
         return;
     }
 
-    let id = bpf_get_current_pid_tgid();
-    let mut context = SyscallRelevantContext::empty();
-    context = SyscallRelevantContext::Read {
-        fd: fd,
-        data_ptr: buf as usize,
-    };
-    unsafe { syscall_contexts.set(&id, &context) }
+    let mut context = SyscallContext::empty();
+    context = SyscallContext::Read { fd, data_ptr };
+    context.push(syscall_contexts_map())
 }
 
 #[kretprobe("ksys_read")]
 fn kretprobe_read(regs: Registers) {
-    if !regs.is_syscall_success() {
-        return;
-    }
-
-    let id = bpf_get_current_pid_tgid();
-    match unsafe { syscall_contexts.get(&id) } {
-        Some(SyscallRelevantContext::Read {
-            ref fd,
-            ref data_ptr,
-        }) => {
-            let fd = fd.clone();
-            let data_ptr = (*data_ptr) as *const u8;
-            let read = (unsafe { &*regs.ctx }).r8 as usize;
-
-            if read == 0 || (read as i64) < 0 {
-                return;
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+        SyscallContext::Read { fd, data_ptr } => {
+            let read = (unsafe { &*regs.ctx }).ax as usize;
+            if regs.is_syscall_success() && read as i64 > 0 {
+                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read) };
+                send_data::<typenum::B0, _>(data, DataDescriptor::ctor(fd, DataTag::Read))
             }
-            let data = unsafe { slice::from_raw_parts(data_ptr, read) };
-            send_data::<typenum::B0, _>(data, DataDescriptor::ctor(fd, DataTag::Read))
         },
         _ => (),
-    }
+    });
 }
 
 #[kprobe("__sys_sendto")]
 fn kprobe_sendto(regs: Registers) {
     let fd = regs.parm1() as u32;
-    let buf = regs.parm2() as *const u8;
-    let size = regs.parm3() as usize;
+    let data_ptr = regs.parm2() as usize;
 
     if unsafe { outgoing_connections.get(&fd).is_none() } {
         return;
     }
 
-    let data = unsafe { slice::from_raw_parts(buf, size) };
-
-    let id = bpf_get_current_pid_tgid();
-    let mut context = SyscallRelevantContext::empty();
-    context = SyscallRelevantContext::SendTo { fd: fd, data: data };
-    unsafe { syscall_contexts.set(&id, &context) }
+    let mut context = SyscallContext::empty();
+    context = SyscallContext::SendTo { fd, data_ptr };
+    context.push(syscall_contexts_map())
 }
 
 #[kretprobe("__sys_sendto")]
 fn kretprobe_sendto(regs: Registers) {
-    if !regs.is_syscall_success() {
-        return;
-    }
-
-    let id = bpf_get_current_pid_tgid();
-    match unsafe { syscall_contexts.get(&id) } {
-        Some(SyscallRelevantContext::SendTo { ref fd, ref data }) => {
-            let fd = fd.clone();
-            let data = data.clone();
-
-            send_data::<typenum::B0, _>(data, DataDescriptor::ctor(fd, DataTag::SendTo))
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+        SyscallContext::SendTo { fd, data_ptr } => {
+            let written = (unsafe { &*regs.ctx }).ax as usize;
+            if regs.is_syscall_success() && written as i64 > 0 {
+                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written) };
+                send_data::<typenum::B0, _>(data, DataDescriptor::ctor(fd, DataTag::SendTo))
+            }
         },
         _ => (),
-    }
+    });
 }
 
 #[kprobe("__sys_recvfrom")]
 fn kprobe_recvfrom(regs: Registers) {
     let fd = regs.parm1() as u32;
-    let buf = regs.parm2() as *mut u8;
+    let data_ptr = regs.parm2() as usize;
 
     if unsafe { outgoing_connections.get(&fd).is_none() } {
         return;
     }
 
-    let id = bpf_get_current_pid_tgid();
-    let mut context = SyscallRelevantContext::empty();
-    context = SyscallRelevantContext::RecvFrom {
-        fd: fd,
-        data_ptr: buf as usize,
-    };
-    unsafe { syscall_contexts.set(&id, &context) }
+    let mut context = SyscallContext::empty();
+    context = SyscallContext::RecvFrom { fd, data_ptr };
+    context.push(syscall_contexts_map())
 }
 
 #[kretprobe("__sys_recvfrom")]
 fn kretprobe_recvfrom(regs: Registers) {
-    if !regs.is_syscall_success() {
-        return;
-    }
-
-    let id = bpf_get_current_pid_tgid();
-    match unsafe { syscall_contexts.get(&id) } {
-        Some(SyscallRelevantContext::RecvFrom {
-            ref fd,
-            ref data_ptr,
-        }) => {
-            let fd = fd.clone();
-            let data_ptr = (*data_ptr) as *const u8;
-            let read = (unsafe { &*regs.ctx }).r8 as usize;
-
-            if read == 0 || (read as i64) < 0 {
-                return;
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+        SyscallContext::RecvFrom { fd, data_ptr } => {
+            let read = (unsafe { &*regs.ctx }).ax as usize;
+            if regs.is_syscall_success() && read as i64 > 0 {
+                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read) };
+                send_data::<typenum::B0, _>(data, DataDescriptor::ctor(fd, DataTag::RecvFrom))
             }
-            let data = unsafe { slice::from_raw_parts(data_ptr, read) };
-            send_data::<typenum::B0, _>(data, DataDescriptor::ctor(fd, DataTag::RecvFrom))
         },
         _ => (),
-    }
+    });
 }
 
 #[repr(C)]
@@ -339,6 +299,8 @@ fn kprobe_sendmsg(regs: Registers) {
         )
     };
 
+    // let's ignore it
+    /*
     let data = unsafe {
         slice::from_raw_parts(
             message_header_.msg_control as *const u8,
@@ -346,6 +308,7 @@ fn kprobe_sendmsg(regs: Registers) {
         )
     };
     send_data::<typenum::B0, _>(data, DataDescriptor::ctor(fd, DataTag::SendMsgAncillary));
+    */
 
     let mut io_vec = IoVec {
         iov_base: ptr::null(),
@@ -378,51 +341,38 @@ fn kprobe_connect(regs: Registers) {
 
     let address = unsafe { slice::from_raw_parts(buf, size) };
 
-    let id = bpf_get_current_pid_tgid();
-    let mut context = SyscallRelevantContext::empty();
-    context = SyscallRelevantContext::Connect {
-        fd: fd,
-        address: address,
-    };
-    unsafe { syscall_contexts.set(&id, &context) }
+    let mut context = SyscallContext::empty();
+    context = SyscallContext::Connect { fd, address };
+    context.push(syscall_contexts_map())
 }
 
 #[kretprobe("__sys_connect")]
 fn kretprobe_connect(regs: Registers) {
-    if !regs.is_syscall_success() {
-        return;
-    }
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+        SyscallContext::Connect { fd, address } => {
+            let read = (unsafe { &*regs.ctx }).ax as usize;
+            if regs.is_syscall_success() && read as i64 > 0 {
+                let mut tmp = [0xff; Address::RAW_SIZE];
+                unsafe {
+                    gen::bpf_probe_read_user(
+                        tmp.as_mut_ptr() as _,
+                        tmp.len().min(address.len()) as u32,
+                        address.as_ptr() as _,
+                    )
+                };
 
-    let id = bpf_get_current_pid_tgid();
-    match unsafe { syscall_contexts.get(&id) } {
-        Some(&SyscallRelevantContext::Connect {
-            ref fd,
-            ref address,
-        }) => {
-            let fd = fd.clone();
-            let address = address.clone();
-
-            let mut tmp = [0; Address::RAW_SIZE];
-            let read = unsafe {
-                gen::bpf_probe_read_user(
-                    tmp.as_mut_ptr() as _,
-                    tmp.len().min(address.len()) as u32,
-                    address.as_ptr() as _,
-                )
-            };
-
-            if let Ok(_) = Address::try_from(tmp.as_ref()) {
-                unsafe { outgoing_connections.set(&fd, &tmp) };
-                let c = DataDescriptor::ctor(fd, DataTag::Connect);
-                // Address::RAW_SIZE + DD == 40
-                send_sized::<typenum::U40, typenum::B0, _>(address.as_ref(), c)
-            } else {
-                // ignore connection to other type of address
-                // track only ipv4 (af_inet) and ipv6 (af_inet6)
+                if let Ok(_) = Address::try_from(tmp.as_ref()) {
+                    unsafe { outgoing_connections.set(&fd, &tmp) };
+                    // Address::RAW_SIZE + DD == 40
+                    send_sized::<typenum::U40, typenum::B0, _>(address, DataDescriptor::ctor(fd, DataTag::Connect))
+                } else {
+                    // ignore connection to other type of address
+                    // track only ipv4 (af_inet) and ipv6 (af_inet6)
+                }
             }
         },
         _ => (),
-    }
+    });
 }
 
 #[kprobe("__close_fd")]
@@ -432,7 +382,7 @@ fn kprobe_close(regs: Registers) {
     if unsafe { outgoing_connections.get(&fd).is_none() } {
         return;
     }
-
     unsafe { outgoing_connections.delete(&fd) };
+
     send_sized::<typenum::U12, typenum::B0, _>(&[], DataDescriptor::ctor(fd, DataTag::Close))
 }

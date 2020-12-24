@@ -17,10 +17,6 @@ use std::sync::Arc;
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::system::syslog_producer::syslog_producer;
 
-use std::{convert::TryFrom, net::SocketAddr};
-use tokio::stream::StreamExt;
-use sniffer::{facade::Module, DataDescriptor, DataTag, Address};
-
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
     let storage_path = format!("/tmp/volume/{}", get_ts());
@@ -77,41 +73,6 @@ async fn main() -> Result<(), failure::Error> {
         .with_max_level(Level::INFO)
         .init();
 
-    tokio::spawn(async move {
-        let (module, _events) = Module::load();
-        let mut events = module.main_buffer();
-        while let Some(event) = events.next().await {
-            let slice = event.as_ref();
-            let descriptor = DataDescriptor::try_from(slice).unwrap();
-
-            if descriptor.size >= 0 {
-                let data = &slice[12..(12 + (descriptor.size as usize))];
-                match descriptor.tag {
-                    DataTag::Connect => {
-                        match Address::try_from(data) {
-                            Ok(address) => {
-                                let address = SocketAddr::from(address);
-                                tracing::info!("Connect: fd: {}, address: {}", descriptor.fd, address)
-                            },
-                            Err(()) => tracing::warn!("Connect: fd: {}, unknown address format", descriptor.fd),
-                        }
-                    },
-                    DataTag::Write | DataTag::SendTo | DataTag::Read | DataTag::RecvFrom => {
-                        if data.len() > 1 {
-                            let chunk_size = (data[0] as usize) * 256 + (data[1] as usize);
-                            if chunk_size + 2 == data.len() {
-                                tracing::info!("{:?}: fd: {}, data: {:?}", descriptor.tag, descriptor.fd, hex::encode(data));
-                            }
-                        }
-                    },
-                    _ => (),
-                }
-            } else {
-                //tracing::error!("{:?}", descriptor);
-            }
-        }
-    });
-
     // Identify the local address
     let local_address = if let Some(ip_addr) = get_local_ip() {
         ip_addr
@@ -153,8 +114,8 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     // Create actual system
-    /*{
-        use tezedge_debugger::system::build_raw_socket_system;
+    {
+        /*use tezedge_debugger::system::build_raw_socket_system;
         match build_raw_socket_system(settings.clone()) {
             Ok(_) => {
                 info!("system built");
@@ -163,16 +124,18 @@ async fn main() -> Result<(), failure::Error> {
                 error!(error = tracing::field::display(&err), "failed to build system");
                 exit(1);
             }
-        }    
-    }*/
+        }   */
+        use tezedge_debugger::system::build_bpf_sniffing_system;
+        build_bpf_sniffing_system(settings.clone());
+    }
 
     // Spawn warp RPC server
-    /*tokio::spawn(async move {
+    tokio::spawn(async move {
         use tezedge_debugger::endpoints::routes;
         warp::serve(routes(storage))
             .run(([0, 0, 0, 0], settings.rpc_port))
             .await;
-    });*/
+    });
 
     // Wait for SIGTERM signal
     if let Err(err) = tokio::signal::ctrl_c().await {
