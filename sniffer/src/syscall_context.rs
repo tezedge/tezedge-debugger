@@ -25,18 +25,6 @@ impl SyscallContext {
         }
     }
 
-    fn fd(&self) -> &u32 {
-        match self {
-            &SyscallContext::Empty { ref fake_fd, .. } => fake_fd,
-            &SyscallContext::Write { ref fd, .. } => fd,
-            &SyscallContext::SendTo { ref fd, .. } => fd,
-            &SyscallContext::SendMsg { ref fd, .. } => fd,
-            &SyscallContext::Read { ref fd, .. } => fd,
-            &SyscallContext::RecvFrom { ref fd, .. } => fd,
-            &SyscallContext::Connect { ref fd, .. } => fd,
-        }
-    }
-
     pub fn push(self, map: &mut HashMap<u64, SyscallContext>) {
         let id = helpers::bpf_get_current_pid_tgid();
         map.set(&id, &self)

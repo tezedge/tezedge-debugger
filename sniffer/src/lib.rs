@@ -1,6 +1,6 @@
 #![cfg_attr(feature = "probes", no_std)]
 
-use core::{convert::TryFrom, mem, ptr};
+use core::convert::TryFrom;
 
 #[cfg(feature = "facade")]
 pub mod facade;
@@ -9,51 +9,15 @@ pub mod facade;
 pub mod bpf_code;
 
 #[cfg(feature = "probes")]
-pub mod syscall_context;
+mod syscall_context;
+#[cfg(feature = "probes")]
+pub use self::syscall_context::SyscallContext;
 
-#[repr(C)]
-pub struct DataDescriptor {
-    pub tag: DataTag,
-    pub fd: u32,
-    pub size: i32,
-}
+#[cfg(feature = "probes")]
+pub mod send;
 
-impl DataDescriptor {
-    pub fn ctor(fd: u32, tag: DataTag) -> impl FnOnce(i32) -> Self {
-        move |size| DataDescriptor {
-            tag: tag,
-            fd: fd,
-            size: size,
-        }
-    }
-}
-
-impl TryFrom<&[u8]> for DataDescriptor {
-    type Error = ();
-
-    // TODO: rewrite safe
-    fn try_from(v: &[u8]) -> Result<Self, Self::Error> {
-        if v.len() >= mem::size_of::<Self>() {
-            Ok(unsafe { ptr::read(v.as_ptr() as *const Self) })
-        } else {
-            Err(())
-        }
-    }
-}
-
-#[repr(u32)]
-#[derive(Debug)]
-pub enum DataTag {
-    Write,
-    SendTo,
-    SendMsg,
-
-    Read,
-    RecvFrom,
-
-    Connect,
-    Close,
-}
+mod data_descriptor;
+pub use self::data_descriptor::{DataDescriptor, DataTag};
 
 pub enum Address {
     Inet {
