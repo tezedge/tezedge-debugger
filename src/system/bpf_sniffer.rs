@@ -11,11 +11,11 @@ pub fn build_bpf_sniffing_system(settings: SystemSettings) {
         while let Some(event) = events.next().await {
             match SnifferEvent::try_from(event.as_ref()) {
                 Err(e) => tracing::error!("{:?}", e),
-                Ok(SnifferEvent::Write { fd, data }) => {
-                    tracing::info!("Write: fd: {}, data: {:?}", fd, data.len());
+                Ok(SnifferEvent::Write { .. }) => {
+                    //tracing::info!("Write: fd: {}, data: {:?}", fd, data.len());
                 },
-                Ok(SnifferEvent::Read { fd, data }) => {
-                    tracing::info!("Read: fd: {}, data: {:?}", fd, data.len());
+                Ok(SnifferEvent::Read { .. }) => {
+                    //tracing::info!("Read: fd: {}, data: {:?}", fd, data.len());
                 },
                 Ok(SnifferEvent::Connect { fd, address }) => {
                     tracing::info!("Connect: fd: {}, address: {}", fd, address);
@@ -23,6 +23,9 @@ pub fn build_bpf_sniffing_system(settings: SystemSettings) {
                         module.ignore(fd);
                         tracing::info!("Ignoring: fd: {}, address: {}", fd, address);
                     }
+                },
+                Ok(SnifferEvent::LocalAddress { fd, address }) => {
+                    tracing::info!("LocalAddress: fd: {}, address: {}", fd, address);
                 },
                 Ok(SnifferEvent::Close { fd }) => {
                     tracing::info!("Close: fd: {}", fd);

@@ -5,6 +5,7 @@
         "Shleft",
         "Syscall",
         "concat",
+        "getsockname",
         "hashset",
         "kprobe",
         "kprobes",

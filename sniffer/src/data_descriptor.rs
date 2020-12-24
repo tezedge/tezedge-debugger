@@ -31,5 +31,6 @@ pub enum DataTag {
     RecvFrom,
 
     Connect,
+    SocketName,
     Close,
 }

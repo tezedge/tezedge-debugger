@@ -33,6 +33,10 @@ pub enum SyscallContext {
         fd: u32,
         address: &'static [u8],
     },
+    SocketName {
+        fd: u32,
+        address: &'static [u8],
+    },
 }
 
 impl SyscallContext {

@@ -22,6 +22,7 @@ pub enum SnifferEvent<'a> {
     Write { fd: u32, data: &'a [u8] },
     Read { fd: u32, data: &'a [u8] },
     Connect { fd: u32, address: SocketAddr },
+    LocalAddress { fd: u32, address: SocketAddr },
     Close { fd: u32 },
 }
 
@@ -84,6 +85,13 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
                     address: Address::try_from(data).unwrap().into(),
                 })
             },
+            DataTag::SocketName => {
+                Ok(SnifferEvent::LocalAddress {
+                    fd: descriptor.fd,
+                    // should not fail, already checked inside bpf code
+                    address: Address::try_from(data).unwrap().into(),
+                })
+            },
             DataTag::Close => Ok(SnifferEvent::Close { fd: descriptor.fd }),
         }
     }
@@ -129,7 +137,7 @@ impl Module {
         RingBuffer::from_map(&rb_map).unwrap()
     }
 
-    fn outgoing_connections_map(&self) -> HashMap<u32, [u8; Address::RAW_SIZE]> {
+    fn outgoing_connections_map(&self) -> HashMap<u32, u32> {
         let map = self
             .0
             .maps
