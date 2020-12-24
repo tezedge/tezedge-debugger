@@ -3,7 +3,7 @@
 #![cfg(feature = "probes")]
 
 use redbpf_probes::kprobe::prelude::*;
-use redbpf_probes::helpers::gen;
+use redbpf_probes::helpers;
 use core::{mem, ptr, slice, convert::TryFrom};
 use sniffer::{DataDescriptor, DataTag, Address, SyscallContext, send};
 
@@ -70,9 +70,9 @@ fn kprobe_write(regs: Registers) {
 fn kretprobe_write(regs: Registers) {
     SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::Write { fd, data_ptr } => {
-            let written = (unsafe { &*regs.ctx }).ax as usize;
+            let written = regs.rc();
             if regs.is_syscall_success() && written as i64 > 0 {
-                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written) };
+                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
                 send::dyn_sized::<typenum::B0>(DataTag::Write, fd, data, rb())
             }
         },
@@ -98,9 +98,9 @@ fn kprobe_read(regs: Registers) {
 fn kretprobe_read(regs: Registers) {
     SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::Read { fd, data_ptr } => {
-            let read = (unsafe { &*regs.ctx }).ax as usize;
+            let read = regs.rc();
             if regs.is_syscall_success() && read as i64 > 0 {
-                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read) };
+                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
                 send::dyn_sized::<typenum::B0>(DataTag::Read, fd, data, rb())
             }
         },
@@ -126,9 +126,9 @@ fn kprobe_sendto(regs: Registers) {
 fn kretprobe_sendto(regs: Registers) {
     SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::SendTo { fd, data_ptr } => {
-            let written = (unsafe { &*regs.ctx }).ax as usize;
+            let written = regs.rc();
             if regs.is_syscall_success() && written as i64 > 0 {
-                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written) };
+                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
                 send::dyn_sized::<typenum::B0>(DataTag::SendTo, fd, data, rb())
             }
         },
@@ -154,9 +154,9 @@ fn kprobe_recvfrom(regs: Registers) {
 fn kretprobe_recvfrom(regs: Registers) {
     SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::RecvFrom { fd, data_ptr } => {
-            let read = (unsafe { &*regs.ctx }).ax as usize;
+            let read = regs.rc();
             if regs.is_syscall_success() && read as i64 > 0 {
-                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read) };
+                let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
                 send::dyn_sized::<typenum::B0>(DataTag::RecvFrom, fd, data, rb())
             }
         },
@@ -166,11 +166,11 @@ fn kretprobe_recvfrom(regs: Registers) {
 
 #[repr(C)]
 struct UserMessageHeader {
-    msg_name: *mut cty::c_void,
+    msg_name: *const cty::c_void,
     msg_name_len: cty::c_int,
-    msg_iov: *mut IoVec,
+    msg_iov: *const IoVec,
     msg_iov_len: cty::c_long,
-    msg_control: *mut cty::c_void,
+    msg_control: *const cty::c_void,
     msg_control_len: cty::c_long,
     msg_flags: cty::c_int,
 }
@@ -184,34 +184,22 @@ struct IoVec {
 #[kprobe("__sys_sendmsg")]
 fn kprobe_sendmsg(regs: Registers) {
     let fd = regs.parm1() as u32;
-    let message_header = regs.parm2() as *const cty::c_void;
+    let header = regs.parm2() as *const UserMessageHeader;
 
     if !is_outgoing(&fd) {
         return;
     }
 
-    let mut message_header_ = UserMessageHeader {
-        msg_name: ptr::null_mut(),
-        msg_name_len: 0,
-        msg_iov: ptr::null_mut(),
-        msg_iov_len: 0,
-        msg_control: ptr::null_mut(),
-        msg_control_len: 0,
-        msg_flags: 0,
-    };
-    let _ = unsafe {
-        gen::bpf_probe_read_user(
-            &mut message_header_ as *mut UserMessageHeader as *mut _,
-            mem::size_of::<UserMessageHeader>() as u32,
-            message_header,
-        )
+    let header = match unsafe { helpers::bpf_probe_read_user(header) } {
+        Ok(header) => header,
+        Err(_) => return,
     };
 
     /*
     let data = unsafe {
         slice::from_raw_parts(
-            message_header_.msg_control as *const u8,
-            message_header_.msg_control_len as usize,
+            header.msg_control as *const u8,
+            header.msg_control_len as usize,
         )
     };
     // send it if needed
@@ -222,20 +210,15 @@ fn kprobe_sendmsg(regs: Registers) {
         iov_len: 0,
     };
     for i in 0..4 {
-        if i >= message_header_.msg_iov_len {
+        if i >= header.msg_iov_len as isize {
             break;
         }
 
-        let _ = unsafe {
-            gen::bpf_probe_read_user(
-                &mut io_vec as *mut IoVec as *mut _,
-                mem::size_of::<IoVec>() as u32,
-                ((message_header_.msg_iov as usize) + mem::size_of::<IoVec>() * (i as usize))
-                    as *mut _,
-            )
+        let data = match unsafe { helpers::bpf_probe_read_user(header.msg_iov.offset(i)) } {
+            Ok(v) => unsafe { slice::from_raw_parts(v.iov_base as *const u8, v.iov_len) },
+            Err(_) => return,
         };
 
-        let data = unsafe { slice::from_raw_parts(io_vec.iov_base as *const u8, io_vec.iov_len) };
         send::dyn_sized::<typenum::B0>(DataTag::SendMsg, fd, data, rb())
     }
 }
@@ -257,8 +240,7 @@ fn kprobe_connect(regs: Registers) {
 fn kretprobe_connect(regs: Registers) {
     SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::Connect { fd, address } => {
-            let read = (unsafe { &*regs.ctx }).ax as usize;
-            if regs.is_syscall_success() && read as i64 > 0 {
+            if regs.is_syscall_success() && regs.rc() as i64 > 0 {
                 let mut tmp = [0xff; Address::RAW_SIZE];
                 unsafe {
                     gen::bpf_probe_read_user(
@@ -270,7 +252,7 @@ fn kretprobe_connect(regs: Registers) {
 
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
                     reg_outgoing(&fd);
-                    // Address::RAW_SIZE + DD == 40
+                    // Address::RAW_SIZE + size of DataDescriptor == 40
                     send::sized::<typenum::U40, typenum::B0>(DataTag::Connect, fd, address, rb())
                 } else {
                     // ignore connection to other type of address

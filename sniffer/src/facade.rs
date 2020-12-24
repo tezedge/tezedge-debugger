@@ -19,37 +19,18 @@ impl From<Address> for SocketAddr {
 }
 
 pub enum SnifferEvent<'a> {
-    Write {
-        fd: u32,
-        data: &'a [u8],
-    },
-    Read {
-        fd: u32,
-        data: &'a [u8],
-    },
-    Connect {
-        fd: u32,
-        address: SocketAddr,
-    },
-    Close {
-        fd: u32,
-    },
+    Write { fd: u32, data: &'a [u8] },
+    Read { fd: u32, data: &'a [u8] },
+    Connect { fd: u32, address: SocketAddr },
+    Close { fd: u32 },
 }
 
 #[derive(Debug)]
 pub enum SnifferError {
     SliceTooShort(usize),
-    Write {
-        fd: u32,
-        code: SnifferErrorCode,
-    },
-    Read {
-        fd: u32,
-        code: SnifferErrorCode,
-    },
-    Connect {
-        fd: u32,
-    },
+    Write { fd: u32, code: SnifferErrorCode },
+    Read { fd: u32, code: SnifferErrorCode },
+    Connect { fd: u32 },
 }
 
 impl SnifferError {
@@ -57,20 +38,19 @@ impl SnifferError {
         match code {
             -14 => Err(SnifferErrorCode::Fault),
             e if e < 0 => Err(SnifferErrorCode::Unknown(e)),
-            e if actual_length < (e as usize) =>
-                Err(SnifferErrorCode::SliceTooShort(actual_length, e as usize)),
+            e if actual_length < (e as usize) => {
+                Err(SnifferErrorCode::SliceTooShort(actual_length, e as usize))
+            },
             _ => return Ok(fd),
         }
     }
 
     fn write(fd: u32, code: i32, actual_length: usize) -> Result<u32, Self> {
-        Self::code(fd, code, actual_length)
-            .map_err(|code| SnifferError::Write { fd, code })
+        Self::code(fd, code, actual_length).map_err(|code| SnifferError::Write { fd, code })
     }
 
     fn read(fd: u32, code: i32, actual_length: usize) -> Result<u32, Self> {
-        Self::code(fd, code, actual_length)
-            .map_err(|code| SnifferError::Read { fd, code })
+        Self::code(fd, code, actual_length).map_err(|code| SnifferError::Read { fd, code })
     }
 }
 
@@ -104,11 +84,7 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
                     address: Address::try_from(data).unwrap().into(),
                 })
             },
-            DataTag::Close => {
-                Ok(SnifferEvent::Close {
-                    fd: descriptor.fd,
-                })
-            }
+            DataTag::Close => Ok(SnifferEvent::Close { fd: descriptor.fd }),
         }
     }
 }
@@ -154,7 +130,12 @@ impl Module {
     }
 
     fn outgoing_connections_map(&self) -> HashMap<u32, [u8; Address::RAW_SIZE]> {
-        let map = self.0.maps.iter().find(|m| m.name == "outgoing_connections").unwrap();
+        let map = self
+            .0
+            .maps
+            .iter()
+            .find(|m| m.name == "outgoing_connections")
+            .unwrap();
         HashMap::new(map).unwrap()
     }
 
