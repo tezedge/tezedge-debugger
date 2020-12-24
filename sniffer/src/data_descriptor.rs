@@ -6,7 +6,7 @@ pub struct DataDescriptor {
     pub size: i32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct EventId {
     pub pid: u32,
     pub fd: u32,

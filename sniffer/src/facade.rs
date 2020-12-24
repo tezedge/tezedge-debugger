@@ -34,22 +34,22 @@ pub enum SnifferError {
 }
 
 impl SnifferError {
-    fn code(id: EventId, code: i32, actual_length: usize) -> Result<EventId, SnifferErrorCode> {
+    fn code(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), SnifferErrorCode> {
         match code {
             -14 => Err(SnifferErrorCode::Fault),
             e if e < 0 => Err(SnifferErrorCode::Unknown(e)),
             e if actual_length < (e as usize) => {
                 Err(SnifferErrorCode::SliceTooShort(actual_length, e as usize))
             },
-            _ => return Ok(id),
+            _ => return Ok((id, code as usize)),
         }
     }
 
-    fn write(id: EventId, code: i32, actual_length: usize) -> Result<EventId, Self> {
+    fn write(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
         Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Write { id, code })
     }
 
-    fn read(id: EventId, code: i32, actual_length: usize) -> Result<EventId, Self> {
+    fn read(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
         Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Read { id, code })
     }
 }
@@ -71,11 +71,11 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
         match descriptor.tag {
             DataTag::Write | DataTag::SendTo | DataTag::SendMsg => {
                 SnifferError::write(descriptor.id, descriptor.size, data.len())
-                    .map(|id| SnifferEvent::Write { id, data })
+                    .map(|(id, size)| SnifferEvent::Write { id, data: &data[..size] })
             },
             DataTag::Read | DataTag::RecvFrom => {
                 SnifferError::read(descriptor.id, descriptor.size, data.len())
-                    .map(|id| SnifferEvent::Read { id, data })
+                    .map(|(id, size)| SnifferEvent::Read { id, data: &data[..size] })
             },
             DataTag::Connect => {
                 Ok(SnifferEvent::Connect {

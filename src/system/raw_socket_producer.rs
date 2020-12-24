@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{io, env, net::{SocketAddr, IpAddr}};
+use std::{io, env, net::{SocketAddr, IpAddr}, fmt};
 use crate::system::{
     orchestrator::spawn_packet_orchestrator,
     SystemSettings,
@@ -24,6 +24,19 @@ pub struct P2pPacket {
     pub is_opening: bool,
     pub payload: Vec<u8>,
     pub counter: u64,
+}
+
+impl fmt::Display for P2pPacket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("P2pPacket")
+            .field("source_address", &self.source_address)
+            .field("destination_address", &self.destination_address)
+            .field("is_closing", &self.is_closing)
+            .field("is_opening", &self.is_opening)
+            .field("payload", &hex::encode(self.payload.as_slice()))
+            .field("counter", &self.counter)
+            .finish()
+    }
 }
 
 fn handle_tcp(counter: u64, settings: &SystemSettings, source: IpAddr, destination: IpAddr, payload: &[u8]) -> Option<P2pPacket> {
