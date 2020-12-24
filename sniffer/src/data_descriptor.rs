@@ -1,10 +1,15 @@
 use core::{mem, ptr, convert::TryFrom};
 
-#[repr(C)]
 pub struct DataDescriptor {
+    pub id: EventId,
     pub tag: DataTag,
-    pub fd: u32,
     pub size: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct EventId {
+    pub pid: u32,
+    pub fd: u32,
 }
 
 impl TryFrom<&[u8]> for DataDescriptor {

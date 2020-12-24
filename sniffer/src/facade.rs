@@ -5,7 +5,7 @@ use std::{
 };
 use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, HashMap};
 use futures::stream::StreamExt;
-use super::{DataDescriptor, DataTag, Address, bpf_code::CODE};
+use super::{EventId, DataDescriptor, DataTag, Address, bpf_code::CODE};
 
 pub struct Module(RawModule);
 
@@ -19,39 +19,38 @@ impl From<Address> for SocketAddr {
 }
 
 pub enum SnifferEvent<'a> {
-    Write { fd: u32, data: &'a [u8] },
-    Read { fd: u32, data: &'a [u8] },
-    Connect { fd: u32, address: SocketAddr },
-    LocalAddress { fd: u32, address: SocketAddr },
-    Close { fd: u32 },
+    Write { id: EventId, data: &'a [u8] },
+    Read { id: EventId, data: &'a [u8] },
+    Connect { id: EventId, address: SocketAddr },
+    LocalAddress { id: EventId, address: SocketAddr },
+    Close { id: EventId },
 }
 
 #[derive(Debug)]
 pub enum SnifferError {
     SliceTooShort(usize),
-    Write { fd: u32, code: SnifferErrorCode },
-    Read { fd: u32, code: SnifferErrorCode },
-    Connect { fd: u32 },
+    Write { id: EventId, code: SnifferErrorCode },
+    Read { id: EventId, code: SnifferErrorCode },
 }
 
 impl SnifferError {
-    fn code(fd: u32, code: i32, actual_length: usize) -> Result<u32, SnifferErrorCode> {
+    fn code(id: EventId, code: i32, actual_length: usize) -> Result<EventId, SnifferErrorCode> {
         match code {
             -14 => Err(SnifferErrorCode::Fault),
             e if e < 0 => Err(SnifferErrorCode::Unknown(e)),
             e if actual_length < (e as usize) => {
                 Err(SnifferErrorCode::SliceTooShort(actual_length, e as usize))
             },
-            _ => return Ok(fd),
+            _ => return Ok(id),
         }
     }
 
-    fn write(fd: u32, code: i32, actual_length: usize) -> Result<u32, Self> {
-        Self::code(fd, code, actual_length).map_err(|code| SnifferError::Write { fd, code })
+    fn write(id: EventId, code: i32, actual_length: usize) -> Result<EventId, Self> {
+        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Write { id, code })
     }
 
-    fn read(fd: u32, code: i32, actual_length: usize) -> Result<u32, Self> {
-        Self::code(fd, code, actual_length).map_err(|code| SnifferError::Read { fd, code })
+    fn read(id: EventId, code: i32, actual_length: usize) -> Result<EventId, Self> {
+        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Read { id, code })
     }
 }
 
@@ -71,28 +70,28 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
         let data = &value[mem::size_of::<DataDescriptor>()..];
         match descriptor.tag {
             DataTag::Write | DataTag::SendTo | DataTag::SendMsg => {
-                SnifferError::write(descriptor.fd, descriptor.size, data.len())
-                    .map(|fd| SnifferEvent::Write { fd, data })
+                SnifferError::write(descriptor.id, descriptor.size, data.len())
+                    .map(|id| SnifferEvent::Write { id, data })
             },
             DataTag::Read | DataTag::RecvFrom => {
-                SnifferError::read(descriptor.fd, descriptor.size, data.len())
-                    .map(|fd| SnifferEvent::Read { fd, data })
+                SnifferError::read(descriptor.id, descriptor.size, data.len())
+                    .map(|id| SnifferEvent::Read { id, data })
             },
             DataTag::Connect => {
                 Ok(SnifferEvent::Connect {
-                    fd: descriptor.fd,
+                    id: descriptor.id,
                     // should not fail, already checked inside bpf code
                     address: Address::try_from(data).unwrap().into(),
                 })
             },
             DataTag::SocketName => {
                 Ok(SnifferEvent::LocalAddress {
-                    fd: descriptor.fd,
+                    id: descriptor.id,
                     // should not fail, already checked inside bpf code
                     address: Address::try_from(data).unwrap().into(),
                 })
             },
-            DataTag::Close => Ok(SnifferEvent::Close { fd: descriptor.fd }),
+            DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
         }
     }
 }

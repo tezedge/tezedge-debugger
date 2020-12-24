@@ -1,4 +1,5 @@
 use redbpf_probes::{maps::HashMap, helpers};
+use super::data_descriptor::EventId;
 
 #[derive(Clone)]
 pub enum SyscallContext {
@@ -50,6 +51,19 @@ impl SyscallContext {
         }
     }
 
+    fn fd(&self) -> u32 {
+        match self {
+            &SyscallContext::Empty { ref fake_fd, .. } => *fake_fd,
+            &SyscallContext::Write { ref fd, .. } => *fd,
+            &SyscallContext::SendTo { ref fd, .. } => *fd,
+            &SyscallContext::SendMsg { ref fd, .. } => *fd,
+            &SyscallContext::Read { ref fd, .. } => *fd,
+            &SyscallContext::RecvFrom { ref fd, .. } => *fd,
+            &SyscallContext::Connect { ref fd, .. } => *fd,
+            &SyscallContext::SocketName { ref fd, .. } => *fd,
+        }
+    }
+
     pub fn push(self, map: &mut HashMap<u64, SyscallContext>) {
         let id = helpers::bpf_get_current_pid_tgid();
         map.set(&id, &self)
@@ -57,12 +71,16 @@ impl SyscallContext {
 
     pub fn pop_with<F>(map: &mut HashMap<u64, SyscallContext>, f: F)
     where
-        F: FnOnce(Self),
+        F: FnOnce(Self, EventId),
     {
         let id = helpers::bpf_get_current_pid_tgid();
         match map.get(&id) {
             Some(context) => {
-                f(context.clone());
+                let eid = EventId {
+                    pid: (id & 0xffffffff) as u32,
+                    fd: context.fd(),
+                };
+                f(context.clone(), eid);
                 map.delete(&id);
             },
             None => (),

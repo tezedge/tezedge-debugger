@@ -1,9 +1,9 @@
 use core::{mem, ptr};
 use typenum::{Unsigned, Bit, Shleft};
 use redbpf_probes::{maps::RingBuffer, helpers::gen};
-use super::data_descriptor::{DataDescriptor, DataTag};
+use super::data_descriptor::{EventId, DataDescriptor, DataTag};
 
-pub fn sized<S, K>(tag: DataTag, fd: u32, data: &[u8], rb: &mut RingBuffer)
+pub fn sized<S, K>(id: EventId, tag: DataTag, data: &[u8], rb: &mut RingBuffer)
 where
     S: Unsigned,
     K: Bit,
@@ -38,7 +38,7 @@ where
         } else {
             result as i32
         };
-        let descriptor = DataDescriptor { tag, fd, size };
+        let descriptor = DataDescriptor { id, tag, size };
         unsafe {
             ptr::write(buffer.0.as_ptr() as *mut _, descriptor);
         }
@@ -48,7 +48,7 @@ where
 
     // failed to allocate buffer, try allocate smaller buffer to report error
     if let Ok(buffer) = rb.reserve(mem::size_of::<DataDescriptor>() as u64, 0) {
-        let descriptor = DataDescriptor { tag, fd, size: -90 };
+        let descriptor = DataDescriptor { id, tag, size: -90 };
         unsafe {
             ptr::write(buffer.0.as_ptr() as *mut _, descriptor);
         }
@@ -56,54 +56,54 @@ where
     }
 }
 
-pub fn dyn_sized<K>(tag: DataTag, fd: u32, data: &[u8], rb: &mut RingBuffer)
+pub fn dyn_sized<K>(id: EventId, tag: DataTag, data: &[u8], rb: &mut RingBuffer)
 where
     K: Bit,
 {
     let length_to_send = data.len() + mem::size_of::<DataDescriptor>();
     if length_to_send <= Shleft::<typenum::U1, typenum::U8>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U8>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U8>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U9>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U9>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U9>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U10>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U10>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U10>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U11>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U11>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U11>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U12>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U12>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U12>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U13>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U13>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U13>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U14>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U14>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U14>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U15>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U15>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U15>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U16>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U16>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U16>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U17>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U17>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U17>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U18>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U18>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U18>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U19>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U19>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U19>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U20>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U20>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U20>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U21>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U21>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U21>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U22>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U22>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U22>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U23>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U23>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U23>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U24>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U24>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U24>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U25>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U25>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U25>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U26>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U26>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U26>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U27>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U27>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U27>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U28>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U28>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U28>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U29>::USIZE {
-        sized::<Shleft<typenum::U1, typenum::U29>, K>(tag, fd, data, rb)
+        sized::<Shleft<typenum::U1, typenum::U29>, K>(id, tag, data, rb)
     }
 }

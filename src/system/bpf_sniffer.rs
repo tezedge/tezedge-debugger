@@ -12,23 +12,23 @@ pub fn build_bpf_sniffing_system(settings: SystemSettings) {
             match SnifferEvent::try_from(event.as_ref()) {
                 Err(e) => tracing::error!("{:?}", e),
                 Ok(SnifferEvent::Write { .. }) => {
-                    //tracing::info!("Write: fd: {}, data: {:?}", fd, data.len());
+                    //tracing::info!("Write: id: {:?}, data: {:?}", id, data.len());
                 },
                 Ok(SnifferEvent::Read { .. }) => {
-                    //tracing::info!("Read: fd: {}, data: {:?}", fd, data.len());
+                    //tracing::info!("Read: id: {:?}, data: {:?}", id, data.len());
                 },
-                Ok(SnifferEvent::Connect { fd, address }) => {
-                    tracing::info!("Connect: fd: {}, address: {}", fd, address);
+                Ok(SnifferEvent::Connect { id, address }) => {
+                    tracing::info!("Connect: id: {:?}, address: {}", id, address);
                     if should_ignore(&settings, &address) {
-                        module.ignore(fd);
-                        tracing::info!("Ignoring: fd: {}, address: {}", fd, address);
+                        module.ignore(id.fd);
+                        tracing::info!("Ignoring: id: {:?}, address: {}", id, address);
                     }
                 },
-                Ok(SnifferEvent::LocalAddress { fd, address }) => {
-                    tracing::info!("LocalAddress: fd: {}, address: {}", fd, address);
+                Ok(SnifferEvent::LocalAddress { id, address }) => {
+                    tracing::info!("LocalAddress: id: {:?}, address: {}", id, address);
                 },
-                Ok(SnifferEvent::Close { fd }) => {
-                    tracing::info!("Close: fd: {}", fd);
+                Ok(SnifferEvent::Close { id }) => {
+                    tracing::info!("Close: id: {:?}", id);
                 },
             }
         }

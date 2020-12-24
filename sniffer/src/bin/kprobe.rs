@@ -5,7 +5,7 @@
 use redbpf_probes::kprobe::prelude::*;
 use redbpf_probes::helpers;
 use core::{mem, ptr, slice, convert::TryFrom};
-use sniffer::{DataDescriptor, DataTag, Address, SyscallContext, send};
+use sniffer::{EventId, DataDescriptor, DataTag, Address, SyscallContext, send};
 
 program!(0xFFFFFFFE, "GPL");
 
@@ -68,12 +68,12 @@ fn kprobe_write(regs: Registers) {
 
 #[kretprobe("ksys_write")]
 fn kretprobe_write(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
         SyscallContext::Write { fd, data_ptr } => {
             let written = regs.rc();
             if regs.is_syscall_success() && written as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
-                send::dyn_sized::<typenum::B0>(DataTag::Write, fd, data, rb())
+                send::dyn_sized::<typenum::B0>(id, DataTag::Write, data, rb())
             }
         },
         _ => (),
@@ -96,12 +96,12 @@ fn kprobe_read(regs: Registers) {
 
 #[kretprobe("ksys_read")]
 fn kretprobe_read(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
         SyscallContext::Read { fd, data_ptr } => {
             let read = regs.rc();
             if regs.is_syscall_success() && read as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
-                send::dyn_sized::<typenum::B0>(DataTag::Read, fd, data, rb())
+                send::dyn_sized::<typenum::B0>(id, DataTag::Read, data, rb())
             }
         },
         _ => (),
@@ -124,12 +124,12 @@ fn kprobe_sendto(regs: Registers) {
 
 #[kretprobe("__sys_sendto")]
 fn kretprobe_sendto(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
         SyscallContext::SendTo { fd, data_ptr } => {
             let written = regs.rc();
             if regs.is_syscall_success() && written as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
-                send::dyn_sized::<typenum::B0>(DataTag::SendTo, fd, data, rb())
+                send::dyn_sized::<typenum::B0>(id, DataTag::SendTo, data, rb())
             }
         },
         _ => (),
@@ -152,19 +152,19 @@ fn kprobe_recvfrom(regs: Registers) {
 
 #[kretprobe("__sys_recvfrom")]
 fn kretprobe_recvfrom(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
         SyscallContext::RecvFrom { fd, data_ptr } => {
             let read = regs.rc();
             if regs.is_syscall_success() && read as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
-                send::dyn_sized::<typenum::B0>(DataTag::RecvFrom, fd, data, rb())
+                send::dyn_sized::<typenum::B0>(id, DataTag::RecvFrom, data, rb())
             }
         },
         _ => (),
     });
 }
 
-#[repr(C)]
+/*#[repr(C)]
 struct UserMessageHeader {
     msg_name: *const cty::c_void,
     msg_name_len: cty::c_int,
@@ -183,6 +183,8 @@ struct IoVec {
 
 #[kprobe("__sys_sendmsg")]
 fn kprobe_sendmsg(regs: Registers) {
+    let id = helpers::bpf_get_current_pid_tgid();
+
     let fd = regs.parm1() as u32;
     let header = regs.parm2() as *const UserMessageHeader;
 
@@ -219,9 +221,13 @@ fn kprobe_sendmsg(regs: Registers) {
             Err(_) => return,
         };
 
-        send::dyn_sized::<typenum::B0>(DataTag::SendMsg, fd, data, rb())
+        let id = EventId {
+            pid: (id & 0xffffffff) as u32,
+            fd: fd,
+        };
+        send::dyn_sized::<typenum::B0>(id, DataTag::SendMsg, data, rb())
     }
-}
+}*/
 
 #[kprobe("__sys_connect")]
 fn kprobe_connect(regs: Registers) {
@@ -238,7 +244,7 @@ fn kprobe_connect(regs: Registers) {
 
 #[kretprobe("__sys_connect")]
 fn kretprobe_connect(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
         SyscallContext::Connect { fd, address } => {
             if regs.is_syscall_success() && regs.rc() as i64 > 0 {
                 let mut tmp = [0xff; Address::RAW_SIZE];
@@ -252,8 +258,8 @@ fn kretprobe_connect(regs: Registers) {
 
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
                     reg_outgoing(&fd);
-                    // Address::RAW_SIZE + size of DataDescriptor == 40
-                    send::sized::<typenum::U40, typenum::B0>(DataTag::Connect, fd, address, rb())
+                    // Address::RAW_SIZE + size of DataDescriptor == 44
+                    send::sized::<typenum::U44, typenum::B0>(id, DataTag::Connect, address, rb())
                 } else {
                     // ignore connection to other type of address
                     // track only ipv4 (af_inet) and ipv6 (af_inet6)
@@ -283,7 +289,7 @@ fn kprobe_getsockname(regs: Registers) {
 
 #[kretprobe("__sys_getsockname")]
 fn kretprobe_getsockname(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
         SyscallContext::SocketName { fd, address } => {
             if regs.is_syscall_success() && regs.rc() as i64 > 0 {
                 let mut tmp = [0xff; Address::RAW_SIZE];
@@ -296,8 +302,8 @@ fn kretprobe_getsockname(regs: Registers) {
                 };
 
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
-                    // Address::RAW_SIZE + size of DataDescriptor == 40
-                    send::sized::<typenum::U40, typenum::B0>(DataTag::SocketName, fd, address, rb())
+                    // Address::RAW_SIZE + size of DataDescriptor == 44
+                    send::sized::<typenum::U44, typenum::B0>(id, DataTag::SocketName, address, rb())
                 } else {
                     // ignore connection to other type of address
                     // track only ipv4 (af_inet) and ipv6 (af_inet6)
@@ -314,6 +320,12 @@ fn kprobe_close(regs: Registers) {
 
     if is_outgoing(&fd) {
         forget_outgoing(&fd);
-        send::sized::<typenum::U12, typenum::B0>(DataTag::Close, fd, &[], rb())
+
+        let id = helpers::bpf_get_current_pid_tgid();
+        let id = EventId {
+            pid: (id & 0xffffffff) as u32,
+            fd: fd,
+        };
+        send::sized::<typenum::U16, typenum::B0>(id, DataTag::Close, &[], rb())
     }
 }
