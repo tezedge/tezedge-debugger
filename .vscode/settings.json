@@ -4,6 +4,7 @@
         "Inet",
         "Shleft",
         "Syscall",
+        "Tezos",
         "concat",
         "getsockname",
         "hashset",

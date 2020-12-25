@@ -3,7 +3,6 @@
 
 use std::{net::IpAddr, string::ToString, net::SocketAddr};
 use tokio::sync::mpsc;
-use tracing::{trace, error, warn};
 use tezos_messages::p2p::{
     encoding::{
         connection::ConnectionMessage,
@@ -15,6 +14,7 @@ use tezos_messages::p2p::{
 };
 use tezos_encoding::binary_reader::BinaryReaderError;
 use tezos_conversation::{Conversation, Packet, ConsumeResult, Identity, ChunkInfoPair, ChunkMetadata, Sender};
+use sniffer::EventId;
 use crate::{
     system::{SystemSettings, raw_socket_producer::P2pPacket},
     messages::{p2p_message::{P2pMessage, SourceType, TezosPeerMessage, PartialPeerMessage, HandshakeMessage}},
@@ -31,7 +31,7 @@ pub fn spawn_p2p_parser(
         let identity = Identity::from_json(&identity_json).unwrap();
         let mut parser = Parser::new(settings.local_address.clone(), receiver, processor_sender, identity);
         while parser.parse_next().await {
-            trace!("parsed new message");
+            tracing::trace!("parsed new message");
         }
     });
     sender
@@ -90,11 +90,28 @@ impl Parser {
         }
     }
 
+    fn report(&mut self, error: String, event_id: Option<EventId>) {
+        if !self.reported_error {
+            if let Some(event_id) = event_id {
+                tracing::info!("{:?}", event_id);
+            }
+            tracing::warn!("{}", error);
+            self.reported_error = true;
+        } else {
+            if let Some(event_id) = event_id {
+                tracing::trace!("{:?}", event_id);
+            }
+            tracing::trace!("{}", error);
+        }
+    }
+
     pub async fn parse_next(&mut self) -> bool {
         match self.receiver.recv().await {
             Some(packet) => {
+                let is_closing = packet.is_closing;
+                let event_id = packet.event_id;
                 if packet.payload.is_empty() {
-                    return true;
+                    return !is_closing;
                 }
                 let packet = Packet {
                     source: packet.source_address,
@@ -125,7 +142,7 @@ impl Parser {
                     Sender::Responder => if incoming { SourceType::Local } else { SourceType::Remote },
                 };
                 match result {
-                    ConsumeResult::Pending => true,
+                    ConsumeResult::Pending => (),
                     ConsumeResult::ConnectionMessage(chunk_info) => {
                         let message = ConnectionMessage::from_bytes(&chunk_info.data()[2..])
                             .map(HandshakeMessage::ConnectionMessage)
@@ -140,24 +157,32 @@ impl Parser {
                             message,
                         );
                         if let Err(err) = self.sender.send(p2p_msg) {
-                            error!(error = tracing::field::display(&err), "processor channel closed abruptly");
+                            if let Some(event_id) = event_id {
+                                tracing::info!("{:?}", event_id);
+                            }
+                            tracing::error!(error = tracing::field::display(&err), "processor channel closed abruptly");
                             return false;
                         }
                         self.inc(incoming);
+                        if let Some(event_id) = event_id {
+                            tracing::info!("{:?}", event_id);
+                        }
                         tracing::info!("connection message {}", remote_addr);
-                        true
                     },
                     ConsumeResult::Chunks { regular, failed_to_decrypt } => {
                         for ChunkInfoPair { encrypted, decrypted } in regular {
                             let length = decrypted.data().len();
                             if length < 18 {
-                                error!("the chunk is too small");
-                                return true;
+                                if let Some(event_id) = event_id {
+                                    tracing::info!("{:?}", event_id);
+                                }
+                                tracing::error!("the chunk is too small");
+                                return !is_closing;
                             }
                             let content = &decrypted.data()[2..(length - 16)];
                             let message = match self.chunk(incoming) {
                                 0 => {
-                                    warn!("Connection message should not come here");
+                                    tracing::warn!("Connection message should not come here");
                                     ConnectionMessage::from_bytes(&decrypted.data()[2..])
                                         .map(HandshakeMessage::ConnectionMessage)
                                         .map(TezosPeerMessage::HandshakeMessage)
@@ -202,7 +227,10 @@ impl Parser {
                                 message,
                             );
                             if let Err(err) = self.sender.send(p2p_msg) {
-                                error!(error = tracing::field::display(&err), "processor channel closed abruptly");
+                                if let Some(event_id) = event_id {
+                                    tracing::info!("{:?}", event_id);
+                                }
+                                tracing::error!(error = tracing::field::display(&err), "processor channel closed abruptly");
                                 return false;
                             }
                             self.inc(incoming);
@@ -217,36 +245,35 @@ impl Parser {
                                 Err("cannot decrypt".to_string()),
                             );
                             if let Err(err) = self.sender.send(p2p_msg) {
-                                error!(error = tracing::field::display(&err), "processor channel closed abruptly");
+                                if let Some(event_id) = event_id {
+                                    tracing::info!("{:?}", event_id);
+                                }
+                                tracing::error!(error = tracing::field::display(&err), "processor channel closed abruptly");
                                 return false;
                             }
                             self.inc(incoming);
                         }
-                        if !failed_to_decrypt.is_empty() && !self.reported_error {
-                            tracing::warn!("cannot decrypt: {}", remote_addr);
-                            self.reported_error = true;
+                        if !failed_to_decrypt.is_empty() {
+                            self.report(format!("cannot decrypt: {}", remote_addr), event_id)
                         }
-                        true
                     },
                     ConsumeResult::NoDecipher(_) => {
-                        warn!("identity wrong");
-                        true
+                        self.report(format!("identity wrong, payload: {}", hex::encode(packet.payload.as_slice())), event_id);
                     },
                     ConsumeResult::PowInvalid => {
-                        warn!("received connection message with wrong pow, maybe foreign packet");
-                        true
+                        self.report("received connection message with wrong pow, maybe foreign packet".to_string(), event_id);
                     },
                     ConsumeResult::UnexpectedChunks | ConsumeResult::InvalidConversation => {
-                        warn!("probably foreign packet");
-                        true
+                        self.report("probably foreign packet".to_string(), event_id);
                     },
-                }
+                };
+                !is_closing
             }
             None => {
                 if let Some(remote_addr) = self.remote_addr {
-                    error!("p2p parser channel closed abruptly, remote address: {}", remote_addr);
+                    tracing::error!("p2p parser channel closed abruptly, remote address: {}", remote_addr);
                 } else {
-                    error!("p2p parser channel closed abruptly");
+                    tracing::error!("p2p parser channel closed abruptly");
                 }
                 false
             }

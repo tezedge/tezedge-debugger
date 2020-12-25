@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use std::{io, env, net::{SocketAddr, IpAddr}, fmt};
+use sniffer::EventId;
 use crate::system::{
     orchestrator::spawn_packet_orchestrator,
     SystemSettings,
@@ -24,6 +25,7 @@ pub struct P2pPacket {
     pub is_opening: bool,
     pub payload: Vec<u8>,
     pub counter: u64,
+    pub event_id: Option<EventId>,
 }
 
 impl fmt::Display for P2pPacket {
@@ -60,6 +62,7 @@ fn handle_tcp(counter: u64, settings: &SystemSettings, source: IpAddr, destinati
             is_opening: (tcp.get_flags() & TcpFlags::SYN) != 0,
             payload: tcp.payload().to_vec(),
             counter,
+            event_id: None,
         };
         if !packet.payload.is_empty() {
             tracing::trace!(

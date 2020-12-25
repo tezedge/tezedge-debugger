@@ -10,7 +10,8 @@ struct Connection {
 }
 
 impl Connection {
-    fn regular(&mut self, write: bool, data: &[u8], local: SocketAddr, counter: u64) -> P2pPacket {
+    fn regular(&mut self, write: bool, data: &[u8], settings: &SystemSettings, id: &EventId, counter: u64) -> P2pPacket {
+        let local = fake(settings, id);
         let remote = self.remote_address.clone();
         let is_opening = self.is_opening;
         self.is_opening = false;
@@ -21,10 +22,12 @@ impl Connection {
             is_opening: is_opening,
             payload: data.to_vec(),
             counter: counter,
+            event_id: Some(id.clone()),
         }
     }
 
-    fn closing(self, local: SocketAddr, counter: u64) -> P2pPacket {
+    fn closing(self, settings: &SystemSettings, id: &EventId, counter: u64) -> P2pPacket {
+        let local = fake(settings, id);
         P2pPacket {
             source_address: local,
             destination_address: self.remote_address,
@@ -32,6 +35,7 @@ impl Connection {
             is_opening: self.is_opening,
             payload: vec![],
             counter: counter,
+            event_id: Some(id.clone()),
         }
     }
 }
@@ -56,11 +60,11 @@ pub fn build_bpf_sniffing_system(settings: SystemSettings) {
                 },
                 Ok(SnifferEvent::Write { id, data }) => {
                     connections.get_mut(&id)
-                        .map(|c| c.regular(true, data, fake(&settings, &id), counter))
+                        .map(|c| c.regular(true, data, &settings, &id, counter))
                 },
                 Ok(SnifferEvent::Read { id, data }) => {
                     connections.get_mut(&id)
-                        .map(|c| c.regular(false, data, fake(&settings, &id), counter))
+                        .map(|c| c.regular(false, data, &settings, &id, counter))
                 },
                 Ok(SnifferEvent::Connect { id, address }) => {
                     tracing::info!("P2P Connect {{ id: {:?}, address: {} }}", id, address);
@@ -74,7 +78,7 @@ pub fn build_bpf_sniffing_system(settings: SystemSettings) {
                             is_opening: true,
                         };
                         connections.insert(id.clone(), connection)
-                            .map(|connection| connection.closing(fake(&settings, &id), counter))
+                            .map(|c| c.closing(&settings, &id, counter))
                     }
                 },
                 Ok(SnifferEvent::LocalAddress { .. }) => {
@@ -83,7 +87,7 @@ pub fn build_bpf_sniffing_system(settings: SystemSettings) {
                 Ok(SnifferEvent::Close { id }) => {
                     tracing::info!("Close {{ id: {:?} }}", id);
                     connections.remove(&id)
-                        .map(|connection| connection.closing(fake(&settings, &id), counter))
+                        .map(|c| c.closing(&settings, &id, counter))
                 },
             };
             if let Some(packet) = packet {
