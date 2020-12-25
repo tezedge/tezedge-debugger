@@ -25,7 +25,7 @@ static mut syscall_contexts: HashMap<u64, SyscallContext> = HashMap::with_max_en
 
 // connected socket ipv6 ocaml
 #[map]
-static mut outgoing_connections: HashSet<u32> = HashSet::with_max_entries(0x1000);
+static mut outgoing_connections: HashSet<EventId> = HashSet::with_max_entries(0x1000);
 
 // each bpf map is safe to access from multiple threads
 fn syscall_contexts_map() -> &'static mut HashMap<u64, SyscallContext> {
@@ -36,20 +36,28 @@ fn rb() -> &'static mut RingBuffer {
     unsafe { &mut main_buffer }
 }
 
-fn reg_outgoing(fd: &u32) {
-    unsafe { outgoing_connections.set(fd, &1) };
+fn reg_outgoing(id: &EventId) {
+    unsafe { outgoing_connections.set(id, &1) };
 }
 
-fn is_outgoing(fd: &u32) -> bool {
-    if let Some(c) = unsafe { outgoing_connections.get(fd) } {
+fn is_outgoing(id: &EventId) -> bool {
+    if let Some(c) = unsafe { outgoing_connections.get(id) } {
         *c == 1
     } else {
         false
     }
 }
 
-fn forget_outgoing(fd: &u32) {
-    unsafe { outgoing_connections.delete(fd) };
+fn forget_outgoing(id: &EventId) {
+    unsafe { outgoing_connections.delete(id) };
+}
+
+fn id(fd: u32) -> EventId {
+    let id = helpers::bpf_get_current_pid_tgid();
+    EventId {
+        pid: (id & 0xffffffff) as u32,
+        fd: fd,
+    }
 }
 
 #[kprobe("ksys_write")]
@@ -57,7 +65,7 @@ fn kprobe_write(regs: Registers) {
     let fd = regs.parm1() as u32;
     let data_ptr = regs.parm2() as usize;
 
-    if !is_outgoing(&fd) {
+    if !is_outgoing(&id(fd)) {
         return;
     }
 
@@ -85,7 +93,7 @@ fn kprobe_read(regs: Registers) {
     let fd = regs.parm1() as u32;
     let data_ptr = regs.parm2() as usize;
 
-    if !is_outgoing(&fd) {
+    if !is_outgoing(&id(fd)) {
         return;
     }
 
@@ -113,7 +121,7 @@ fn kprobe_sendto(regs: Registers) {
     let fd = regs.parm1() as u32;
     let data_ptr = regs.parm2() as usize;
 
-    if !is_outgoing(&fd) {
+    if !is_outgoing(&id(fd)) {
         return;
     }
 
@@ -141,7 +149,7 @@ fn kprobe_recvfrom(regs: Registers) {
     let fd = regs.parm1() as u32;
     let data_ptr = regs.parm2() as usize;
 
-    if !is_outgoing(&fd) {
+    if !is_outgoing(&id(fd)) {
         return;
     }
 
@@ -183,12 +191,10 @@ struct IoVec {
 
 #[kprobe("__sys_sendmsg")]
 fn kprobe_sendmsg(regs: Registers) {
-    let id = helpers::bpf_get_current_pid_tgid();
-
     let fd = regs.parm1() as u32;
     let header = regs.parm2() as *const UserMessageHeader;
 
-    if !is_outgoing(&fd) {
+    if !is_outgoing(&id(fd)) {
         return;
     }
 
@@ -221,11 +227,7 @@ fn kprobe_sendmsg(regs: Registers) {
             Err(_) => return,
         };
 
-        let id = EventId {
-            pid: (id & 0xffffffff) as u32,
-            fd: fd,
-        };
-        send::dyn_sized::<typenum::B0>(id, DataTag::SendMsg, data, rb())
+        send::dyn_sized::<typenum::B0>(id(fd), DataTag::SendMsg, data, rb())
     }
 }*/
 
@@ -257,7 +259,7 @@ fn kretprobe_connect(regs: Registers) {
                 };
 
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
-                    reg_outgoing(&fd);
+                    reg_outgoing(&id);
                     // Address::RAW_SIZE + size of DataDescriptor == 44
                     send::sized::<typenum::U44, typenum::B0>(id, DataTag::Connect, address, rb())
                 } else {
@@ -278,7 +280,7 @@ fn kprobe_getsockname(regs: Registers) {
 
     let address = unsafe { slice::from_raw_parts(buf, size) };
 
-    if !is_outgoing(&fd) {
+    if !is_outgoing(&id(fd)) {
         return;
     }
 
@@ -318,14 +320,10 @@ fn kretprobe_getsockname(regs: Registers) {
 fn kprobe_close(regs: Registers) {
     let fd = regs.parm1() as u32;
 
-    if is_outgoing(&fd) {
-        forget_outgoing(&fd);
 
-        let id = helpers::bpf_get_current_pid_tgid();
-        let id = EventId {
-            pid: (id & 0xffffffff) as u32,
-            fd: fd,
-        };
-        send::sized::<typenum::U16, typenum::B0>(id, DataTag::Close, &[], rb())
+    if is_outgoing(&id(fd)) {
+        forget_outgoing(&id(fd));
+
+        send::sized::<typenum::U16, typenum::B0>(id(fd), DataTag::Close, &[], rb())
     }
 }

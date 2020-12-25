@@ -136,7 +136,7 @@ impl Module {
         RingBuffer::from_map(&rb_map).unwrap()
     }
 
-    fn outgoing_connections_map(&self) -> HashMap<u32, u32> {
+    fn outgoing_connections_map(&self) -> HashMap<EventId, u32> {
         let map = self
             .0
             .maps
@@ -146,7 +146,7 @@ impl Module {
         HashMap::new(map).unwrap()
     }
 
-    pub fn ignore(&self, fd: u32) {
-        self.outgoing_connections_map().delete(fd);
+    pub fn ignore(&self, id: EventId) {
+        self.outgoing_connections_map().delete(id);
     }
 }

@@ -7,13 +7,14 @@ pub mod replayer;
 
 // new socket capturing system
 mod bpf_sniffer;
-pub use self::bpf_sniffer::build_bpf_sniffing_system;
+mod p2p;
+pub use self::bpf_sniffer::BpfSniffer;
+mod processor;
 
 // old socket capturing system
 mod orchestrator;
 mod p2p_parser;
 mod raw_socket_producer;
-mod processor;
 
 // old socket capturing system
 pub use self::orchestrator::CONNECTIONS;

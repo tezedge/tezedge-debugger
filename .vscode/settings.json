@@ -20,6 +20,7 @@
         "sendmsg",
         "sendto",
         "tgid",
-        "typenum"
+        "typenum",
+        "userspace"
     ]
 }

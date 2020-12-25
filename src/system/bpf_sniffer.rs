@@ -1,112 +1,122 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::{convert::TryFrom, net::{IpAddr, SocketAddr}, collections::HashMap};
-use tokio::stream::StreamExt;
+use tokio::{stream::StreamExt, sync::mpsc};
 use sniffer::{EventId, facade::{Module, SnifferEvent}};
 
-use super::{SystemSettings, orchestrator::spawn_packet_orchestrator, raw_socket_producer::P2pPacket};
+use super::{SystemSettings, p2p, processor};
+use crate::messages::p2p_message::{P2pMessage, SourceType};
 
-struct Connection {
-    remote_address: SocketAddr,
-    is_opening: bool,
+pub struct BpfSniffer {
+    module: Module,
+    settings: SystemSettings,
+    connections: HashMap<EventId, mpsc::UnboundedSender<p2p::Message>>,
+    counter: u64,
 }
 
-impl Connection {
-    fn regular(&mut self, write: bool, data: &[u8], settings: &SystemSettings, id: &EventId, counter: u64) -> P2pPacket {
-        let local = fake(settings, id);
-        let remote = self.remote_address.clone();
-        let is_opening = self.is_opening;
-        self.is_opening = false;
-        P2pPacket {
-            source_address: if write { local } else { remote },
-            destination_address: if write { remote } else { local },
-            is_closing: false,
-            is_opening: is_opening,
-            payload: data.to_vec(),
-            counter: counter,
-            event_id: Some(id.clone()),
-        }
-    }
-
-    fn closing(self, settings: &SystemSettings, id: &EventId, counter: u64) -> P2pPacket {
-        let local = fake(settings, id);
-        P2pPacket {
-            source_address: local,
-            destination_address: self.remote_address,
-            is_closing: true,
-            is_opening: self.is_opening,
-            payload: vec![],
-            counter: counter,
-            event_id: Some(id.clone()),
-        }
-    }
-}
-
-fn fake(settings: &SystemSettings, id: &EventId) -> SocketAddr {
-    let port = 3 << 14 | ((id.pid & 0x7f) << 7) as u16 | (id.fd & 0x7f) as u16;
-    SocketAddr::new(settings.local_address.clone(), port)
-}
-
-pub fn build_bpf_sniffing_system(settings: SystemSettings) {
-    let orchestrator = spawn_packet_orchestrator(settings.clone());
-    tokio::spawn(async move {
+impl BpfSniffer {
+    pub fn new(settings: &SystemSettings) -> Self {
         let (module, _events) = Module::load();
-        let mut events = module.main_buffer();
-        let mut connections = HashMap::<EventId, Connection>::new();
-        let mut counter = 1u64;
-        while let Some(event) = events.next().await {
-            let packet = match SnifferEvent::try_from(event.as_ref()) {
-                Err(e) => {
-                    tracing::error!("{:?}", e);
-                    None
-                },
-                Ok(SnifferEvent::Write { id, data }) => {
-                    connections.get_mut(&id)
-                        .map(|c| c.regular(true, data, &settings, &id, counter))
-                },
-                Ok(SnifferEvent::Read { id, data }) => {
-                    connections.get_mut(&id)
-                        .map(|c| c.regular(false, data, &settings, &id, counter))
-                },
-                Ok(SnifferEvent::Connect { id, address }) => {
-                    tracing::info!("P2P Connect {{ id: {:?}, address: {} }}", id, address);
-                    if should_ignore(&settings, &address) {
-                        module.ignore(id.fd);
-                        tracing::info!("P2P Ignore {{ id: {:?}, address: {} }}", id, address);
-                        None
-                    } else {
-                        let connection = Connection {
-                            remote_address: address,
-                            is_opening: true,
-                        };
-                        connections.insert(id.clone(), connection)
-                            .map(|c| c.closing(&settings, &id, counter))
-                    }
-                },
-                Ok(SnifferEvent::LocalAddress { .. }) => {
-                    None
-                },
-                Ok(SnifferEvent::Close { id }) => {
-                    tracing::info!("Close {{ id: {:?} }}", id);
-                    connections.remove(&id)
-                        .map(|c| c.closing(&settings, &id, counter))
-                },
-            };
-            if let Some(packet) = packet {
-                tracing::trace!("packet: {}", packet);
-                counter += 1;
-                match orchestrator.send(packet) {
-                    Ok(_) => {
-                        tracing::trace!("sent packet for processing");
-                    }
-                    Err(_) => {
-                        tracing::error!("orchestrator channel closed abruptly");
-                    }
-                }
+        BpfSniffer {
+            module: module,
+            settings: settings.clone(),
+            connections: HashMap::new(),
+            counter: 1,
+        }
+    }
+
+    pub async fn run(self) {
+        let db = processor::spawn_processor(self.settings.clone());
+        let mut events = self.module.main_buffer();
+        let mut s = self;
+        while let Some(slice) = events.next().await {
+            match SnifferEvent::try_from(slice.as_ref()) {
+                Err(error) => tracing::error!("{:?}", error),
+                Ok(SnifferEvent::Connect { id, address }) => s.on_connect(id, address, db.clone(), false),
+                // TODO:
+                // Ok(SnifferEvent::Accept { id, address }) => s.on_connect(id, address, db.clone(), true),
+                Ok(SnifferEvent::Close { id }) => s.on_close(id),
+                Ok(SnifferEvent::Read { id, data }) => s.on_data(id, data.to_vec(), true),
+                Ok(SnifferEvent::Write { id, data }) => s.on_data(id, data.to_vec(), false),
+                // does not work, and not needed
+                Ok(SnifferEvent::LocalAddress { .. }) => (),
             }
         }
-    });
+    }
+
+    fn on_connect(&mut self, id: EventId, address: SocketAddr, db: mpsc::UnboundedSender<P2pMessage>, incoming: bool) {
+        let should_ignore = ignore(&self.settings, &address);
+        tracing::info!(
+            address = tracing::field::debug(&address),
+            id = tracing::field::debug(&id),
+            ignore = should_ignore,
+            "P2P New Outgoing",
+        );
+        if should_ignore {
+            self.module.ignore(id);
+            return;
+        }
+
+        let (tx, rx) = mpsc::unbounded_channel();
+        // drop old connection, it cause termination stream on the p2p parser,
+        // so the p2p parser will know about it
+        self.connections.insert(id.clone(), tx);
+        let parser = p2p::Parser {
+            settings: self.settings.clone(),
+            source_type: if incoming { SourceType::Remote } else { SourceType::Local },
+            remote_address: address,
+            id: id,
+            db: db,
+        };
+        tokio::spawn(async move { parser.run(rx).await });
+    }
+    
+    fn on_close(&mut self, id: EventId) {
+        tracing::info!(
+            id = tracing::field::debug(&id),
+            "P2P Close",
+        );
+        // can safely drop the old connection
+        self.connections.remove(&id);
+    }
+    
+    fn on_data(&mut self, id: EventId, payload: Vec<u8>, incoming: bool) {
+        let message = p2p::Message {
+            payload,
+            incoming,
+            counter: self.counter,
+        };
+        match self.connections.get_mut(&id) {
+            Some(connection) => {
+                match connection.send(message) {
+                    Ok(()) => (),
+                    Err(_) => {
+                        tracing::error!(
+                            id = tracing::field::debug(&id),
+                            incoming = incoming,
+                            "P2P Failed to forward message to the p2p parser",
+                        )
+                    },
+                }
+            },
+            None => {
+                // It is possible due to race condition,
+                // when we consider to ignore connection, we do not create
+                // connection structure in userspace, and send to bpf code 'ignore' command.
+                // However, the bpf code might already sent us some message.
+                // It is safe to ignore this message if it goes right after appearing
+                // new P2P connection which we ignore.
+                tracing::warn!(
+                    id = tracing::field::debug(&id),
+                    "P2P receive message for absent connection",
+                )
+            },
+        }
+    }
 }
 
-fn should_ignore(settings: &SystemSettings, address: &SocketAddr) -> bool {
+fn ignore(settings: &SystemSettings, address: &SocketAddr) -> bool {
     match address.port() {
         0 | 65535 => {
             return true;

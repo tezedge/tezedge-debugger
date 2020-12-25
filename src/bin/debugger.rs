@@ -15,7 +15,7 @@ use tezedge_debugger::storage::{MessageStore, get_ts, cfs};
 use std::path::Path;
 use std::sync::Arc;
 use storage::persistent::{open_kv, DbConfiguration};
-use tezedge_debugger::system::syslog_producer::syslog_producer;
+use tezedge_debugger::system::{syslog_producer::syslog_producer, BpfSniffer};
 
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
@@ -114,20 +114,8 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     // Create actual system
-    {
-        /*use tezedge_debugger::system::build_raw_socket_system;
-        match build_raw_socket_system(settings.clone()) {
-            Ok(_) => {
-                info!("system built");
-            }
-            Err(err) => {
-                error!(error = tracing::field::display(&err), "failed to build system");
-                exit(1);
-            }
-        }   */
-        use tezedge_debugger::system::build_bpf_sniffing_system;
-        build_bpf_sniffing_system(settings.clone());
-    }
+    let bpf_sniffer = BpfSniffer::new(&settings);
+    tokio::spawn(async move { bpf_sniffer.run().await });
 
     // Spawn warp RPC server
     tokio::spawn(async move {
