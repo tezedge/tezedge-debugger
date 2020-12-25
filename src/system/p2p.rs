@@ -14,7 +14,7 @@ use tezos_messages::p2p::{
     binary_message::BinaryMessage,
 };
 use tezos_encoding::binary_reader::BinaryReaderError;
-use tezos_conversation::{Identity, Conversation, Packet, ConsumeResult, ChunkMetadata, ChunkInfoPair};
+use tezos_conversation::{Identity, Conversation, Packet, ConsumeResult, ChunkMetadata, ChunkInfoPair, Sender};
 use sniffer::EventId;
 
 use crate::{
@@ -61,7 +61,7 @@ impl fmt::Display for ErrorContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "source {:?}, chunk {} {}, id {}:{}, address {}",
+            "{{ source {:?}, chunk {} {}, id {}:{}, address {} }}",
             self.source_type,
             self.chunk_counter,
             if self.is_incoming { "incoming" } else { "outgoing" },
@@ -106,7 +106,16 @@ impl Parser {
                 number: counter,
                 payload: payload,
             };
-            let (result, _, _) = state.conversation.add(Some(&identity), &packet);
+            let (result, sender, _) = state.conversation.add(Some(&identity), &packet);
+            let ok = match (&sender, &self.source_type) {
+                (&Sender::Initiator, &SourceType::Local) => !incoming,
+                (&Sender::Initiator, &SourceType::Remote) => incoming,
+                (&Sender::Responder, &SourceType::Local) => incoming,
+                (&Sender::Responder, &SourceType::Remote) => !incoming,
+            };
+            if !ok {
+                tracing::error!("the combination is not ok, {:?}, {:?}, {}", sender, self.source_type, incoming);
+            }
             match result {
                 ConsumeResult::Pending => (),
                 ConsumeResult::ConnectionMessage(chunk_info) => {
@@ -159,6 +168,11 @@ impl Parser {
                         state.inc(incoming);
                     }
                     for chunk in &failed_to_decrypt {
+                        tracing::warn!(
+                            context = self.error_context(&state, incoming),
+                            payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
+                            "cannot decrypt",
+                        );
                         let p2p_msg = P2pMessage::new(
                             self.remote_address.clone(),
                             incoming,
@@ -177,12 +191,6 @@ impl Parser {
                         }
                         state.inc(incoming);
                     }
-                    if !failed_to_decrypt.is_empty() {
-                        tracing::warn!(
-                            context = self.error_context(&state, incoming),
-                            "cannot decrypt",
-                        );
-                    }
                 },
                 ConsumeResult::NoDecipher(_) => {
                     tracing::warn!(
@@ -193,6 +201,7 @@ impl Parser {
                 ConsumeResult::PowInvalid => {
                     tracing::warn!(
                         context = self.error_context(&state, incoming),
+                        payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
                         "received connection message with wrong pow, maybe foreign packet",
                     );
                 },
