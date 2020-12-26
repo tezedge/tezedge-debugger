@@ -17,7 +17,7 @@ pub use self::syscall_context::SyscallContext;
 pub mod send;
 
 mod data_descriptor;
-pub use self::data_descriptor::{EventId, DataDescriptor, DataTag};
+pub use self::data_descriptor::{SocketId, EventId, DataDescriptor, DataTag};
 
 pub enum Address {
     Inet {

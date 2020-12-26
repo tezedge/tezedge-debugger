@@ -8,6 +8,12 @@ pub struct DataDescriptor {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct EventId {
+    pub socket_id: SocketId,
+    pub ts: u32,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct SocketId {
     pub pid: u32,
     pub fd: u32,
 }
@@ -38,4 +44,6 @@ pub enum DataTag {
     Connect,
     SocketName,
     Close,
+
+    Debug,
 }

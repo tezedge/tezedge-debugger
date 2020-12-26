@@ -61,12 +61,13 @@ impl fmt::Display for ErrorContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{{ source {:?}, chunk {} {}, id {}:{}, address {} }}",
+            "{{ source {:?}, chunk {} {}, id {}:{}:{}, address {} }}",
             self.source_type,
             self.chunk_counter,
             if self.is_incoming { "incoming" } else { "outgoing" },
-            self.id.pid,
-            self.id.fd,
+            self.id.socket_id.pid,
+            self.id.socket_id.fd,
+            self.id.ts,
             self.remote_address,
         )
     }
@@ -95,7 +96,7 @@ impl Parser {
         let fake_local = {
             let local_address = self.settings.local_address.clone();
             let id = self.id.clone();
-            let port = 3 << 14 | ((id.pid & 0x7f) << 7) as u16 | (id.fd & 0x7f) as u16;
+            let port = 3 << 14 | ((id.socket_id.pid & 0x7f) << 7) as u16 | (id.socket_id.fd & 0x7f) as u16;
             SocketAddr::new(local_address, port)
         };
 
@@ -120,7 +121,7 @@ impl Parser {
             if !ok {
                 tracing::warn!(
                     context = self.error_context(&state, incoming),
-                    "the combination is not ok, {:?}, {:?}, {}", sender, self.source_type, incoming,
+                    "the combination is not ok, sender: {:?}", sender,
                 );
             }
             match result {
@@ -189,12 +190,14 @@ impl Parser {
                         payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
                         "received connection message with wrong pow, maybe foreign packet",
                     );
+                    //std::process::exit(0);
                 },
                 ConsumeResult::UnexpectedChunks | ConsumeResult::InvalidConversation => {
                     tracing::error!(
                         context = self.error_context(&state, incoming),
                         "probably foreign packet",
                     );
+                    //std::process::exit(0);
                 },
             }
         }

@@ -3,6 +3,7 @@ use typenum::{Unsigned, Bit, Shleft};
 use redbpf_probes::{maps::RingBuffer, helpers::gen};
 use super::data_descriptor::{EventId, DataDescriptor, DataTag};
 
+#[inline(always)]
 pub fn sized<S, K>(id: EventId, tag: DataTag, data: &[u8], rb: &mut RingBuffer)
 where
     S: Unsigned,
@@ -56,6 +57,7 @@ where
     }
 }
 
+#[inline(always)]
 pub fn dyn_sized<K>(id: EventId, tag: DataTag, data: &[u8], rb: &mut RingBuffer)
 where
     K: Bit,

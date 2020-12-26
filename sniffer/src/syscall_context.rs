@@ -1,5 +1,5 @@
 use redbpf_probes::{maps::HashMap, helpers};
-use super::data_descriptor::EventId;
+use super::data_descriptor::{SocketId, EventId};
 
 #[derive(Clone)]
 pub enum SyscallContext {
@@ -44,6 +44,7 @@ impl SyscallContext {
     /// bpf validator forbids reading from stack uninitialized data
     /// different variants of this enum has different length,
     /// `Empty` variant should be biggest
+    #[inline(always)]
     pub fn empty() -> Self {
         SyscallContext::Empty {
             fake_fd: 0,
@@ -51,6 +52,7 @@ impl SyscallContext {
         }
     }
 
+    #[inline(always)]
     fn fd(&self) -> u32 {
         match self {
             &SyscallContext::Empty { ref fake_fd, .. } => *fake_fd,
@@ -64,11 +66,13 @@ impl SyscallContext {
         }
     }
 
+    #[inline(always)]
     pub fn push(self, map: &mut HashMap<u64, SyscallContext>) {
         let id = helpers::bpf_get_current_pid_tgid();
         map.set(&id, &self)
     }
 
+    #[inline(always)]
     pub fn pop_with<F>(map: &mut HashMap<u64, SyscallContext>, f: F)
     where
         F: FnOnce(Self, EventId),
@@ -77,8 +81,11 @@ impl SyscallContext {
         match map.get(&id) {
             Some(context) => {
                 let eid = EventId {
-                    pid: (id >> 32) as u32,
-                    fd: context.fd(),
+                    socket_id: SocketId {
+                        pid: (id >> 32) as u32,
+                        fd: context.fd(),
+                    },
+                    ts: ((helpers::bpf_ktime_get_ns() / 1000) & 0xffffffff) as u32,
                 };
                 f(context.clone(), eid);
                 map.delete(&id);

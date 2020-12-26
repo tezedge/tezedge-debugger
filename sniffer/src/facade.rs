@@ -2,6 +2,7 @@ use std::{
     convert::TryFrom,
     mem,
     net::{SocketAddr, IpAddr},
+    str,
 };
 use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, HashMap};
 use futures::stream::StreamExt;
@@ -24,6 +25,7 @@ pub enum SnifferEvent<'a> {
     Connect { id: EventId, address: SocketAddr },
     LocalAddress { id: EventId, address: SocketAddr },
     Close { id: EventId },
+    Debug { id: EventId, msg: &'a str },
 }
 
 #[derive(Debug)]
@@ -31,6 +33,7 @@ pub enum SnifferError {
     SliceTooShort(usize),
     Write { id: EventId, code: SnifferErrorCode },
     Read { id: EventId, code: SnifferErrorCode },
+    Debug { id: EventId, code: SnifferErrorCode },
 }
 
 impl SnifferError {
@@ -51,6 +54,10 @@ impl SnifferError {
 
     fn read(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
         Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Read { id, code })
+    }
+
+    fn debug(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
+        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Debug { id, code })
     }
 }
 
@@ -92,6 +99,13 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
                 })
             },
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
+            DataTag::Debug => {
+                SnifferError::debug(descriptor.id, descriptor.size, data.len())
+                    .map(|(id, size)| {
+                        let msg = str::from_utf8(&data[..size]).unwrap();
+                        SnifferEvent::Debug { id, msg }
+                    })
+            }
         }
     }
 }

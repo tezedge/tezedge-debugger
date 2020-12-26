@@ -5,7 +5,7 @@
 use redbpf_probes::kprobe::prelude::*;
 use redbpf_probes::helpers;
 use core::{mem, ptr, slice, convert::TryFrom};
-use sniffer::{EventId, DataDescriptor, DataTag, Address, SyscallContext, send};
+use sniffer::{SocketId, EventId, DataDescriptor, DataTag, Address, SyscallContext, send};
 
 program!(0xFFFFFFFE, "GPL");
 
@@ -25,22 +25,26 @@ static mut syscall_contexts: HashMap<u64, SyscallContext> = HashMap::with_max_en
 
 // connected socket ipv6 ocaml
 #[map]
-static mut outgoing_connections: HashSet<EventId> = HashSet::with_max_entries(0x1000);
+static mut outgoing_connections: HashSet<SocketId> = HashSet::with_max_entries(0x1000);
 
 // each bpf map is safe to access from multiple threads
+#[inline(always)]
 fn syscall_contexts_map() -> &'static mut HashMap<u64, SyscallContext> {
     unsafe { &mut syscall_contexts }
 }
 
+#[inline(always)]
 fn rb() -> &'static mut RingBuffer {
     unsafe { &mut main_buffer }
 }
 
-fn reg_outgoing(id: &EventId) {
+#[inline(always)]
+fn reg_outgoing(id: &SocketId) {
     unsafe { outgoing_connections.set(id, &1) };
 }
 
-fn is_outgoing(id: &EventId) -> bool {
+#[inline(always)]
+fn is_outgoing(id: &SocketId) -> bool {
     if let Some(c) = unsafe { outgoing_connections.get(id) } {
         *c == 1
     } else {
@@ -48,15 +52,26 @@ fn is_outgoing(id: &EventId) -> bool {
     }
 }
 
-fn forget_outgoing(id: &EventId) {
+#[inline(always)]
+fn forget_outgoing(id: &SocketId) {
     unsafe { outgoing_connections.delete(id) };
 }
 
-fn id(fd: u32) -> EventId {
+#[inline(always)]
+fn socket_id(fd: u32) -> SocketId {
     let id = helpers::bpf_get_current_pid_tgid();
-    EventId {
+
+    SocketId {
         pid: (id >> 32) as u32,
         fd: fd,
+    }
+}
+
+#[inline(always)]
+fn event_id(fd: u32) -> EventId {
+    EventId {
+        socket_id: socket_id(fd),
+        ts: ((helpers::bpf_ktime_get_ns() / 1000) & 0xffffffff) as u32,
     }
 }
 
@@ -65,7 +80,7 @@ fn kprobe_write(regs: Registers) {
     let fd = regs.parm1() as u32;
     let data_ptr = regs.parm2() as usize;
 
-    if !is_outgoing(&id(fd)) {
+    if !is_outgoing(&socket_id(fd)) {
         return;
     }
 
@@ -93,7 +108,7 @@ fn kprobe_read(regs: Registers) {
     let fd = regs.parm1() as u32;
     let data_ptr = regs.parm2() as usize;
 
-    if !is_outgoing(&id(fd)) {
+    if !is_outgoing(&socket_id(fd)) {
         return;
     }
 
@@ -121,7 +136,7 @@ fn kprobe_sendto(regs: Registers) {
     let fd = regs.parm1() as u32;
     let data_ptr = regs.parm2() as usize;
 
-    if !is_outgoing(&id(fd)) {
+    if !is_outgoing(&socket_id(fd)) {
         return;
     }
 
@@ -149,7 +164,7 @@ fn kprobe_recvfrom(regs: Registers) {
     let fd = regs.parm1() as u32;
     let data_ptr = regs.parm2() as usize;
 
-    if !is_outgoing(&id(fd)) {
+    if !is_outgoing(&socket_id(fd)) {
         return;
     }
 
@@ -194,7 +209,7 @@ fn kprobe_sendmsg(regs: Registers) {
     let fd = regs.parm1() as u32;
     let header = regs.parm2() as *const UserMessageHeader;
 
-    if !is_outgoing(&id(fd)) {
+    if !is_outgoing(&socket_id(fd)) {
         return;
     }
 
@@ -227,7 +242,7 @@ fn kprobe_sendmsg(regs: Registers) {
             Err(_) => return,
         };
 
-        send::dyn_sized::<typenum::B0>(id(fd), DataTag::SendMsg, data, rb())
+        send::dyn_sized::<typenum::B0>(event_id(fd), DataTag::SendMsg, data, rb())
     }
 }*/
 
@@ -259,9 +274,9 @@ fn kretprobe_connect(regs: Registers) {
                 };
 
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
-                    reg_outgoing(&id);
-                    // Address::RAW_SIZE + size of DataDescriptor == 44
-                    send::sized::<typenum::U44, typenum::B0>(id, DataTag::Connect, address, rb())
+                    reg_outgoing(&id.socket_id);
+                    // Address::RAW_SIZE + size of DataDescriptor == 48
+                    send::sized::<typenum::U48, typenum::B0>(id, DataTag::Connect, address, rb())
                 } else {
                     // ignore connection to other type of address
                     // track only ipv4 (af_inet) and ipv6 (af_inet6)
@@ -280,7 +295,7 @@ fn kprobe_getsockname(regs: Registers) {
 
     let address = unsafe { slice::from_raw_parts(buf, size) };
 
-    if !is_outgoing(&id(fd)) {
+    if !is_outgoing(&socket_id(fd)) {
         return;
     }
 
@@ -304,8 +319,8 @@ fn kretprobe_getsockname(regs: Registers) {
                 };
 
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
-                    // Address::RAW_SIZE + size of DataDescriptor == 44
-                    send::sized::<typenum::U44, typenum::B0>(id, DataTag::SocketName, address, rb())
+                    // Address::RAW_SIZE + size of DataDescriptor == 48
+                    send::sized::<typenum::U48, typenum::B0>(id, DataTag::SocketName, address, rb())
                 } else {
                     // ignore connection to other type of address
                     // track only ipv4 (af_inet) and ipv6 (af_inet6)
@@ -321,9 +336,9 @@ fn kprobe_close(regs: Registers) {
     let fd = regs.parm1() as u32;
 
 
-    if is_outgoing(&id(fd)) {
-        forget_outgoing(&id(fd));
+    if is_outgoing(&socket_id(fd)) {
+        forget_outgoing(&socket_id(fd));
 
-        send::sized::<typenum::U16, typenum::B0>(id(fd), DataTag::Close, &[], rb())
+        send::sized::<typenum::U20, typenum::B0>(event_id(fd), DataTag::Close, &[], rb())
     }
 }

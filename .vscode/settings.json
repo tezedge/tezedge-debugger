@@ -12,6 +12,8 @@
         "kprobes",
         "kretprobe",
         "ksys",
+        "ktime",
+        "printk",
         "recvfrom",
         "redbpf",
         "regs",

@@ -41,6 +41,7 @@ impl BpfSniffer {
                 Ok(SnifferEvent::Write { id, data }) => s.on_data(id, data.to_vec(), false),
                 // does not work, and not needed
                 Ok(SnifferEvent::LocalAddress { .. }) => (),
+                Ok(SnifferEvent::Debug { id, msg }) => tracing::warn!("{:?} {}", id, msg),
             }
         }
     }
