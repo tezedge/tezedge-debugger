@@ -3,7 +3,7 @@
 
 use std::{convert::TryFrom, net::{IpAddr, SocketAddr}, collections::HashMap};
 use tokio::{stream::StreamExt, sync::mpsc};
-use sniffer::{EventId, facade::{Module, SnifferEvent}};
+use sniffer::{SocketId, EventId, facade::{Module, SnifferEvent}};
 
 use super::{SystemSettings, p2p, processor};
 use crate::messages::p2p_message::{P2pMessage, SourceType};
@@ -11,7 +11,7 @@ use crate::messages::p2p_message::{P2pMessage, SourceType};
 pub struct BpfSniffer {
     module: Module,
     settings: SystemSettings,
-    connections: HashMap<EventId, mpsc::UnboundedSender<p2p::Message>>,
+    connections: HashMap<SocketId, mpsc::UnboundedSender<p2p::Message>>,
     counter: u64,
 }
 
@@ -55,14 +55,14 @@ impl BpfSniffer {
             "P2P New Outgoing",
         );
         if should_ignore {
-            self.module.ignore(id);
+            self.module.ignore(id.socket_id);
             return;
         }
 
         let (tx, rx) = mpsc::unbounded_channel();
         // drop old connection, it cause termination stream on the p2p parser,
         // so the p2p parser will know about it
-        self.connections.insert(id.clone(), tx);
+        self.connections.insert(id.socket_id.clone(), tx);
         let parser = p2p::Parser {
             settings: self.settings.clone(),
             source_type: if incoming { SourceType::Remote } else { SourceType::Local },
@@ -79,7 +79,7 @@ impl BpfSniffer {
             "P2P Close",
         );
         // can safely drop the old connection
-        self.connections.remove(&id);
+        self.connections.remove(&id.socket_id);
     }
     
     fn on_data(&mut self, id: EventId, payload: Vec<u8>, incoming: bool) {
@@ -88,7 +88,7 @@ impl BpfSniffer {
             incoming,
             counter: self.counter,
         };
-        match self.connections.get_mut(&id) {
+        match self.connections.get_mut(&id.socket_id) {
             Some(connection) => {
                 match connection.send(message) {
                     Ok(()) => (),

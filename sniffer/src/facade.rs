@@ -6,7 +6,7 @@ use std::{
 };
 use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, HashMap};
 use futures::stream::StreamExt;
-use super::{EventId, DataDescriptor, DataTag, Address, bpf_code::CODE};
+use super::{SocketId, EventId, DataDescriptor, DataTag, Address, bpf_code::CODE};
 
 pub struct Module(RawModule);
 
@@ -150,7 +150,7 @@ impl Module {
         RingBuffer::from_map(&rb_map).unwrap()
     }
 
-    fn outgoing_connections_map(&self) -> HashMap<EventId, u32> {
+    fn outgoing_connections_map(&self) -> HashMap<SocketId, u32> {
         let map = self
             .0
             .maps
@@ -160,7 +160,7 @@ impl Module {
         HashMap::new(map).unwrap()
     }
 
-    pub fn ignore(&self, id: EventId) {
+    pub fn ignore(&self, id: SocketId) {
         self.outgoing_connections_map().delete(id);
     }
 }

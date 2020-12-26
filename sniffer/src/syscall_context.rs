@@ -53,20 +53,6 @@ impl SyscallContext {
     }
 
     #[inline(always)]
-    fn fd(&self) -> u32 {
-        match self {
-            &SyscallContext::Empty { ref fake_fd, .. } => *fake_fd,
-            &SyscallContext::Write { ref fd, .. } => *fd,
-            &SyscallContext::SendTo { ref fd, .. } => *fd,
-            &SyscallContext::SendMsg { ref fd, .. } => *fd,
-            &SyscallContext::Read { ref fd, .. } => *fd,
-            &SyscallContext::RecvFrom { ref fd, .. } => *fd,
-            &SyscallContext::Connect { ref fd, .. } => *fd,
-            &SyscallContext::SocketName { ref fd, .. } => *fd,
-        }
-    }
-
-    #[inline(always)]
     pub fn push(self, map: &mut HashMap<u64, SyscallContext>) {
         let id = helpers::bpf_get_current_pid_tgid();
         map.set(&id, &self)
@@ -75,19 +61,12 @@ impl SyscallContext {
     #[inline(always)]
     pub fn pop_with<F>(map: &mut HashMap<u64, SyscallContext>, f: F)
     where
-        F: FnOnce(Self, EventId),
+        F: FnOnce(Self),
     {
         let id = helpers::bpf_get_current_pid_tgid();
         match map.get(&id) {
             Some(context) => {
-                let eid = EventId {
-                    socket_id: SocketId {
-                        pid: (id >> 32) as u32,
-                        fd: context.fd(),
-                    },
-                    ts: ((helpers::bpf_ktime_get_ns() / 1000) & 0xffffffff) as u32,
-                };
-                f(context.clone(), eid);
+                f(context.clone());
                 map.delete(&id);
             },
             None => (),

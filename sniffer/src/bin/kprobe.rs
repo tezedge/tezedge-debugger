@@ -91,11 +91,12 @@ fn kprobe_write(regs: Registers) {
 
 #[kretprobe("ksys_write")]
 fn kretprobe_write(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::Write { fd, data_ptr } => {
             let written = regs.rc();
             if regs.is_syscall_success() && written as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
+                let id = event_id(fd);
                 send::dyn_sized::<typenum::B0>(id, DataTag::Write, data, rb())
             }
         },
@@ -119,11 +120,12 @@ fn kprobe_read(regs: Registers) {
 
 #[kretprobe("ksys_read")]
 fn kretprobe_read(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::Read { fd, data_ptr } => {
             let read = regs.rc();
             if regs.is_syscall_success() && read as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
+                let id = event_id(fd);
                 send::dyn_sized::<typenum::B0>(id, DataTag::Read, data, rb())
             }
         },
@@ -147,11 +149,12 @@ fn kprobe_sendto(regs: Registers) {
 
 #[kretprobe("__sys_sendto")]
 fn kretprobe_sendto(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::SendTo { fd, data_ptr } => {
             let written = regs.rc();
             if regs.is_syscall_success() && written as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
+                let id = event_id(fd);
                 send::dyn_sized::<typenum::B0>(id, DataTag::SendTo, data, rb())
             }
         },
@@ -175,11 +178,12 @@ fn kprobe_recvfrom(regs: Registers) {
 
 #[kretprobe("__sys_recvfrom")]
 fn kretprobe_recvfrom(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::RecvFrom { fd, data_ptr } => {
             let read = regs.rc();
             if regs.is_syscall_success() && read as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
+                let id = event_id(fd);
                 send::dyn_sized::<typenum::B0>(id, DataTag::RecvFrom, data, rb())
             }
         },
@@ -261,7 +265,7 @@ fn kprobe_connect(regs: Registers) {
 
 #[kretprobe("__sys_connect")]
 fn kretprobe_connect(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::Connect { fd, address } => {
             if regs.is_syscall_success() && regs.rc() as i64 > 0 {
                 let mut tmp = [0xff; Address::RAW_SIZE];
@@ -274,6 +278,7 @@ fn kretprobe_connect(regs: Registers) {
                 };
 
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
+                    let id = event_id(fd);
                     reg_outgoing(&id.socket_id);
                     // Address::RAW_SIZE + size of DataDescriptor == 48
                     send::sized::<typenum::U48, typenum::B0>(id, DataTag::Connect, address, rb())
@@ -306,7 +311,7 @@ fn kprobe_getsockname(regs: Registers) {
 
 #[kretprobe("__sys_getsockname")]
 fn kretprobe_getsockname(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s, id| match s {
+    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
         SyscallContext::SocketName { fd, address } => {
             if regs.is_syscall_success() && regs.rc() as i64 > 0 {
                 let mut tmp = [0xff; Address::RAW_SIZE];
@@ -319,6 +324,7 @@ fn kretprobe_getsockname(regs: Registers) {
                 };
 
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
+                    let id = event_id(fd);
                     // Address::RAW_SIZE + size of DataDescriptor == 48
                     send::sized::<typenum::U48, typenum::B0>(id, DataTag::SocketName, address, rb())
                 } else {
