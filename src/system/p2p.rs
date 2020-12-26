@@ -76,7 +76,7 @@ impl Parser {
     const DEFAULT_POW_TARGET: f64 = 26.0;
 
     // TODO: split
-    pub async fn run<S>(self, mut events: S)
+    pub async fn run<S>(self, mut events: S) -> Result<(), ()>
     where
         S: Unpin + StreamExt<Item = Message>,
     {
@@ -99,13 +99,17 @@ impl Parser {
             SocketAddr::new(local_address, port)
         };
 
-        'outer: while let Some(Message { payload, incoming, counter }) = events.next().await {
+        while let Some(Message { payload, incoming, counter }) = events.next().await {
             let packet = Packet {
                 source: if incoming { self.remote_address.clone() } else { fake_local.clone() },
                 destination: if incoming { fake_local.clone() } else { self.remote_address.clone() },
                 number: counter,
                 payload: payload,
             };
+            tracing::debug!(
+                context = self.error_context(&state, incoming),
+                payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
+            );
             let (result, sender, _) = state.conversation.add(Some(&identity), &packet);
             let ok = match (&sender, &self.source_type) {
                 (&Sender::Initiator, &SourceType::Local) => !incoming,
@@ -114,7 +118,10 @@ impl Parser {
                 (&Sender::Responder, &SourceType::Remote) => !incoming,
             };
             if !ok {
-                tracing::error!("the combination is not ok, {:?}, {:?}, {}", sender, self.source_type, incoming);
+                tracing::warn!(
+                    context = self.error_context(&state, incoming),
+                    "the combination is not ok, {:?}, {:?}, {}", sender, self.source_type, incoming,
+                );
             }
             match result {
                 ConsumeResult::Pending => (),
@@ -131,14 +138,7 @@ impl Parser {
                         chunk_info.data().to_vec(),
                         message,
                     );
-                    if let Err(err) = self.db.send(p2p_msg) {
-                        tracing::error!(
-                            context = self.error_context(&state, incoming),
-                            error = tracing::field::display(&err),
-                            "db channel closed abruptly",
-                        );
-                        break 'outer;
-                    }
+                    self.store_db(p2p_msg, self.error_context(&state, incoming))?;
                     tracing::info!(
                         context = self.error_context(&state, incoming),
                         "connection message",
@@ -157,20 +157,12 @@ impl Parser {
                             decrypted.data().to_vec(),
                             message,
                         );
-                        if let Err(err) = self.db.send(p2p_msg) {
-                            tracing::error!(
-                                context = self.error_context(&state, incoming),
-                                error = tracing::field::display(&err),
-                                "db channel closed abruptly",
-                            );
-                            break 'outer;
-                        }
+                        self.store_db(p2p_msg, self.error_context(&state, incoming))?;
                         state.inc(incoming);
                     }
                     for chunk in &failed_to_decrypt {
-                        tracing::warn!(
+                        tracing::error!(
                             context = self.error_context(&state, incoming),
-                            payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
                             "cannot decrypt",
                         );
                         let p2p_msg = P2pMessage::new(
@@ -181,38 +173,33 @@ impl Parser {
                             vec![],
                             Err("cannot decrypt".to_string()),
                         );
-                        if let Err(err) = self.db.send(p2p_msg) {
-                            tracing::error!(
-                                context = self.error_context(&state, incoming),
-                                error = tracing::field::display(&err),
-                                "db channel closed abruptly",
-                            );
-                            break 'outer;
-                        }
+                        self.store_db(p2p_msg, self.error_context(&state, incoming))?;
                         state.inc(incoming);
                     }
                 },
                 ConsumeResult::NoDecipher(_) => {
-                    tracing::warn!(
+                    tracing::error!(
                         context = self.error_context(&state, incoming),
                         "identity wrong",
                     );
                 },
                 ConsumeResult::PowInvalid => {
-                    tracing::warn!(
+                    tracing::error!(
                         context = self.error_context(&state, incoming),
                         payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
                         "received connection message with wrong pow, maybe foreign packet",
                     );
                 },
                 ConsumeResult::UnexpectedChunks | ConsumeResult::InvalidConversation => {
-                    tracing::warn!(
+                    tracing::error!(
                         context = self.error_context(&state, incoming),
                         "probably foreign packet",
                     );
                 },
             }
         }
+
+        Ok(())
     }
 
     fn error_context(&self, state: &State, is_incoming: bool) -> DisplayValue<ErrorContext> {
@@ -224,6 +211,17 @@ impl Parser {
             chunk_counter: state.chunk(is_incoming),
         };
         tracing::field::display(ctx)
+    }
+
+    fn store_db(&self, message: P2pMessage, error_context: DisplayValue<ErrorContext>) -> Result<(), ()> {
+        self.db.send(message)
+            .map_err(|err| {
+                tracing::error!(
+                    context = error_context,
+                    error = tracing::field::display(&err),
+                    "db channel closed abruptly",
+                );
+            })
     }
 }
 
