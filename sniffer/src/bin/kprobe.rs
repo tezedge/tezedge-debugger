@@ -11,7 +11,7 @@ program!(0xFFFFFFFE, "GPL");
 
 const DD: usize = mem::size_of::<DataDescriptor>();
 
-// HashMap need to store something
+// HashMap should store something event if it is void, let's store 1u32
 type HashSet<T> = HashMap<T, u32>;
 
 #[map]
@@ -55,7 +55,7 @@ fn forget_outgoing(id: &EventId) {
 fn id(fd: u32) -> EventId {
     let id = helpers::bpf_get_current_pid_tgid();
     EventId {
-        pid: (id & 0xffffffff) as u32,
+        pid: (id >> 32) as u32,
         fd: fd,
     }
 }

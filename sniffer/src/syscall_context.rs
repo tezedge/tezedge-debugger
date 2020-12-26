@@ -77,7 +77,7 @@ impl SyscallContext {
         match map.get(&id) {
             Some(context) => {
                 let eid = EventId {
-                    pid: (id & 0xffffffff) as u32,
+                    pid: (id >> 32) as u32,
                     fd: context.fd(),
                 };
                 f(context.clone(), eid);
