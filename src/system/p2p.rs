@@ -61,13 +61,11 @@ impl fmt::Display for ErrorContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{{ source {:?}, chunk {} {}, id {}:{}:{}, address {} }}",
+            "{{ source {:?}, chunk {} {}, id {}, address {} }}",
             self.source_type,
             self.chunk_counter,
             if self.is_incoming { "incoming" } else { "outgoing" },
-            self.id.socket_id.pid,
-            self.id.socket_id.fd,
-            self.id.ts,
+            self.id,
             self.remote_address,
         )
     }

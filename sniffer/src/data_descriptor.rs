@@ -1,4 +1,4 @@
-use core::{mem, ptr, convert::TryFrom};
+use core::{mem, ptr, convert::TryFrom, fmt};
 
 pub struct DataDescriptor {
     pub id: EventId,
@@ -9,13 +9,27 @@ pub struct DataDescriptor {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct EventId {
     pub socket_id: SocketId,
-    pub ts: u32,
+    pub ts_lo: u32,
+    pub ts_hi: u32,
+}
+
+impl fmt::Display for EventId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ts = ((self.ts_hi as u64) << 32) | (self.ts_lo as u64);
+        write!(f, "{}:{}", self.socket_id, ts)
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct SocketId {
     pub pid: u32,
     pub fd: u32,
+}
+
+impl fmt::Display for SocketId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.pid, self.fd)
+    }
 }
 
 impl TryFrom<&[u8]> for DataDescriptor {

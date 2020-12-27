@@ -69,9 +69,11 @@ fn socket_id(fd: u32) -> SocketId {
 
 #[inline(always)]
 fn event_id(fd: u32) -> EventId {
+    let ts = helpers::bpf_ktime_get_ns();
     EventId {
         socket_id: socket_id(fd),
-        ts: ((helpers::bpf_ktime_get_ns() / 1000) & 0xffffffff) as u32,
+        ts_lo: (ts & 0xffffffff) as u32,
+        ts_hi: (ts >> 32) as u32,
     }
 }
 
@@ -280,8 +282,8 @@ fn kretprobe_connect(regs: Registers) {
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
                     let id = event_id(fd);
                     reg_outgoing(&id.socket_id);
-                    // Address::RAW_SIZE + size of DataDescriptor == 48
-                    send::sized::<typenum::U48, typenum::B0>(id, DataTag::Connect, address, rb())
+                    // Address::RAW_SIZE + size of DataDescriptor
+                    send::sized::<typenum::U52, typenum::B0>(id, DataTag::Connect, address, rb())
                 } else {
                     // ignore connection to other type of address
                     // track only ipv4 (af_inet) and ipv6 (af_inet6)
@@ -325,8 +327,8 @@ fn kretprobe_getsockname(regs: Registers) {
 
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
                     let id = event_id(fd);
-                    // Address::RAW_SIZE + size of DataDescriptor == 48
-                    send::sized::<typenum::U48, typenum::B0>(id, DataTag::SocketName, address, rb())
+                    // Address::RAW_SIZE + size of DataDescriptor
+                    send::sized::<typenum::U52, typenum::B0>(id, DataTag::SocketName, address, rb())
                 } else {
                     // ignore connection to other type of address
                     // track only ipv4 (af_inet) and ipv6 (af_inet6)
@@ -345,6 +347,6 @@ fn kprobe_close(regs: Registers) {
     if is_outgoing(&socket_id(fd)) {
         forget_outgoing(&socket_id(fd));
 
-        send::sized::<typenum::U20, typenum::B0>(event_id(fd), DataTag::Close, &[], rb())
+        send::sized::<typenum::U24, typenum::B0>(event_id(fd), DataTag::Close, &[], rb())
     }
 }
