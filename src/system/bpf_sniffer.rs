@@ -50,9 +50,9 @@ impl BpfSniffer {
         let should_ignore = ignore(&self.settings, &address);
         tracing::info!(
             address = tracing::field::debug(&address),
-            id = tracing::field::debug(&id),
+            id = tracing::field::display(&id),
             ignore = should_ignore,
-            "P2P New Outgoing",
+            msg = "P2P New Outgoing",
         );
         if should_ignore {
             self.module.ignore(id.socket_id);
@@ -67,7 +67,7 @@ impl BpfSniffer {
             settings: self.settings.clone(),
             source_type: if incoming { SourceType::Remote } else { SourceType::Local },
             remote_address: address,
-            id: id,
+            id: id.socket_id.clone(),
             db: db,
         };
         tokio::spawn(async move { parser.run(rx).await });
@@ -75,28 +75,29 @@ impl BpfSniffer {
     
     fn on_close(&mut self, id: EventId) {
         tracing::info!(
-            id = tracing::field::debug(&id),
-            "P2P Close",
+            id = tracing::field::display(&id),
+            msg = "P2P Close",
         );
         // can safely drop the old connection
         self.connections.remove(&id.socket_id);
     }
     
     fn on_data(&mut self, id: EventId, payload: Vec<u8>, incoming: bool) {
-        let message = p2p::Message {
-            payload,
-            incoming,
-            counter: self.counter,
-        };
         match self.connections.get_mut(&id.socket_id) {
             Some(connection) => {
+                let message = p2p::Message {
+                    payload,
+                    incoming,
+                    counter: self.counter,
+                    event_id: id.clone(),
+                };
                 match connection.send(message) {
                     Ok(()) => (),
                     Err(_) => {
                         tracing::error!(
-                            id = tracing::field::debug(&id),
+                            id = tracing::field::display(&id),
                             incoming = incoming,
-                            "P2P Failed to forward message to the p2p parser",
+                            msg = "P2P Failed to forward message to the p2p parser",
                         )
                     },
                 }
@@ -109,8 +110,8 @@ impl BpfSniffer {
                 // It is safe to ignore this message if it goes right after appearing
                 // new P2P connection which we ignore.
                 tracing::warn!(
-                    id = tracing::field::debug(&id),
-                    "P2P receive message for absent connection",
+                    id = tracing::field::display(&id),
+                    msg = "P2P receive message for absent connection",
                 )
             },
         }

@@ -15,7 +15,7 @@ use tezos_messages::p2p::{
 };
 use tezos_encoding::binary_reader::BinaryReaderError;
 use tezos_conversation::{Identity, Conversation, Packet, ConsumeResult, ChunkMetadata, ChunkInfoPair, Sender};
-use sniffer::EventId;
+use sniffer::{SocketId, EventId};
 
 use crate::{
     system::SystemSettings,
@@ -32,13 +32,14 @@ pub struct Message {
     pub payload: Vec<u8>,
     pub incoming: bool,
     pub counter: u64,
+    pub event_id: EventId,
 }
 
 pub struct Parser {
     pub settings: SystemSettings,
     pub source_type: SourceType,
     pub remote_address: SocketAddr,
-    pub id: EventId,
+    pub id: SocketId,
     pub db: mpsc::UnboundedSender<P2pMessage>,
 }
 
@@ -53,7 +54,7 @@ struct ErrorContext {
     is_incoming: bool,
     source_type: SourceType,
     remote_address: SocketAddr,
-    id: EventId,
+    event_id: EventId,
     chunk_counter: usize,
 }
 
@@ -65,7 +66,7 @@ impl fmt::Display for ErrorContext {
             self.source_type,
             self.chunk_counter,
             if self.is_incoming { "incoming" } else { "outgoing" },
-            self.id,
+            self.event_id,
             self.remote_address,
         )
     }
@@ -91,14 +92,15 @@ impl Parser {
             Identity::from_json(&identity_json).unwrap()
         };
 
+        // the local socket identifier is pair (pid, fd), but `Conversation` requires the packet
+        // have local socket address; it needed only for distinguish between local and remote,
+        // let's use fake socket address
         let fake_local = {
             let local_address = self.settings.local_address.clone();
-            let id = self.id.clone();
-            let port = 3 << 14 | ((id.socket_id.pid & 0x7f) << 7) as u16 | (id.socket_id.fd & 0x7f) as u16;
-            SocketAddr::new(local_address, port)
+            SocketAddr::new(local_address, 0b1100011110001111)
         };
 
-        while let Some(Message { payload, incoming, counter }) = events.next().await {
+        while let Some(Message { payload, incoming, counter, event_id }) = events.next().await {
             let packet = Packet {
                 source: if incoming { self.remote_address.clone() } else { fake_local.clone() },
                 destination: if incoming { fake_local.clone() } else { self.remote_address.clone() },
@@ -106,7 +108,7 @@ impl Parser {
                 payload: payload,
             };
             tracing::debug!(
-                context = self.error_context(&state, incoming),
+                context = self.error_context(&state, incoming, &event_id),
                 payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
             );
             let (result, sender, _) = state.conversation.add(Some(&identity), &packet);
@@ -118,8 +120,9 @@ impl Parser {
             };
             if !ok {
                 tracing::warn!(
-                    context = self.error_context(&state, incoming),
-                    "the combination is not ok, sender: {:?}", sender,
+                    context = self.error_context(&state, incoming, &event_id),
+                    sender = tracing::field::debug(&sender),
+                    msg = "the combination is not ok",
                 );
             }
             match result {
@@ -137,16 +140,16 @@ impl Parser {
                         chunk_info.data().to_vec(),
                         message,
                     );
-                    self.store_db(p2p_msg, self.error_context(&state, incoming))?;
+                    self.store_db(p2p_msg, self.error_context(&state, incoming, &event_id))?;
                     tracing::info!(
-                        context = self.error_context(&state, incoming),
-                        "connection message",
+                        context = self.error_context(&state, incoming, &event_id),
+                        msg = "connection message",
                     );
                     state.inc(incoming);
                 },
                 ConsumeResult::Chunks { regular, failed_to_decrypt } => {
                     for ChunkInfoPair { encrypted, decrypted } in regular {
-                        let ec = self.error_context(&state, incoming);
+                        let ec = self.error_context(&state, incoming, &event_id);
                         let message = state.process(decrypted.data(), ec, incoming);
                         let p2p_msg = P2pMessage::new(
                             self.remote_address.clone(),
@@ -156,13 +159,13 @@ impl Parser {
                             decrypted.data().to_vec(),
                             message,
                         );
-                        self.store_db(p2p_msg, self.error_context(&state, incoming))?;
+                        self.store_db(p2p_msg, self.error_context(&state, incoming, &event_id))?;
                         state.inc(incoming);
                     }
                     for chunk in &failed_to_decrypt {
                         tracing::error!(
-                            context = self.error_context(&state, incoming),
-                            "cannot decrypt",
+                            context = self.error_context(&state, incoming, &event_id),
+                            msg = "cannot decrypt",
                         );
                         let p2p_msg = P2pMessage::new(
                             self.remote_address.clone(),
@@ -172,28 +175,28 @@ impl Parser {
                             vec![],
                             Err("cannot decrypt".to_string()),
                         );
-                        self.store_db(p2p_msg, self.error_context(&state, incoming))?;
+                        self.store_db(p2p_msg, self.error_context(&state, incoming, &event_id))?;
                         state.inc(incoming);
                     }
                 },
                 ConsumeResult::NoDecipher(_) => {
                     tracing::error!(
-                        context = self.error_context(&state, incoming),
-                        "identity wrong",
+                        context = self.error_context(&state, incoming, &event_id),
+                        msg = "identity wrong",
                     );
                 },
                 ConsumeResult::PowInvalid => {
                     tracing::error!(
-                        context = self.error_context(&state, incoming),
+                        context = self.error_context(&state, incoming, &event_id),
                         payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
-                        "received connection message with wrong pow, maybe foreign packet",
+                        msg = "received connection message with wrong pow, maybe foreign packet",
                     );
                     //std::process::exit(0);
                 },
                 ConsumeResult::UnexpectedChunks | ConsumeResult::InvalidConversation => {
                     tracing::error!(
-                        context = self.error_context(&state, incoming),
-                        "probably foreign packet",
+                        context = self.error_context(&state, incoming, &event_id),
+                        msg = "probably foreign packet",
                     );
                     //std::process::exit(0);
                 },
@@ -203,12 +206,12 @@ impl Parser {
         Ok(())
     }
 
-    fn error_context(&self, state: &State, is_incoming: bool) -> DisplayValue<ErrorContext> {
+    fn error_context(&self, state: &State, is_incoming: bool, event_id: &EventId) -> DisplayValue<ErrorContext> {
         let ctx = ErrorContext {
             is_incoming,
             source_type: self.source_type,
             remote_address: self.remote_address.clone(),
-            id: self.id.clone(),
+            event_id: event_id.clone(),
             chunk_counter: state.chunk(is_incoming),
         };
         tracing::field::display(ctx)
@@ -220,7 +223,7 @@ impl Parser {
                 tracing::error!(
                     context = error_context,
                     error = tracing::field::display(&err),
-                    "db channel closed abruptly",
+                    msg = "db channel closed abruptly",
                 );
             })
     }
@@ -248,7 +251,7 @@ impl State {
         if length < 18 {
             tracing::error!(
                 context = error_context,
-                "the chunk is too small",
+                msg = "the chunk is too small",
             );
         }
         let content = &decrypted[2..(length - 16)];
@@ -256,7 +259,7 @@ impl State {
             0 => {
                 tracing::warn!(
                     context = error_context,
-                    "Connection message should not come here",
+                    msg = "Connection message should not come here",
                 );
                 ConnectionMessage::from_bytes(&decrypted[2..])
                     .map(HandshakeMessage::ConnectionMessage)
