@@ -70,7 +70,7 @@ async fn load_identity() -> Identity {
 async fn main() -> Result<(), failure::Error> {
     // Initialize tracing default tracing console subscriber
     tracing_subscriber::fmt()
-        .with_max_level(Level::DEBUG)
+        .with_max_level(Level::INFO)
         .init();
 
     // Identify the local address

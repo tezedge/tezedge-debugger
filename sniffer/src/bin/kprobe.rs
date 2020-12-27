@@ -88,7 +88,9 @@ fn kprobe_write(regs: Registers) {
 
     let mut context = SyscallContext::empty();
     context = SyscallContext::Write { fd, data_ptr };
-    context.push(syscall_contexts_map())
+    context.push(syscall_contexts_map());
+
+    //send::sized::<typenum::U32, typenum::B1>(event_id(fd), DataTag::Debug, b"write   ", rb());
 }
 
 #[kretprobe("ksys_write")]
@@ -117,7 +119,9 @@ fn kprobe_read(regs: Registers) {
 
     let mut context = SyscallContext::empty();
     context = SyscallContext::Read { fd, data_ptr };
-    context.push(syscall_contexts_map())
+    context.push(syscall_contexts_map());
+
+    //send::sized::<typenum::U32, typenum::B1>(event_id(fd), DataTag::Debug, b"read    ", rb());
 }
 
 #[kretprobe("ksys_read")]
@@ -342,7 +346,6 @@ fn kretprobe_getsockname(regs: Registers) {
 #[kprobe("__close_fd")]
 fn kprobe_close(regs: Registers) {
     let fd = regs.parm1() as u32;
-
 
     if is_outgoing(&socket_id(fd)) {
         forget_outgoing(&socket_id(fd));

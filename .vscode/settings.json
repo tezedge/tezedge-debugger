@@ -15,6 +15,7 @@
         "kretprobe",
         "ksys",
         "ktime",
+        "percpu",
         "printk",
         "recvfrom",
         "redbpf",
