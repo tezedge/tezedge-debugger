@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::{
     convert::TryFrom,
     mem,
@@ -5,7 +8,6 @@ use std::{
     str,
 };
 use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, HashMap};
-use futures::stream::StreamExt;
 use super::{SocketId, EventId, DataDescriptor, DataTag, Address, bpf_code::CODE};
 
 pub struct Module(RawModule);
@@ -37,7 +39,11 @@ pub enum SnifferError {
 }
 
 impl SnifferError {
-    fn code(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), SnifferErrorCode> {
+    fn code(
+        id: EventId,
+        code: i32,
+        actual_length: usize,
+    ) -> Result<(EventId, usize), SnifferErrorCode> {
         match code {
             -14 => Err(SnifferErrorCode::Fault),
             e if e < 0 => Err(SnifferErrorCode::Unknown(e)),
@@ -77,12 +83,20 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
         let data = &value[mem::size_of::<DataDescriptor>()..];
         match descriptor.tag {
             DataTag::Write | DataTag::SendTo | DataTag::SendMsg => {
-                SnifferError::write(descriptor.id, descriptor.size, data.len())
-                    .map(|(id, size)| SnifferEvent::Write { id, data: &data[..size] })
+                SnifferError::write(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
+                    SnifferEvent::Write {
+                        id,
+                        data: &data[..size],
+                    }
+                })
             },
             DataTag::Read | DataTag::RecvFrom => {
-                SnifferError::read(descriptor.id, descriptor.size, data.len())
-                    .map(|(id, size)| SnifferEvent::Read { id, data: &data[..size] })
+                SnifferError::read(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
+                    SnifferEvent::Read {
+                        id,
+                        data: &data[..size],
+                    }
+                })
             },
             DataTag::Connect => {
                 Ok(SnifferEvent::Connect {
@@ -100,44 +114,25 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
             },
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
             DataTag::Debug => {
-                SnifferError::debug(descriptor.id, descriptor.size, data.len())
-                    .map(|(id, size)| {
-                        let msg = str::from_utf8(&data[..size]).unwrap();
-                        SnifferEvent::Debug { id, msg }
-                    })
-            }
+                SnifferError::debug(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
+                    let msg = str::from_utf8(&data[..size]).unwrap();
+                    SnifferEvent::Debug { id, msg }
+                })
+            },
         }
     }
 }
 
-pub struct Event<T> {
-    pub map_name: String,
-    pub items: Vec<T>,
-}
-
 impl Module {
     // TODO: handle error
-    pub fn load() -> (Self, impl StreamExt<Item = Event<DataDescriptor>>) {
+    pub fn load() -> Self {
         let mut loaded = Loader::load(CODE).expect("Error loading BPF program");
         for probe in loaded.kprobes_mut() {
             probe
                 .attach_kprobe(&probe.name(), 0)
                 .expect(&format!("Error attaching kprobe program {}", probe.name()));
         }
-        let events = loaded.events.map(|(map_name, items_bytes)| {
-            let mut items = Vec::with_capacity(items_bytes.len());
-            for bytes in items_bytes {
-                match DataDescriptor::try_from(bytes.as_ref()) {
-                    Ok(item) => items.push(item),
-                    Err(()) => todo!("log en error"),
-                }
-            }
-            Event {
-                map_name: map_name,
-                items: items,
-            }
-        });
-        (Module(loaded.module), events)
+        Module(loaded.module)
     }
 
     pub fn main_buffer(&self) -> RingBuffer {

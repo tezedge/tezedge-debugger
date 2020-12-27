@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 fn main() {
     #[cfg(feature = "facade")]
     self::facade::main()

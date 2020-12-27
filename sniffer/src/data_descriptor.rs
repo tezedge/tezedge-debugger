@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use core::{mem, ptr, convert::TryFrom, fmt};
 
 pub struct DataDescriptor {

@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use core::{mem, ptr};
 use typenum::{Unsigned, Bit, Shleft};
 use redbpf_probes::{maps::RingBuffer, helpers::gen};

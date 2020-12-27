@@ -53,7 +53,6 @@ struct State {
 struct ErrorContext {
     is_incoming: bool,
     source_type: SourceType,
-    remote_address: SocketAddr,
     event_id: EventId,
     chunk_counter: usize,
 }
@@ -67,7 +66,6 @@ impl fmt::Display for ErrorContext {
             self.chunk_counter,
             if self.is_incoming { "incoming" } else { "outgoing" },
             self.event_id,
-            // self.remote_address,
         )
     }
 }
@@ -210,7 +208,6 @@ impl Parser {
         let ctx = ErrorContext {
             is_incoming,
             source_type: self.source_type,
-            remote_address: self.remote_address.clone(),
             event_id: event_id.clone(),
             chunk_counter: state.chunk(is_incoming),
         };

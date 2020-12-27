@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 #![no_std]
 #![no_main]
 #![cfg(feature = "probes")]
@@ -11,7 +14,7 @@ program!(0xFFFFFFFE, "GPL");
 
 const DD: usize = mem::size_of::<DataDescriptor>();
 
-// HashMap should store something event if it is void, let's store 1u32
+// HashMap should store something even if it is void, let's store 1u32
 type HashSet<T> = HashMap<T, u32>;
 
 #[map]

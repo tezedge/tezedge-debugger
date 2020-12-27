@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use redbpf_probes::{maps::HashMap, helpers};
 use super::data_descriptor::{SocketId, EventId};
 

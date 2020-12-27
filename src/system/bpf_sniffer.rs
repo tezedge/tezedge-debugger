@@ -3,7 +3,7 @@
 
 use std::{convert::TryFrom, net::{IpAddr, SocketAddr}, collections::HashMap};
 use tokio::{stream::StreamExt, sync::mpsc};
-use sniffer::{SocketId, EventId, facade::{Module, SnifferEvent}};
+use sniffer::{SocketId, EventId, Module, SnifferEvent};
 
 use super::{SystemSettings, p2p, processor};
 use crate::messages::p2p_message::{P2pMessage, SourceType};
@@ -17,9 +17,8 @@ pub struct BpfSniffer {
 
 impl BpfSniffer {
     pub fn new(settings: &SystemSettings) -> Self {
-        let (module, _events) = Module::load();
         BpfSniffer {
-            module: module,
+            module: Module::load(),
             settings: settings.clone(),
             connections: HashMap::new(),
             counter: 1,
