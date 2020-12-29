@@ -12,13 +12,13 @@ where
     S: Unsigned,
     K: Bit,
 {
-    if let Ok(buffer) = rb.reserve(S::U64, 0) {
+    if let Ok(mut buffer) = rb.reserve(S::U64, 0) {
         let to_copy = (S::USIZE - mem::size_of::<DataDescriptor>()).min(data.len());
         let result = if to_copy > 0 {
             let source = data.as_ptr();
             let offset = mem::size_of::<DataDescriptor>() as isize;
             unsafe {
-                let destination = buffer.0.as_mut_ptr().offset(offset);
+                let destination = buffer.as_mut().as_mut_ptr().offset(offset);
                 if K::BOOL {
                     gen::bpf_probe_read_kernel(
                         destination as *mut _,
@@ -44,17 +44,17 @@ where
         };
         let descriptor = DataDescriptor { id, tag, size };
         unsafe {
-            ptr::write(buffer.0.as_ptr() as *mut _, descriptor);
+            ptr::write(buffer.as_mut().as_mut_ptr() as *mut _, descriptor);
         }
         buffer.submit(0);
         return;
     }
 
     // failed to allocate buffer, try allocate smaller buffer to report error
-    if let Ok(buffer) = rb.reserve(mem::size_of::<DataDescriptor>() as u64, 0) {
+    if let Ok(mut buffer) = rb.reserve(mem::size_of::<DataDescriptor>() as u64, 0) {
         let descriptor = DataDescriptor { id, tag, size: -90 };
         unsafe {
-            ptr::write(buffer.0.as_ptr() as *mut _, descriptor);
+            ptr::write(buffer.as_mut().as_mut_ptr() as *mut _, descriptor);
         }
         buffer.submit(0);
     }

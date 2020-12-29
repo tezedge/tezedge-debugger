@@ -2,8 +2,8 @@
 
 for probe in /sys/kernel/debug/tracing/events/kprobes/*; do
     if [ -d "$probe" ]; then
-        echo $probe
-        echo 0 > /sys/kernel/debug/tracing/events/kprobes/$probe/enable
+        echo "removing" "$probe"
+        echo 0 > "$probe"/enable
     fi
 done
 
