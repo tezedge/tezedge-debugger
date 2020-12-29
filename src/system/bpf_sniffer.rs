@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{convert::TryFrom, net::{IpAddr, SocketAddr}, collections::HashMap};
+use std::{convert::TryFrom, net::{IpAddr, SocketAddr}, collections::HashMap, fs::File, io::Write};
 use tokio::{stream::StreamExt, sync::mpsc};
 use sniffer::{SocketId, EventId, Module, SnifferEvent};
 
@@ -13,15 +13,22 @@ pub struct BpfSniffer {
     settings: SystemSettings,
     connections: HashMap<SocketId, mpsc::UnboundedSender<p2p::Message>>,
     counter: u64,
+    debug_stop_tx: mpsc::Sender<()>,
+    debug_stop_rx: mpsc::Receiver<()>,
+    last_timestamp: u64,
 }
 
 impl BpfSniffer {
     pub fn new(settings: &SystemSettings) -> Self {
+        let (tx, rx) = mpsc::channel(1);
         BpfSniffer {
             module: Module::load(),
             settings: settings.clone(),
             connections: HashMap::new(),
             counter: 1,
+            debug_stop_tx: tx,
+            debug_stop_rx: rx,
+            last_timestamp: 0,
         }
     }
 
@@ -30,6 +37,18 @@ impl BpfSniffer {
         let mut events = self.module.main_buffer();
         let mut s = self;
         while let Some(slice) = events.next().await {
+            if let Ok(()) = s.debug_stop_rx.try_recv() {
+                drop(slice);
+                s.connections.clear();
+                let dump = events.dump();
+                tracing::error!(consumer_pos = dump.pos, msg = "fatal error, stop sniffing");
+                let path = "/tmp/volume/ring_buffer.dump";
+                let mut file = File::create(path).unwrap();
+                file.write_all(dump.as_ref()).unwrap();
+                file.sync_all().unwrap();
+                tracing::info!(path = path, msg = "written dump");
+                break;
+            }
             match SnifferEvent::try_from(slice.as_ref()) {
                 Err(error) => tracing::error!("{:?}", error),
                 Ok(SnifferEvent::Connect { id, address }) => s.on_connect(id, address, db.clone(), false),
@@ -45,7 +64,17 @@ impl BpfSniffer {
         }
     }
 
+    fn check(&mut self, id: &EventId) {
+        let ts = id.ts();
+        if ts < self.last_timestamp {
+            panic!("HERE");
+        }
+        self.last_timestamp = ts;
+    }
+
     fn on_connect(&mut self, id: EventId, address: SocketAddr, db: mpsc::UnboundedSender<P2pMessage>, incoming: bool) {
+        self.check(&id);
+
         let should_ignore = ignore(&self.settings, &address);
         tracing::info!(
             address = tracing::field::debug(&address),
@@ -69,10 +98,18 @@ impl BpfSniffer {
             id: id.socket_id.clone(),
             db: db,
         };
-        tokio::spawn(async move { parser.run(rx).await });
+        let mut tx = self.debug_stop_tx.clone();
+        tokio::spawn(async move {
+            match parser.run(rx).await {
+                Err(p2p::ParserError::FailedToDecrypt) => tx.send(()).await.unwrap(),
+                _ => (),
+            }
+        });
     }
-    
+
     fn on_close(&mut self, id: EventId) {
+        self.check(&id);
+
         tracing::info!(
             id = tracing::field::display(&id),
             msg = "P2P Close",
@@ -80,8 +117,10 @@ impl BpfSniffer {
         // can safely drop the old connection
         self.connections.remove(&id.socket_id);
     }
-    
+
     fn on_data(&mut self, id: EventId, payload: Vec<u8>, incoming: bool) {
+        self.check(&id);
+
         match self.connections.get_mut(&id.socket_id) {
             Some(connection) => {
                 let message = p2p::Message {
@@ -90,6 +129,7 @@ impl BpfSniffer {
                     counter: self.counter,
                     event_id: id.clone(),
                 };
+                self.counter += 1;
                 match connection.send(message) {
                     Ok(()) => (),
                     Err(_) => {
@@ -122,8 +162,8 @@ fn ignore(settings: &SystemSettings, address: &SocketAddr) -> bool {
         0 | 65535 => {
             return true;
         },
-        // dns
-        53 => {
+        // dns and other well known not tezos
+        53 | 80 | 443 => {
             return true;
         },
         // our

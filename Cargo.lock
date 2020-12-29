@@ -246,7 +246,6 @@ dependencies = [
 [[package]]
 name = "bpf-sys"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#9d250cc8f60b3ca307ab9f669f5c7c94182530a4"
 dependencies = [
  "bindgen",
  "cc",
@@ -302,7 +301,6 @@ checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
 [[package]]
 name = "cargo-bpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#9d250cc8f60b3ca307ab9f669f5c7c94182530a4"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -705,9 +703,9 @@ dependencies = [
 
 [[package]]
 name = "dtoa"
-version = "0.4.6"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "134951f4028bdadb9b84baf4232681efbf277da25144b9b0ad65df75946c422b"
+checksum = "88d7ed2934d741c6b37e33e3832298e8850b53fd2d2bea03873375596c7cea4e"
 
 [[package]]
 name = "either"
@@ -1275,9 +1273,9 @@ dependencies = [
 
 [[package]]
 name = "itoa"
-version = "0.4.6"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc6f3ad7b9d11a0c00842ff8de1b60ee58661048eb8049ed33c73594f359d7e6"
+checksum = "dd25036021b0de88a0aff6b850051563c6516d0bf53f8638938edbb9de732736"
 
 [[package]]
 name = "jobserver"
@@ -2226,7 +2224,6 @@ dependencies = [
 [[package]]
 name = "redbpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#9d250cc8f60b3ca307ab9f669f5c7c94182530a4"
 dependencies = [
  "bindgen",
  "bpf-sys",
@@ -2246,7 +2243,6 @@ dependencies = [
 [[package]]
 name = "redbpf-macros"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#9d250cc8f60b3ca307ab9f669f5c7c94182530a4"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
@@ -2257,7 +2253,6 @@ dependencies = [
 [[package]]
 name = "redbpf-probes"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#9d250cc8f60b3ca307ab9f669f5c7c94182530a4"
 dependencies = [
  "cargo-bpf",
  "cty",

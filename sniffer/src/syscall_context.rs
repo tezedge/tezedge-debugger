@@ -1,8 +1,13 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use redbpf_probes::{maps::HashMap, helpers};
-use super::data_descriptor::{SocketId, EventId};
+use redbpf_probes::{maps::{HashMap, RingBuffer}, helpers, registers::Registers};
+use super::{data_descriptor::{SocketId, EventId, DataTag}, send};
+
+#[derive(Clone)]
+pub struct SyscallContextKey {
+    pid: u32,
+}
 
 #[derive(Clone)]
 pub enum SyscallContext {
@@ -43,6 +48,19 @@ pub enum SyscallContext {
     },
 }
 
+#[inline(always)]
+fn e_unknown_fd(id: u64) -> EventId {
+    let ts = helpers::bpf_ktime_get_ns();
+    EventId {
+        socket_id: SocketId {
+            pid: (id >> 32) as u32,
+            fd: 0,
+        },
+        ts_lo: (ts & 0xffffffff) as u32,
+        ts_hi: (ts >> 32) as u32,
+    }
+}
+
 impl SyscallContext {
     /// bpf validator forbids reading from stack uninitialized data
     /// different variants of this enum has different length,
@@ -56,21 +74,34 @@ impl SyscallContext {
     }
 
     #[inline(always)]
-    pub fn push(self, map: &mut HashMap<u64, SyscallContext>) {
+    pub fn push(self, regs: &Registers, map: &mut HashMap<SyscallContextKey, SyscallContext>, rb: &mut RingBuffer) {
+        let _ = regs;
         let id = helpers::bpf_get_current_pid_tgid();
-        map.set(&id, &self)
+        let key = SyscallContextKey {
+            pid: (id & 0xffffffff) as u32,
+        };
+        if map.get(&key).is_some() {
+            send::sized::<typenum::U32, typenum::B1>(e_unknown_fd(id), DataTag::Debug, 0xdeadbeef_u64.to_be_bytes().as_ref(), rb);
+            map.delete(&key);
+        } else {
+            map.set(&key, &self);
+        }
     }
 
     #[inline(always)]
-    pub fn pop_with<F>(map: &mut HashMap<u64, SyscallContext>, f: F)
+    pub fn pop_with<F>(regs: &Registers, map: &mut HashMap<SyscallContextKey, SyscallContext>, rb: &mut RingBuffer, f: F)
     where
         F: FnOnce(Self),
     {
+        let _ = regs;
         let id = helpers::bpf_get_current_pid_tgid();
-        match map.get(&id) {
+        let key = SyscallContextKey {
+            pid: (id & 0xffffffff) as u32,
+        };
+        match map.get(&key) {
             Some(context) => {
                 f(context.clone());
-                map.delete(&id);
+                map.delete(&key);
             },
             None => (),
         }

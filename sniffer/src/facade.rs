@@ -5,7 +5,6 @@ use std::{
     convert::TryFrom,
     mem,
     net::{SocketAddr, IpAddr},
-    str,
 };
 use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, HashMap};
 use super::{SocketId, EventId, DataDescriptor, DataTag, Address, bpf_code::CODE};
@@ -27,7 +26,7 @@ pub enum SnifferEvent<'a> {
     Connect { id: EventId, address: SocketAddr },
     LocalAddress { id: EventId, address: SocketAddr },
     Close { id: EventId },
-    Debug { id: EventId, msg: &'a str },
+    Debug { id: EventId, msg: String },
 }
 
 #[derive(Debug)]
@@ -115,7 +114,7 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
             DataTag::Debug => {
                 SnifferError::debug(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
-                    let msg = str::from_utf8(&data[..size]).unwrap();
+                    let msg = hex::encode(&data[..size]);
                     SnifferEvent::Debug { id, msg }
                 })
             },

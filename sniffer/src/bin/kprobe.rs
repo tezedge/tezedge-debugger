@@ -8,7 +8,7 @@
 use redbpf_probes::kprobe::prelude::*;
 use redbpf_probes::helpers;
 use core::{mem, ptr, slice, convert::TryFrom};
-use sniffer::{SocketId, EventId, DataDescriptor, DataTag, Address, SyscallContext, send};
+use sniffer::{SocketId, EventId, DataDescriptor, DataTag, Address, SyscallContext, SyscallContextKey, send};
 
 program!(0xFFFFFFFE, "GPL");
 
@@ -22,9 +22,9 @@ static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x40000000); //
 
 // the key is (pid concat tgid) it identifies the single thread
 // one thread can do no more then one syscall simultaneously
-// max entries is the maximal number of processors on target machine, let's define 64
+// max entries is the maximal number of processors on target machine, let's define 256
 #[map]
-static mut syscall_contexts: HashMap<u64, SyscallContext> = HashMap::with_max_entries(64);
+static mut syscall_contexts: HashMap<SyscallContextKey, SyscallContext> = HashMap::with_max_entries(256);
 
 // connected socket ipv6 ocaml
 #[map]
@@ -32,7 +32,7 @@ static mut outgoing_connections: HashSet<SocketId> = HashSet::with_max_entries(0
 
 // each bpf map is safe to access from multiple threads
 #[inline(always)]
-fn syscall_contexts_map() -> &'static mut HashMap<u64, SyscallContext> {
+fn syscall_contexts_map() -> &'static mut HashMap<SyscallContextKey, SyscallContext> {
     unsafe { &mut syscall_contexts }
 }
 
@@ -43,7 +43,10 @@ fn rb() -> &'static mut RingBuffer {
 
 #[inline(always)]
 fn reg_outgoing(id: &SocketId) {
-    unsafe { outgoing_connections.set(id, &1) };
+    unsafe {
+        outgoing_connections.delete(id);
+        outgoing_connections.set(id, &1)
+    };
 }
 
 #[inline(always)]
@@ -91,14 +94,12 @@ fn kprobe_write(regs: Registers) {
 
     let mut context = SyscallContext::empty();
     context = SyscallContext::Write { fd, data_ptr };
-    context.push(syscall_contexts_map());
-
-    //send::sized::<typenum::U32, typenum::B1>(event_id(fd), DataTag::Debug, b"write   ", rb());
+    context.push(&regs, syscall_contexts_map(), rb());
 }
 
 #[kretprobe("ksys_write")]
 fn kretprobe_write(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
         SyscallContext::Write { fd, data_ptr } => {
             let written = regs.rc();
             if regs.is_syscall_success() && written as i64 > 0 {
@@ -122,14 +123,12 @@ fn kprobe_read(regs: Registers) {
 
     let mut context = SyscallContext::empty();
     context = SyscallContext::Read { fd, data_ptr };
-    context.push(syscall_contexts_map());
-
-    //send::sized::<typenum::U32, typenum::B1>(event_id(fd), DataTag::Debug, b"read    ", rb());
+    context.push(&regs, syscall_contexts_map(), rb());
 }
 
 #[kretprobe("ksys_read")]
 fn kretprobe_read(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
         SyscallContext::Read { fd, data_ptr } => {
             let read = regs.rc();
             if regs.is_syscall_success() && read as i64 > 0 {
@@ -153,12 +152,12 @@ fn kprobe_sendto(regs: Registers) {
 
     let mut context = SyscallContext::empty();
     context = SyscallContext::SendTo { fd, data_ptr };
-    context.push(syscall_contexts_map())
+    context.push(&regs, syscall_contexts_map(), rb());
 }
 
 #[kretprobe("__sys_sendto")]
 fn kretprobe_sendto(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
         SyscallContext::SendTo { fd, data_ptr } => {
             let written = regs.rc();
             if regs.is_syscall_success() && written as i64 > 0 {
@@ -182,12 +181,12 @@ fn kprobe_recvfrom(regs: Registers) {
 
     let mut context = SyscallContext::empty();
     context = SyscallContext::RecvFrom { fd, data_ptr };
-    context.push(syscall_contexts_map())
+    context.push(&regs, syscall_contexts_map(), rb());
 }
 
 #[kretprobe("__sys_recvfrom")]
 fn kretprobe_recvfrom(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
         SyscallContext::RecvFrom { fd, data_ptr } => {
             let read = regs.rc();
             if regs.is_syscall_success() && read as i64 > 0 {
@@ -269,12 +268,12 @@ fn kprobe_connect(regs: Registers) {
 
     let mut context = SyscallContext::empty();
     context = SyscallContext::Connect { fd, address };
-    context.push(syscall_contexts_map())
+    context.push(&regs, syscall_contexts_map(), rb());
 }
 
 #[kretprobe("__sys_connect")]
 fn kretprobe_connect(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
         SyscallContext::Connect { fd, address } => {
             if regs.is_syscall_success() && regs.rc() as i64 > 0 {
                 let mut tmp = [0xff; Address::RAW_SIZE];
@@ -315,12 +314,12 @@ fn kprobe_getsockname(regs: Registers) {
 
     let mut context = SyscallContext::empty();
     context = SyscallContext::SocketName { fd, address };
-    context.push(syscall_contexts_map())
+    context.push(&regs, syscall_contexts_map(), rb());
 }
 
 #[kretprobe("__sys_getsockname")]
 fn kretprobe_getsockname(regs: Registers) {
-    SyscallContext::pop_with(syscall_contexts_map(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
         SyscallContext::SocketName { fd, address } => {
             if regs.is_syscall_success() && regs.rc() as i64 > 0 {
                 let mut tmp = [0xff; Address::RAW_SIZE];
@@ -353,6 +352,6 @@ fn kprobe_close(regs: Registers) {
     if is_outgoing(&socket_id(fd)) {
         forget_outgoing(&socket_id(fd));
 
-        send::sized::<typenum::U24, typenum::B0>(event_id(fd), DataTag::Close, &[], rb())
+        send::sized::<typenum::U24, typenum::B0>(event_id(fd), DataTag::Close, &[], rb());
     }
 }

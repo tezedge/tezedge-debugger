@@ -16,6 +16,12 @@ pub struct EventId {
     pub ts_hi: u32,
 }
 
+impl EventId {
+    pub fn ts(&self) -> u64 {
+        ((self.ts_hi.clone() as u64) << 32) + (self.ts_lo.clone() as u64)
+    }
+}
+
 impl fmt::Display for EventId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ts = ((self.ts_hi as u64) << 32) | (self.ts_lo as u64);

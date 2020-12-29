@@ -14,7 +14,7 @@ mod bpf_code;
 #[cfg(feature = "probes")]
 mod syscall_context;
 #[cfg(feature = "probes")]
-pub use self::syscall_context::SyscallContext;
+pub use self::syscall_context::{SyscallContext, SyscallContextKey};
 
 #[cfg(feature = "probes")]
 pub mod send;

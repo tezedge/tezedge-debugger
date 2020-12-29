@@ -43,6 +43,12 @@ pub struct Parser {
     pub db: mpsc::UnboundedSender<P2pMessage>,
 }
 
+pub enum ParserError {
+    NoDatabase,
+    FailedToDecrypt,
+    WrongProofOfWork,
+}
+
 struct State {
     conversation: Conversation,
     chunk_incoming_counter: usize,
@@ -74,7 +80,7 @@ impl Parser {
     const DEFAULT_POW_TARGET: f64 = 26.0;
 
     // TODO: split
-    pub async fn run<S>(self, mut events: S) -> Result<(), ()>
+    pub async fn run<S>(self, mut events: S) -> Result<(), ParserError>
     where
         S: Unpin + StreamExt<Item = Message>,
     {
@@ -176,12 +182,16 @@ impl Parser {
                         self.store_db(p2p_msg, self.error_context(&state, incoming, &event_id))?;
                         state.inc(incoming);
                     }
+                    if !failed_to_decrypt.is_empty() {
+                        return Err(ParserError::FailedToDecrypt);
+                    }
                 },
                 ConsumeResult::NoDecipher(_) => {
                     tracing::error!(
                         context = self.error_context(&state, incoming, &event_id),
                         msg = "identity wrong",
                     );
+                    return Err(ParserError::FailedToDecrypt);
                 },
                 ConsumeResult::PowInvalid => {
                     tracing::error!(
@@ -189,14 +199,14 @@ impl Parser {
                         payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
                         msg = "received connection message with wrong pow, maybe foreign packet",
                     );
-                    //std::process::exit(0);
+                    return Err(ParserError::WrongProofOfWork);
                 },
                 ConsumeResult::UnexpectedChunks | ConsumeResult::InvalidConversation => {
                     tracing::error!(
                         context = self.error_context(&state, incoming, &event_id),
                         msg = "probably foreign packet",
                     );
-                    //std::process::exit(0);
+                    return Err(ParserError::FailedToDecrypt);
                 },
             }
         }
@@ -214,7 +224,7 @@ impl Parser {
         tracing::field::display(ctx)
     }
 
-    fn store_db(&self, message: P2pMessage, error_context: DisplayValue<ErrorContext>) -> Result<(), ()> {
+    fn store_db(&self, message: P2pMessage, error_context: DisplayValue<ErrorContext>) -> Result<(), ParserError> {
         self.db.send(message)
             .map_err(|err| {
                 tracing::error!(
@@ -222,6 +232,7 @@ impl Parser {
                     error = tracing::field::display(&err),
                     msg = "db channel closed abruptly",
                 );
+                ParserError::NoDatabase
             })
     }
 }
