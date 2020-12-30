@@ -65,7 +65,7 @@ impl BpfSniffer {
     }
 
     fn check(&mut self, id: &EventId) {
-        let ts = id.ts();
+        let ts = id.ts_finish();
         if ts < self.last_timestamp {
             panic!("HERE");
         }

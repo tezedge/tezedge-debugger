@@ -8,7 +8,7 @@
 use redbpf_probes::kprobe::prelude::*;
 use redbpf_probes::helpers;
 use core::{mem, ptr, slice, convert::TryFrom};
-use sniffer::{SocketId, EventId, DataDescriptor, DataTag, Address, SyscallContext, SyscallContextKey, send};
+use sniffer::{SocketId, EventId, DataDescriptor, DataTag, Address, SyscallContext, SyscallContextFull, SyscallContextKey, send};
 
 program!(0xFFFFFFFE, "GPL");
 
@@ -24,7 +24,7 @@ static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x40000000); //
 // one thread can do no more then one syscall simultaneously
 // max entries is the maximal number of processors on target machine, let's define 256
 #[map]
-static mut syscall_contexts: HashMap<SyscallContextKey, SyscallContext> = HashMap::with_max_entries(256);
+static mut syscall_contexts: HashMap<SyscallContextKey, SyscallContextFull> = HashMap::with_max_entries(256);
 
 // connected socket ipv6 ocaml
 #[map]
@@ -32,7 +32,7 @@ static mut outgoing_connections: HashSet<SocketId> = HashSet::with_max_entries(0
 
 // each bpf map is safe to access from multiple threads
 #[inline(always)]
-fn syscall_contexts_map() -> &'static mut HashMap<SyscallContextKey, SyscallContext> {
+fn syscall_contexts_map() -> &'static mut HashMap<SyscallContextKey, SyscallContextFull> {
     unsafe { &mut syscall_contexts }
 }
 
@@ -74,13 +74,8 @@ fn socket_id(fd: u32) -> SocketId {
 }
 
 #[inline(always)]
-fn event_id(fd: u32) -> EventId {
-    let ts = helpers::bpf_ktime_get_ns();
-    EventId {
-        socket_id: socket_id(fd),
-        ts_lo: (ts & 0xffffffff) as u32,
-        ts_hi: (ts >> 32) as u32,
-    }
+fn event_id(fd: u32, ts0: u64) -> EventId {
+    EventId::new(socket_id(fd), ts0, helpers::bpf_ktime_get_ns())
 }
 
 #[kprobe("ksys_write")]
@@ -99,12 +94,12 @@ fn kprobe_write(regs: Registers) {
 
 #[kretprobe("ksys_write")]
 fn kretprobe_write(regs: Registers) {
-    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s, ts| match s {
         SyscallContext::Write { fd, data_ptr } => {
             let written = regs.rc();
             if regs.is_syscall_success() && written as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
-                let id = event_id(fd);
+                let id = event_id(fd, ts);
                 send::dyn_sized::<typenum::B0>(id, DataTag::Write, data, rb())
             }
         },
@@ -128,12 +123,12 @@ fn kprobe_read(regs: Registers) {
 
 #[kretprobe("ksys_read")]
 fn kretprobe_read(regs: Registers) {
-    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s, ts| match s {
         SyscallContext::Read { fd, data_ptr } => {
             let read = regs.rc();
             if regs.is_syscall_success() && read as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
-                let id = event_id(fd);
+                let id = event_id(fd, ts);
                 send::dyn_sized::<typenum::B0>(id, DataTag::Read, data, rb())
             }
         },
@@ -157,12 +152,12 @@ fn kprobe_sendto(regs: Registers) {
 
 #[kretprobe("__sys_sendto")]
 fn kretprobe_sendto(regs: Registers) {
-    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s, ts| match s {
         SyscallContext::SendTo { fd, data_ptr } => {
             let written = regs.rc();
             if regs.is_syscall_success() && written as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
-                let id = event_id(fd);
+                let id = event_id(fd, ts);
                 send::dyn_sized::<typenum::B0>(id, DataTag::SendTo, data, rb())
             }
         },
@@ -186,12 +181,12 @@ fn kprobe_recvfrom(regs: Registers) {
 
 #[kretprobe("__sys_recvfrom")]
 fn kretprobe_recvfrom(regs: Registers) {
-    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s, ts| match s {
         SyscallContext::RecvFrom { fd, data_ptr } => {
             let read = regs.rc();
             if regs.is_syscall_success() && read as i64 > 0 {
                 let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
-                let id = event_id(fd);
+                let id = event_id(fd, ts);
                 send::dyn_sized::<typenum::B0>(id, DataTag::RecvFrom, data, rb())
             }
         },
@@ -273,7 +268,7 @@ fn kprobe_connect(regs: Registers) {
 
 #[kretprobe("__sys_connect")]
 fn kretprobe_connect(regs: Registers) {
-    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s, ts| match s {
         SyscallContext::Connect { fd, address } => {
             if regs.is_syscall_success() && regs.rc() as i64 > 0 {
                 let mut tmp = [0xff; Address::RAW_SIZE];
@@ -286,55 +281,9 @@ fn kretprobe_connect(regs: Registers) {
                 };
 
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
-                    let id = event_id(fd);
+                    let id = event_id(fd, ts);
                     reg_outgoing(&id.socket_id);
-                    // Address::RAW_SIZE + size of DataDescriptor
-                    send::sized::<typenum::U52, typenum::B0>(id, DataTag::Connect, address, rb())
-                } else {
-                    // ignore connection to other type of address
-                    // track only ipv4 (af_inet) and ipv6 (af_inet6)
-                }
-            }
-        },
-        _ => (),
-    });
-}
-
-#[kprobe("__sys_getsockname")]
-fn kprobe_getsockname(regs: Registers) {
-    let fd = regs.parm1() as u32;
-    let buf = regs.parm2() as *const u8;
-    let size = regs.parm3() as usize;
-
-    let address = unsafe { slice::from_raw_parts(buf, size) };
-
-    if !is_outgoing(&socket_id(fd)) {
-        return;
-    }
-
-    let mut context = SyscallContext::empty();
-    context = SyscallContext::SocketName { fd, address };
-    context.push(&regs, syscall_contexts_map(), rb());
-}
-
-#[kretprobe("__sys_getsockname")]
-fn kretprobe_getsockname(regs: Registers) {
-    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s| match s {
-        SyscallContext::SocketName { fd, address } => {
-            if regs.is_syscall_success() && regs.rc() as i64 > 0 {
-                let mut tmp = [0xff; Address::RAW_SIZE];
-                unsafe {
-                    gen::bpf_probe_read_user(
-                        tmp.as_mut_ptr() as _,
-                        tmp.len().min(address.len()) as u32,
-                        address.as_ptr() as _,
-                    )
-                };
-
-                if let Ok(_) = Address::try_from(tmp.as_ref()) {
-                    let id = event_id(fd);
-                    // Address::RAW_SIZE + size of DataDescriptor
-                    send::sized::<typenum::U52, typenum::B0>(id, DataTag::SocketName, address, rb())
+                    send::sized::<typenum::U28, typenum::B0>(id, DataTag::Connect, address, rb())
                 } else {
                     // ignore connection to other type of address
                     // track only ipv4 (af_inet) and ipv6 (af_inet6)
@@ -352,6 +301,6 @@ fn kprobe_close(regs: Registers) {
     if is_outgoing(&socket_id(fd)) {
         forget_outgoing(&socket_id(fd));
 
-        send::sized::<typenum::U24, typenum::B0>(event_id(fd), DataTag::Close, &[], rb());
+        send::sized::<typenum::U0, typenum::B0>(event_id(fd, 0), DataTag::Close, &[], rb());
     }
 }

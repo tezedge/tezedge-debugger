@@ -10,6 +10,12 @@ pub struct SyscallContextKey {
 }
 
 #[derive(Clone)]
+pub struct SyscallContextFull {
+    inner: SyscallContext,
+    ts: u64,
+}
+
+#[derive(Clone)]
 pub enum SyscallContext {
     Empty {
         fake_fd: u32,
@@ -42,23 +48,17 @@ pub enum SyscallContext {
         fd: u32,
         address: &'static [u8],
     },
-    SocketName {
-        fd: u32,
-        address: &'static [u8],
-    },
 }
 
 #[inline(always)]
 fn e_unknown_fd(id: u64) -> EventId {
     let ts = helpers::bpf_ktime_get_ns();
-    EventId {
-        socket_id: SocketId {
-            pid: (id >> 32) as u32,
-            fd: 0,
-        },
-        ts_lo: (ts & 0xffffffff) as u32,
-        ts_hi: (ts >> 32) as u32,
-    }
+    let socket_id = SocketId {
+        pid: (id >> 32) as u32,
+        fd: 0,
+    };
+    // same timestamp because event is instant
+    EventId::new(socket_id, ts, ts)
 }
 
 impl SyscallContext {
@@ -74,24 +74,28 @@ impl SyscallContext {
     }
 
     #[inline(always)]
-    pub fn push(self, regs: &Registers, map: &mut HashMap<SyscallContextKey, SyscallContext>, rb: &mut RingBuffer) {
+    pub fn push(self, regs: &Registers, map: &mut HashMap<SyscallContextKey, SyscallContextFull>, rb: &mut RingBuffer) {
         let _ = regs;
         let id = helpers::bpf_get_current_pid_tgid();
         let key = SyscallContextKey {
             pid: (id & 0xffffffff) as u32,
         };
         if map.get(&key).is_some() {
-            send::sized::<typenum::U32, typenum::B1>(e_unknown_fd(id), DataTag::Debug, 0xdeadbeef_u64.to_be_bytes().as_ref(), rb);
+            send::sized::<typenum::U8, typenum::B1>(e_unknown_fd(id), DataTag::Debug, 0xdeadbeef_u64.to_be_bytes().as_ref(), rb);
             map.delete(&key);
         } else {
-            map.set(&key, &self);
+            let s = SyscallContextFull {
+                inner: self,
+                ts: helpers::bpf_ktime_get_ns(),
+            };
+            map.set(&key, &s);
         }
     }
 
     #[inline(always)]
-    pub fn pop_with<F>(regs: &Registers, map: &mut HashMap<SyscallContextKey, SyscallContext>, rb: &mut RingBuffer, f: F)
+    pub fn pop_with<F>(regs: &Registers, map: &mut HashMap<SyscallContextKey, SyscallContextFull>, rb: &mut RingBuffer, f: F)
     where
-        F: FnOnce(Self),
+        F: FnOnce(Self, u64),
     {
         let _ = regs;
         let id = helpers::bpf_get_current_pid_tgid();
@@ -100,7 +104,7 @@ impl SyscallContext {
         };
         match map.get(&key) {
             Some(context) => {
-                f(context.clone());
+                f(context.inner.clone(), context.ts.clone());
                 map.delete(&key);
             },
             None => (),

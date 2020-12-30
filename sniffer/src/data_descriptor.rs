@@ -12,20 +12,37 @@ pub struct DataDescriptor {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct EventId {
     pub socket_id: SocketId,
-    pub ts_lo: u32,
-    pub ts_hi: u32,
+    //ts_start_lo: u32,
+    //ts_start_hi: u32,
+    ts_finish_lo: u32,
+    ts_finish_hi: u32,
 }
 
 impl EventId {
-    pub fn ts(&self) -> u64 {
-        ((self.ts_hi.clone() as u64) << 32) + (self.ts_lo.clone() as u64)
+    pub fn new(socket_id: SocketId, ts_start: u64, ts_finish: u64) -> Self {
+        EventId {
+            socket_id: socket_id,
+            //ts_start_lo: (ts_start & 0xffffffff) as u32,
+            //ts_start_hi: (ts_start >> 32) as u32,
+            ts_finish_lo: (ts_finish & 0xffffffff) as u32,
+            ts_finish_hi: (ts_finish >> 32) as u32,
+        }
+    }
+
+    pub fn ts_start(&self) -> u64 {
+        0//((self.ts_start_hi.clone() as u64) << 32) + (self.ts_start_lo.clone() as u64)
+    }
+
+    pub fn ts_finish(&self) -> u64 {
+        ((self.ts_finish_hi.clone() as u64) << 32) + (self.ts_finish_lo.clone() as u64)
     }
 }
 
 impl fmt::Display for EventId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ts = ((self.ts_hi as u64) << 32) | (self.ts_lo as u64);
-        write!(f, "{}:{}", self.socket_id, ts)
+        let ts_start = self.ts_start();
+        let ts_finish = self.ts_finish();
+        write!(f, "{}:{}..{}", self.socket_id, ts_start, ts_finish)
     }
 }
 

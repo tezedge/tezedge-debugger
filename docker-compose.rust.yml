@@ -13,6 +13,7 @@ services:
       - RUST_BACKTRACE=1
     volumes:
       - "rust-shared-data:/tmp/volume"
+      - "/sys/kernel/debug:/sys/kernel/debug:rw"
     entrypoint: ./tezedge-debugger
 
   rust-node:
