@@ -7,12 +7,10 @@
 
 use redbpf_probes::kprobe::prelude::*;
 use redbpf_probes::helpers;
-use core::{mem, ptr, slice, convert::TryFrom};
-use sniffer::{SocketId, EventId, DataDescriptor, DataTag, Address, SyscallContext, SyscallContextFull, SyscallContextKey, send};
+use core::{slice, convert::TryFrom};
+use sniffer::{SocketId, EventId, DataTag, Address, SyscallContext, SyscallContextFull, SyscallContextKey, send};
 
 program!(0xFFFFFFFE, "GPL");
-
-const DD: usize = mem::size_of::<DataDescriptor>();
 
 // HashMap should store something even if it is void, let's store 1u32
 type HashSet<T> = HashMap<T, u32>;
@@ -87,8 +85,7 @@ fn kprobe_write(regs: Registers) {
         return;
     }
 
-    let mut context = SyscallContext::empty();
-    context = SyscallContext::Write { fd, data_ptr };
+    let context = SyscallContext::Write { fd, data_ptr };
     context.push(&regs, syscall_contexts_map(), rb());
 }
 
@@ -116,8 +113,7 @@ fn kprobe_read(regs: Registers) {
         return;
     }
 
-    let mut context = SyscallContext::empty();
-    context = SyscallContext::Read { fd, data_ptr };
+    let context = SyscallContext::Read { fd, data_ptr };
     context.push(&regs, syscall_contexts_map(), rb());
 }
 
@@ -145,8 +141,7 @@ fn kprobe_sendto(regs: Registers) {
         return;
     }
 
-    let mut context = SyscallContext::empty();
-    context = SyscallContext::SendTo { fd, data_ptr };
+    let context = SyscallContext::SendTo { fd, data_ptr };
     context.push(&regs, syscall_contexts_map(), rb());
 }
 
@@ -174,8 +169,7 @@ fn kprobe_recvfrom(regs: Registers) {
         return;
     }
 
-    let mut context = SyscallContext::empty();
-    context = SyscallContext::RecvFrom { fd, data_ptr };
+    let context = SyscallContext::RecvFrom { fd, data_ptr };
     context.push(&regs, syscall_contexts_map(), rb());
 }
 
@@ -261,8 +255,7 @@ fn kprobe_connect(regs: Registers) {
 
     let address = unsafe { slice::from_raw_parts(buf, size) };
 
-    let mut context = SyscallContext::empty();
-    context = SyscallContext::Connect { fd, address };
+    let context = SyscallContext::Connect { fd, address };
     context.push(&regs, syscall_contexts_map(), rb());
 }
 

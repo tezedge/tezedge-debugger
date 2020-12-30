@@ -1,6 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+use core::{mem, ptr};
 use redbpf_probes::{maps::{HashMap, RingBuffer}, helpers, registers::Registers};
 use super::{data_descriptor::{SocketId, EventId, DataTag}, send};
 
@@ -17,10 +18,7 @@ pub struct SyscallContextFull {
 
 #[derive(Clone)]
 pub enum SyscallContext {
-    Empty {
-        fake_fd: u32,
-        fake_data: &'static [u8],
-    },
+    Empty,
 
     Write {
         fd: u32,
@@ -62,17 +60,6 @@ fn e_unknown_fd(id: u64) -> EventId {
 }
 
 impl SyscallContext {
-    /// bpf validator forbids reading from stack uninitialized data
-    /// different variants of this enum has different length,
-    /// `Empty` variant should be biggest
-    #[inline(always)]
-    pub fn empty() -> Self {
-        SyscallContext::Empty {
-            fake_fd: 0,
-            fake_data: b"",
-        }
-    }
-
     #[inline(always)]
     pub fn push(self, regs: &Registers, map: &mut HashMap<SyscallContextKey, SyscallContextFull>, rb: &mut RingBuffer) {
         let _ = regs;
@@ -84,10 +71,14 @@ impl SyscallContext {
             send::sized::<typenum::U8, typenum::B1>(e_unknown_fd(id), DataTag::Debug, 0xdeadbeef_u64.to_be_bytes().as_ref(), rb);
             map.delete(&key);
         } else {
-            let s = SyscallContextFull {
-                inner: self,
+            let mut s = SyscallContextFull {
+                inner: SyscallContext::Empty,
                 ts: helpers::bpf_ktime_get_ns(),
             };
+            // bpf validator forbids reading from stack uninitialized data
+            // different variants of this enum has different length,
+            unsafe { ptr::write_volatile(&mut s.inner, mem::zeroed()) };
+            s.inner = self;
             map.set(&key, &s);
         }
     }
@@ -97,7 +88,7 @@ impl SyscallContext {
     where
         F: FnOnce(Self, u64),
     {
-        let _ = regs;
+        let _ = (regs, rb);
         let id = helpers::bpf_get_current_pid_tgid();
         let key = SyscallContextKey {
             pid: (id & 0xffffffff) as u32,
