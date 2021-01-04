@@ -14,7 +14,7 @@ services:
     volumes:
       - "ocaml-shared-data:/tmp/volume"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
-    entrypoint: sh -c "./tezedge-debugger"
+    entrypoint: sh -c "./cleanup_probes.sh && ./tezedge-debugger"
 
   ocaml-node:
     image: tezos/tezos:v8.0

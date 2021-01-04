@@ -3017,6 +3017,7 @@ dependencies = [
  "bytes 0.5.6",
  "crypto 0.8.0",
  "failure",
+ "futures",
  "hex",
  "itertools",
  "lazy_static",

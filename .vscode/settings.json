@@ -15,6 +15,7 @@
         "kretprobe",
         "ksys",
         "ktime",
+        "oneshot",
         "percpu",
         "printk",
         "recvfrom",

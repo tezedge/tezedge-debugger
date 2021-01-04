@@ -43,10 +43,24 @@ pub struct Parser {
     pub db: mpsc::UnboundedSender<P2pMessage>,
 }
 
+#[derive(Debug, Clone)]
 pub enum ParserError {
-    NoDatabase,
+    FailedToWriteInDatabase,
     FailedToDecrypt,
     WrongProofOfWork,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParserErrorReport {
+    pub position: usize,
+    pub error: ParserError,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParserStatistics {
+    pub total_chunks: usize,
+    pub decrypted_chunks: usize,
+    pub error_report: Option<ParserErrorReport>,
 }
 
 struct State {
@@ -54,6 +68,7 @@ struct State {
     chunk_incoming_counter: usize,
     chunk_outgoing_counter: usize,
     buffer: Vec<u8>,
+    statistics: ParserStatistics,
 }
 
 struct ErrorContext {
@@ -80,7 +95,7 @@ impl Parser {
     const DEFAULT_POW_TARGET: f64 = 26.0;
 
     // TODO: split
-    pub async fn run<S>(self, mut events: S) -> Result<(), ParserError>
+    pub async fn run<S>(self, mut events: S) -> Result<ParserStatistics, ParserStatistics>
     where
         S: Unpin + StreamExt<Item = Message>,
     {
@@ -89,6 +104,11 @@ impl Parser {
             chunk_incoming_counter: 0,
             chunk_outgoing_counter: 0,
             buffer: vec![],
+            statistics: ParserStatistics {
+                total_chunks: 0,
+                decrypted_chunks: 0,
+                error_report: None,
+            },
         };
 
         let identity = {
@@ -144,12 +164,13 @@ impl Parser {
                         chunk_info.data().to_vec(),
                         message,
                     );
-                    self.store_db(p2p_msg, self.error_context(&state, incoming, &event_id))?;
+                    state.inc(incoming, true);
+                    let error_context = self.error_context(&state, incoming, &event_id);
+                    self.store_db(&mut state, p2p_msg, error_context)?;
                     tracing::info!(
                         context = self.error_context(&state, incoming, &event_id),
                         msg = "connection message",
                     );
-                    state.inc(incoming);
                 },
                 ConsumeResult::Chunks { regular, failed_to_decrypt } => {
                     for ChunkInfoPair { encrypted, decrypted } in regular {
@@ -163,14 +184,17 @@ impl Parser {
                             decrypted.data().to_vec(),
                             message,
                         );
-                        self.store_db(p2p_msg, self.error_context(&state, incoming, &event_id))?;
-                        state.inc(incoming);
+                        state.inc(incoming, true);
+                        let error_context = self.error_context(&state, incoming, &event_id);
+                        self.store_db(&mut state, p2p_msg, error_context)?;
                     }
                     for chunk in &failed_to_decrypt {
-                        tracing::error!(
-                            context = self.error_context(&state, incoming, &event_id),
-                            msg = "cannot decrypt",
-                        );
+                        let context = self.error_context(&state, incoming, &event_id);
+                        if state.statistics.error_report.is_some() {
+                            tracing::debug!(context = context, msg = "cannot decrypt");
+                        } else {
+                            tracing::error!(context = context, msg = "cannot decrypt");
+                        }
                         let p2p_msg = P2pMessage::new(
                             self.remote_address.clone(),
                             incoming,
@@ -179,39 +203,42 @@ impl Parser {
                             vec![],
                             Err("cannot decrypt".to_string()),
                         );
-                        self.store_db(p2p_msg, self.error_context(&state, incoming, &event_id))?;
-                        state.inc(incoming);
+                        state.inc(incoming, false);
+                        let error_context = self.error_context(&state, incoming, &event_id);
+                        self.store_db(&mut state, p2p_msg, error_context)?;
                     }
                     if !failed_to_decrypt.is_empty() {
-                        return Err(ParserError::FailedToDecrypt);
+                        state.report_error(ParserError::FailedToDecrypt);
                     }
                 },
                 ConsumeResult::NoDecipher(_) => {
-                    tracing::error!(
-                        context = self.error_context(&state, incoming, &event_id),
-                        msg = "identity wrong",
-                    );
-                    return Err(ParserError::FailedToDecrypt);
+                    let context = self.error_context(&state, incoming, &event_id);
+                    if state.statistics.error_report.is_some() {
+                        tracing::debug!(context = context, msg = "identity wrong");
+                    } else {
+                        tracing::error!(context = context, msg = "identity wrong");
+                    }
+                    state.report_error(ParserError::WrongProofOfWork);
                 },
                 ConsumeResult::PowInvalid => {
-                    tracing::error!(
-                        context = self.error_context(&state, incoming, &event_id),
-                        payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
-                        msg = "received connection message with wrong pow, maybe foreign packet",
-                    );
-                    return Err(ParserError::WrongProofOfWork);
+                    let context = self.error_context(&state, incoming, &event_id);
+                    let payload = tracing::field::display(hex::encode(packet.payload.as_slice()));
+                    if state.statistics.error_report.is_some() {
+                        tracing::debug!(context = context, payload = payload, msg = "wrong pow");
+                    } else {
+                        tracing::error!(context = context, payload = payload, msg = "wrong pow");
+                    }
+                    state.report_error(ParserError::WrongProofOfWork);
                 },
                 ConsumeResult::UnexpectedChunks | ConsumeResult::InvalidConversation => {
-                    tracing::error!(
-                        context = self.error_context(&state, incoming, &event_id),
-                        msg = "probably foreign packet",
-                    );
-                    return Err(ParserError::FailedToDecrypt);
+                    // already known
+                    debug_assert!(state.statistics.error_report.is_some());
+                    state.report_error(ParserError::FailedToDecrypt);
                 },
             }
         }
 
-        Ok(())
+        Ok(state.statistics)
     }
 
     fn error_context(&self, state: &State, is_incoming: bool, event_id: &EventId) -> DisplayValue<ErrorContext> {
@@ -224,7 +251,7 @@ impl Parser {
         tracing::field::display(ctx)
     }
 
-    fn store_db(&self, message: P2pMessage, error_context: DisplayValue<ErrorContext>) -> Result<(), ParserError> {
+    fn store_db(&self, state: &mut State, message: P2pMessage, error_context: DisplayValue<ErrorContext>) -> Result<(), ParserStatistics> {
         self.db.send(message)
             .map_err(|err| {
                 tracing::error!(
@@ -232,13 +259,27 @@ impl Parser {
                     error = tracing::field::display(&err),
                     msg = "db channel closed abruptly",
                 );
-                ParserError::NoDatabase
+                state.report_error(ParserError::FailedToWriteInDatabase);
+                state.statistics.clone()
             })
     }
 }
 
 impl State {
-    fn inc(&mut self, incoming: bool) {
+    fn report_error(&mut self, error: ParserError) {
+        if self.statistics.error_report.is_none() {
+            self.statistics.error_report = Some(ParserErrorReport {
+                position: self.statistics.total_chunks,
+                error: error,
+            })
+        }
+    }
+
+    fn inc(&mut self, incoming: bool, decrypted: bool) {
+        self.statistics.total_chunks += 1;
+        if decrypted {
+            self.statistics.decrypted_chunks += 1;
+        }
         if incoming {
             self.chunk_incoming_counter += 1;
         } else {

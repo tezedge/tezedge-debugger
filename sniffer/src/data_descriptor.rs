@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use core::{mem, ptr, convert::TryFrom, fmt, /*ops::Range*/};
+use core::{mem, ptr, convert::TryFrom, fmt};
 
 #[repr(C)]
 pub struct DataDescriptor {
@@ -18,20 +18,19 @@ pub struct EventId {
 }
 
 impl EventId {
-    pub fn new(socket_id: SocketId, ts_start: u64, ts_finish: u64) -> Self {
+    pub fn new(socket_id: SocketId, ts_start: u64, _ts_finish: u64) -> Self {
         EventId {
             socket_id: socket_id,
-            //ts: ts_start..ts_finish,
             ts: ts_start,
         }
     }
 
     pub fn ts_start(&self) -> u64 {
-        0//self.ts.start
+        0
     }
 
     pub fn ts_finish(&self) -> u64 {
-        self.ts//self.ts.end
+        self.ts
     }
 }
 

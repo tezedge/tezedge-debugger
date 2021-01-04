@@ -16,6 +16,7 @@ use std::path::Path;
 use std::sync::Arc;
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::system::{syslog_producer::syslog_producer, BpfSniffer};
+use tokio::sync::oneshot;
 
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
@@ -114,8 +115,9 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     // Create actual system
-    let bpf_sniffer = BpfSniffer::new(&settings);
-    tokio::spawn(async move { bpf_sniffer.run().await });
+    let (terminate_tx, terminate_rx) = oneshot::channel();
+    let bpf_sniffer = BpfSniffer::new(&settings, terminate_rx, false);
+    let sniffer_report = tokio::spawn(async move { bpf_sniffer.run().await });
 
     // Spawn warp RPC server
     tokio::spawn(async move {
@@ -132,6 +134,14 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     info!("ctrl-c received");
+
+    // sending termination command, now sniffer should stop and report should be available
+    match terminate_tx.send(()) {
+        Ok(()) => (),
+        Err(()) => tracing::error!("failed to send termination command"),
+    };
+    let sniffer_report = sniffer_report.await;
+    tracing::info!("{:?}", sniffer_report);
 
     Ok(())
 }

@@ -278,6 +278,11 @@ fn kretprobe_connect(regs: Registers) {
                     reg_outgoing(&id.socket_id);
                     send::sized::<typenum::U28, typenum::B0>(id, DataTag::Connect, address, rb())
                 } else {
+                    // AF_UNSPEC
+                    if tmp[0] == 0 && tmp[1] == 0 {
+                        forget_outgoing(&socket_id(fd));
+                        send::sized::<typenum::U0, typenum::B0>(event_id(fd, 0), DataTag::Close, &[], rb());
+                    }
                     // ignore connection to other type of address
                     // track only ipv4 (af_inet) and ipv6 (af_inet6)
                 }
