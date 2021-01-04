@@ -17,7 +17,6 @@ use std::sync::Arc;
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::system::{syslog_producer::syslog_producer, BpfSniffer, BpfSnifferCommand, BpfSnifferResponse};
 use std::time::Duration;
-use tokio::sync::mpsc;
 
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
@@ -116,25 +115,18 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     // Create actual system
-    let (command_tx, command_rx) = mpsc::channel(16);
-    let (response_tx, response_rx) = mpsc::channel(16);
-    let bpf_sniffer = BpfSniffer::new(&settings);
-    tokio::spawn(async move { bpf_sniffer.run(command_rx, response_tx).await });
-
+    let sniffer = BpfSniffer::spawn(&settings);
     tokio::spawn(async move {
-        let mut command_tx = command_tx;
-        let mut response_rx = response_rx;
-
+        let mut sniffer = sniffer;
         loop {
             // wait to collect more messages
             tokio::time::delay_for(Duration::from_secs(60)).await;
             tracing::info!("trying retrieve report");
-    
-            command_tx.send(BpfSnifferCommand::GetDebugData { filename: None, report: true }).await
-                .expect("failed to send command");
-    
-            if let Some(BpfSnifferResponse::Report(report)) = response_rx.recv().await {
-                tracing::info!("{:?}", report);
+
+            sniffer.send(BpfSnifferCommand::GetDebugData { filename: None, report: true }).await;
+            if let Some(BpfSnifferResponse::Report(report)) = sniffer.recv().await {
+                let report_json = serde_json::to_string(&report);
+                tracing::info!("{:?}", report_json);
             }
         }
     });

@@ -4,6 +4,7 @@
 use std::{net::SocketAddr, fmt};
 use futures::future::Either;
 use tokio::{stream::StreamExt, sync::mpsc};
+use serde::{Serialize, Deserialize};
 use tracing::field::DisplayValue;
 use tezos_messages::p2p::{
     encoding::{
@@ -49,27 +50,28 @@ pub struct Parser {
     pub db: mpsc::UnboundedSender<P2pMessage>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ParserError {
     FailedToWriteInDatabase,
     FailedToDecrypt,
     WrongProofOfWork,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionReport {
-    pub remote_address: SocketAddr,
+    pub remote_address: String,
     pub source_type: SourceType,
     pub report: ParserStatistics,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParserErrorReport {
     pub position: usize,
     pub error: ParserError,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParserStatistics {
     pub total_chunks: usize,
     pub decrypted_chunks: usize,
@@ -142,7 +144,7 @@ impl Parser {
                 Either::Left(message) => message,
                 Either::Right(Command::GetDebugData) => {
                     let report = ConnectionReport {
-                        remote_address: self.remote_address.clone(),
+                        remote_address: self.remote_address.to_string(),
                         source_type: self.source_type.clone(),
                         report: state.statistics.clone(),
                     };

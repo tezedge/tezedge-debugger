@@ -3,6 +3,7 @@
 
 use std::{convert::TryFrom, net::{IpAddr, SocketAddr}, collections::HashMap, fs::File, io::Write, path::{PathBuf, Path}, fmt};
 use tokio::{stream::StreamExt, sync::mpsc::{self, error::TryRecvError}};
+use serde::{Serialize, Deserialize};
 use sniffer::{SocketId, EventId, Module, SnifferEvent, RingBufferData, RingBuffer};
 use futures::{
     future::{self, FutureExt, Either},
@@ -12,7 +13,7 @@ use futures::{
 use super::{SystemSettings, p2p, processor};
 use crate::messages::p2p_message::{P2pMessage, SourceType};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BpfSnifferReport {
     pub closed_connections: Vec<p2p::ConnectionReport>,
     pub alive_connections: Vec<p2p::ConnectionReport>,
@@ -33,12 +34,37 @@ pub enum BpfSnifferCommand {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum BpfSnifferResponse {
     Report(BpfSnifferReport),
 }
 
 pub struct BpfSniffer {
+    command_tx: mpsc::Sender<BpfSnifferCommand>,
+    response_rx: mpsc::Receiver<BpfSnifferResponse>,
+}
+
+impl BpfSniffer {
+    pub fn spawn(settings: &SystemSettings) -> Self {
+        let (command_tx, command_rx) = mpsc::channel(16);
+        let (response_tx, response_rx) = mpsc::channel(16);
+        let bpf_sniffer = BpfSnifferInner::new(settings);
+        tokio::spawn(bpf_sniffer.run(command_rx, response_tx));
+        BpfSniffer { command_tx, response_rx }
+    }
+
+    pub async fn send(&mut self, command: BpfSnifferCommand) {
+        self.command_tx.send(command).await
+            .expect("failed to send command")
+    }
+
+    pub async fn recv(&mut self) -> Option<BpfSnifferResponse> {
+        self.response_rx.recv().await
+    }
+}
+
+struct BpfSnifferInner {
     module: Module,
     settings: SystemSettings,
     connections: HashMap<SocketId, mpsc::UnboundedSender<Either<p2p::Message, p2p::Command>>>,
@@ -48,10 +74,10 @@ pub struct BpfSniffer {
     last_timestamp: u64,
 }
 
-impl BpfSniffer {
+impl BpfSnifferInner {
     pub fn new(settings: &SystemSettings) -> Self {
         let (tx, rx) = mpsc::channel(0x1000);
-        BpfSniffer {
+        BpfSnifferInner {
             module: Module::load(),
             settings: settings.clone(),
             connections: HashMap::new(),
@@ -202,7 +228,7 @@ impl BpfSniffer {
             db: db,
         };
         tokio::spawn(async move {
-            let remote_address = parser.remote_address.clone();
+            let remote_address = parser.remote_address.to_string();
             let source_type = parser.source_type.clone();
             // factor out `Result`, it needed only for convenient error propagate deeper in stack
             let statistics = match parser.run(rx, debug_tx.clone()).await {
