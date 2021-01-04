@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use std::{net::SocketAddr, fmt};
+use futures::future::Either;
 use tokio::{stream::StreamExt, sync::mpsc};
 use tracing::field::DisplayValue;
 use tezos_messages::p2p::{
@@ -35,6 +36,11 @@ pub struct Message {
     pub event_id: EventId,
 }
 
+#[derive(Debug)]
+pub enum Command {
+    GetDebugData,
+}
+
 pub struct Parser {
     pub settings: SystemSettings,
     pub source_type: SourceType,
@@ -48,6 +54,13 @@ pub enum ParserError {
     FailedToWriteInDatabase,
     FailedToDecrypt,
     WrongProofOfWork,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConnectionReport {
+    pub remote_address: SocketAddr,
+    pub source_type: SourceType,
+    pub report: ParserStatistics,
 }
 
 #[derive(Debug, Clone)]
@@ -95,9 +108,9 @@ impl Parser {
     const DEFAULT_POW_TARGET: f64 = 26.0;
 
     // TODO: split
-    pub async fn run<S>(self, mut events: S) -> Result<ParserStatistics, ParserStatistics>
+    pub async fn run<S>(self, mut events: S, mut debug_tx: mpsc::Sender<ConnectionReport>) -> Result<ParserStatistics, ParserStatistics>
     where
-        S: Unpin + StreamExt<Item = Message>,
+        S: Unpin + StreamExt<Item = Either<Message, Command>>,
     {
         let mut state = State {
             conversation: Conversation::new(Self::DEFAULT_POW_TARGET),
@@ -124,7 +137,19 @@ impl Parser {
             SocketAddr::new(local_address, 0b1100011110001111)
         };
 
-        while let Some(Message { payload, incoming, counter, event_id }) = events.next().await {
+        while let Some(event) = events.next().await {
+            let Message { payload, incoming, counter, event_id } = match event {
+                Either::Left(message) => message,
+                Either::Right(Command::GetDebugData) => {
+                    let report = ConnectionReport {
+                        remote_address: self.remote_address.clone(),
+                        source_type: self.source_type.clone(),
+                        report: state.statistics.clone(),
+                    };
+                    debug_tx.send(report).await.unwrap();
+                    continue;
+                }
+            };
             let packet = Packet {
                 source: if incoming { self.remote_address.clone() } else { fake_local.clone() },
                 destination: if incoming { fake_local.clone() } else { self.remote_address.clone() },

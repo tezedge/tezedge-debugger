@@ -8,7 +8,7 @@ pub mod replayer;
 // new socket capturing system
 mod bpf_sniffer;
 mod p2p;
-pub use self::bpf_sniffer::BpfSniffer;
+pub use self::bpf_sniffer::{BpfSniffer, BpfSnifferCommand, BpfSnifferResponse, BpfSnifferReport};
 mod processor;
 
 // old socket capturing system

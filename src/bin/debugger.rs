@@ -15,8 +15,9 @@ use tezedge_debugger::storage::{MessageStore, get_ts, cfs};
 use std::path::Path;
 use std::sync::Arc;
 use storage::persistent::{open_kv, DbConfiguration};
-use tezedge_debugger::system::{syslog_producer::syslog_producer, BpfSniffer};
-use tokio::sync::oneshot;
+use tezedge_debugger::system::{syslog_producer::syslog_producer, BpfSniffer, BpfSnifferCommand, BpfSnifferResponse};
+use std::time::Duration;
+use tokio::sync::mpsc;
 
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
@@ -115,9 +116,28 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     // Create actual system
-    let (terminate_tx, terminate_rx) = oneshot::channel();
-    let bpf_sniffer = BpfSniffer::new(&settings, terminate_rx, false);
-    let sniffer_report = tokio::spawn(async move { bpf_sniffer.run().await });
+    let (command_tx, command_rx) = mpsc::channel(16);
+    let (response_tx, response_rx) = mpsc::channel(16);
+    let bpf_sniffer = BpfSniffer::new(&settings);
+    tokio::spawn(async move { bpf_sniffer.run(command_rx, response_tx).await });
+
+    tokio::spawn(async move {
+        let mut command_tx = command_tx;
+        let mut response_rx = response_rx;
+
+        loop {
+            // wait to collect more messages
+            tokio::time::delay_for(Duration::from_secs(60)).await;
+            tracing::info!("trying retrieve report");
+    
+            command_tx.send(BpfSnifferCommand::GetDebugData { filename: None, report: true }).await
+                .expect("failed to send command");
+    
+            if let Some(BpfSnifferResponse::Report(report)) = response_rx.recv().await {
+                tracing::info!("{:?}", report);
+            }
+        }
+    });
 
     // Spawn warp RPC server
     tokio::spawn(async move {
@@ -134,14 +154,6 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     info!("ctrl-c received");
-
-    // sending termination command, now sniffer should stop and report should be available
-    match terminate_tx.send(()) {
-        Ok(()) => (),
-        Err(()) => tracing::error!("failed to send termination command"),
-    };
-    let sniffer_report = sniffer_report.await;
-    tracing::info!("{:?}", sniffer_report);
 
     Ok(())
 }

@@ -2,6 +2,7 @@
     "cSpell.words": [
         "EMSGSIZE",
         "Inet",
+        "SIGTERM",
         "SPDX",
         "Shleft",
         "Syscall",
@@ -23,8 +24,10 @@
         "regs",
         "repr",
         "ringbuf",
+        "rocksdb",
         "sendmsg",
         "sendto",
+        "syslogs",
         "tgid",
         "typenum",
         "userspace"
