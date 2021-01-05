@@ -1,7 +1,18 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{convert::TryFrom, net::{IpAddr, SocketAddr}, collections::HashMap, fs::File, io::Write, path::{PathBuf, Path}, fmt};
+use std::{
+    convert::TryFrom,
+    net::{IpAddr, SocketAddr},
+    collections::HashMap,
+    fs::File,
+    io::Write,
+    path::{PathBuf, Path},
+    fmt,
+    lazy::SyncLazy,
+    sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tokio::{stream::StreamExt, sync::mpsc::{self, error::TryRecvError}};
 use serde::{Serialize, Deserialize};
 use sniffer::{SocketId, EventId, Module, SnifferEvent, RingBufferData, RingBuffer};
@@ -15,6 +26,7 @@ use crate::messages::p2p_message::{P2pMessage, SourceType};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BpfSnifferReport {
+    pub timestamp: u128,
     pub closed_connections: Vec<p2p::ConnectionReport>,
     pub alive_connections: Vec<p2p::ConnectionReport>,
     pub total_chunks: usize,
@@ -40,27 +52,28 @@ pub enum BpfSnifferResponse {
     Report(BpfSnifferReport),
 }
 
+#[derive(Clone)]
 pub struct BpfSniffer {
-    command_tx: mpsc::Sender<BpfSnifferCommand>,
-    response_rx: mpsc::Receiver<BpfSnifferResponse>,
+    command_tx: mpsc::UnboundedSender<BpfSnifferCommand>,
 }
+
+static SNIFFER_RESPONSE: SyncLazy<Mutex<Option<BpfSnifferResponse>>> = SyncLazy::new(|| Mutex::new(None));
 
 impl BpfSniffer {
     pub fn spawn(settings: &SystemSettings) -> Self {
-        let (command_tx, command_rx) = mpsc::channel(16);
-        let (response_tx, response_rx) = mpsc::channel(16);
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
         let bpf_sniffer = BpfSnifferInner::new(settings);
-        tokio::spawn(bpf_sniffer.run(command_rx, response_tx));
-        BpfSniffer { command_tx, response_rx }
+        tokio::spawn(bpf_sniffer.run(command_rx));
+        BpfSniffer { command_tx }
     }
 
-    pub async fn send(&mut self, command: BpfSnifferCommand) {
-        self.command_tx.send(command).await
+    pub fn send(&self, command: BpfSnifferCommand) {
+        self.command_tx.send(command)
             .expect("failed to send command")
     }
 
-    pub async fn recv(&mut self) -> Option<BpfSnifferResponse> {
-        self.response_rx.recv().await
+    pub fn recv() -> Option<BpfSnifferResponse> {
+        SNIFFER_RESPONSE.lock().unwrap().clone()
     }
 }
 
@@ -88,7 +101,7 @@ impl BpfSnifferInner {
         }
     }
 
-    async fn next_event(events: &mut RingBuffer, commands: &mut mpsc::Receiver<BpfSnifferCommand>) -> Option<Either<RingBufferData, BpfSnifferCommand>> {
+    async fn next_event(events: &mut RingBuffer, commands: &mut mpsc::UnboundedReceiver<BpfSnifferCommand>) -> Option<Either<RingBufferData, BpfSnifferCommand>> {
         match commands.try_recv() {
             Ok(command) => Some(Either::Right(command)),
             Err(TryRecvError::Closed) => events.next().await.map(Either::Left),
@@ -123,10 +136,11 @@ impl BpfSnifferInner {
         tracing::info!(path = tracing::field::debug(filename), msg = "written dump");
     }
 
-    async fn send_report(&mut self, closed_connections: &Vec<p2p::ConnectionReport>, response_tx: &mut mpsc::Sender<BpfSnifferResponse>) {
+    async fn send_report(&mut self, closed_connections: &Vec<p2p::ConnectionReport>) {
         debug_assert!(self.debug_stop_rx.try_recv().is_err(), "should collect all reports in main loop");
 
         let mut report = BpfSnifferReport {
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos(),
             closed_connections: closed_connections.clone(),
             alive_connections: vec![],
             total_chunks: 0,
@@ -135,7 +149,8 @@ impl BpfSnifferInner {
 
         for (_, connection) in &self.connections {
             connection.send(Either::Right(p2p::Command::GetDebugData)).ok().unwrap();
-            report.alive_connections.push(self.debug_stop_rx.recv().await.unwrap());
+            let running = self.debug_stop_rx.recv().await.unwrap();
+            report.alive_connections.push(running);
         }
 
         let (total_chunks_closed, decrypted_chunks_closed) = report.closed_connections.iter()
@@ -147,18 +162,15 @@ impl BpfSnifferInner {
         report.total_chunks = total_chunks_closed + total_chunks_running;
         report.decrypted_chunks = decrypted_chunks_closed + decrypted_chunks_running;
 
-        match response_tx.send(BpfSnifferResponse::Report(report)).await {
-            Ok(()) => (),
-            Err(error) => tracing::error!("cannot send `BpfSnifferResponse` {:?}", error),
-        }
+        let mut response = SNIFFER_RESPONSE.lock().unwrap();
+        *response = Some(BpfSnifferResponse::Report(report));
     }
 
-    pub async fn run(self, command_rx: mpsc::Receiver<BpfSnifferCommand>, response_tx: mpsc::Sender<BpfSnifferResponse>) {
+    pub async fn run(self, command_rx: mpsc::UnboundedReceiver<BpfSnifferCommand>) {
         let db = processor::spawn_processor(self.settings.clone());
         let mut s = self;
         let mut events = s.module.main_buffer();
         let mut commands = command_rx;
-        let mut response_tx = response_tx;
         let mut closed_connections = vec![];
         while let Some(event) = Self::next_event(&mut events, &mut commands).await {
             match event {
@@ -182,7 +194,7 @@ impl BpfSnifferInner {
                         Self::dump_rb(&filename, &mut events).await;
                     }
                     if report {
-                        s.send_report(&closed_connections, &mut response_tx).await;
+                        s.send_report(&closed_connections).await;
                     }
                 },
             }

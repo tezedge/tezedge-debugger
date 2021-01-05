@@ -15,8 +15,7 @@ use tezedge_debugger::storage::{MessageStore, get_ts, cfs};
 use std::path::Path;
 use std::sync::Arc;
 use storage::persistent::{open_kv, DbConfiguration};
-use tezedge_debugger::system::{syslog_producer::syslog_producer, BpfSniffer, BpfSnifferCommand, BpfSnifferResponse};
-use std::time::Duration;
+use tezedge_debugger::system::{syslog_producer::syslog_producer, BpfSniffer};
 
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
@@ -116,25 +115,11 @@ async fn main() -> Result<(), failure::Error> {
 
     // Create actual system
     let sniffer = BpfSniffer::spawn(&settings);
-    tokio::spawn(async move {
-        let mut sniffer = sniffer;
-        loop {
-            // wait to collect more messages
-            tokio::time::delay_for(Duration::from_secs(60)).await;
-            tracing::info!("trying retrieve report");
-
-            sniffer.send(BpfSnifferCommand::GetDebugData { filename: None, report: true }).await;
-            if let Some(BpfSnifferResponse::Report(report)) = sniffer.recv().await {
-                let report_json = serde_json::to_string(&report);
-                tracing::info!("{:?}", report_json);
-            }
-        }
-    });
 
     // Spawn warp RPC server
     tokio::spawn(async move {
         use tezedge_debugger::endpoints::routes;
-        warp::serve(routes(storage))
+        warp::serve(routes(storage, sniffer))
             .run(([0, 0, 0, 0], settings.rpc_port))
             .await;
     });
