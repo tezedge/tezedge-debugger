@@ -3,10 +3,10 @@ version: "3"
 services:
      
   rust-debugger:
-    image: simplestakingcom/tezedge-debugger:v0.2.0
+    image: simplestakingcom/tezedge-debugger:v0.3.0
     build:
       context: .
-      dockerfile: Dockerfile.light
+      dockerfile: Dockerfile
     privileged: true
     network_mode: "service:rust-network"
     environment:
@@ -17,7 +17,7 @@ services:
     entrypoint: ./tezedge-debugger
 
   rust-node:
-    image: simplestakingcom/tezedge:v0.8.0
+    image: simplestakingcom/tezedge:v0.7.0
     network_mode: "service:rust-network"
     depends_on:
       - rust-debugger
@@ -40,10 +40,10 @@ services:
       - "8080:8080"
 
   rust-network:
-    image: simplestakingcom/tezedge-debugger:v0.2.0
+    image: simplestakingcom/tezedge-debugger:v0.3.0
     build:
       context: .
-      dockerfile: Dockerfile.light
+      dockerfile: Dockerfile
     ports:
       # Node specific ports
       - "10300:4927"       # node WS port (required only for tezedge)

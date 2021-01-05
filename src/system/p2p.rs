@@ -170,9 +170,10 @@ impl Parser {
                 (&Sender::Responder, &SourceType::Remote) => !incoming,
             };
             if !ok {
-                tracing::warn!(
+                tracing::debug!(
                     context = self.error_context(&state, incoming, &event_id),
                     sender = tracing::field::debug(&sender),
+                    payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
                     msg = "the combination is not ok",
                 );
             }
@@ -258,8 +259,6 @@ impl Parser {
                     state.report_error(ParserError::WrongProofOfWork);
                 },
                 ConsumeResult::UnexpectedChunks | ConsumeResult::InvalidConversation => {
-                    // already known
-                    debug_assert!(state.statistics.error_report.is_some());
                     state.report_error(ParserError::FailedToDecrypt);
                 },
             }

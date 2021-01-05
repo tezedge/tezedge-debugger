@@ -188,65 +188,6 @@ fn kretprobe_recvfrom(regs: Registers) {
     });
 }
 
-/*#[repr(C)]
-struct UserMessageHeader {
-    msg_name: *const cty::c_void,
-    msg_name_len: cty::c_int,
-    msg_iov: *const IoVec,
-    msg_iov_len: cty::c_long,
-    msg_control: *const cty::c_void,
-    msg_control_len: cty::c_long,
-    msg_flags: cty::c_int,
-}
-
-#[repr(C)]
-struct IoVec {
-    iov_base: *const cty::c_void,
-    iov_len: cty::size_t,
-}
-
-#[kprobe("__sys_sendmsg")]
-fn kprobe_sendmsg(regs: Registers) {
-    let fd = regs.parm1() as u32;
-    let header = regs.parm2() as *const UserMessageHeader;
-
-    if !is_outgoing(&socket_id(fd)) {
-        return;
-    }
-
-    let header = match unsafe { helpers::bpf_probe_read_user(header) } {
-        Ok(header) => header,
-        Err(_) => return,
-    };
-
-    /*
-    let data = unsafe {
-        slice::from_raw_parts(
-            header.msg_control as *const u8,
-            header.msg_control_len as usize,
-        )
-    };
-    // send it if needed
-    */
-
-    let mut io_vec = IoVec {
-        iov_base: ptr::null(),
-        iov_len: 0,
-    };
-    for i in 0..4 {
-        if i >= header.msg_iov_len as isize {
-            break;
-        }
-
-        let data = match unsafe { helpers::bpf_probe_read_user(header.msg_iov.offset(i)) } {
-            Ok(v) => unsafe { slice::from_raw_parts(v.iov_base as *const u8, v.iov_len) },
-            Err(_) => return,
-        };
-
-        send::dyn_sized::<typenum::B0>(event_id(fd), DataTag::SendMsg, data, rb())
-    }
-}*/
-
 #[kprobe("__sys_connect")]
 fn kprobe_connect(regs: Registers) {
     let fd = regs.parm1() as u32;
@@ -290,6 +231,22 @@ fn kretprobe_connect(regs: Registers) {
         },
         _ => (),
     });
+}
+
+// TODO: kretprobe
+#[kprobe("__sys_listen")]
+fn kprobe_listen(regs: Registers) {
+    let fd = regs.parm1() as u32;
+
+    send::sized::<typenum::U0, typenum::B0>(event_id(fd, 0), DataTag::Listen, &[], rb());
+}
+
+// TODO: kretprobe
+#[kprobe("__sys_accept4")]
+fn kprobe_accept4(regs: Registers) {
+    let fd = regs.parm1() as u32;
+
+    send::sized::<typenum::U0, typenum::B0>(event_id(fd, 0), DataTag::Accept, &[], rb());
 }
 
 #[kprobe("__close_fd")]

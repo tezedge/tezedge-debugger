@@ -186,7 +186,7 @@ pub(crate) mod secondary_indexes {
         sync::Arc,
         str::FromStr,
     };
-    use tracing::debug;
+    use tracing::warn;
     use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform, Cache};
     use crate::storage::LogStore;
     use serde::{Serialize, Deserialize};
@@ -236,7 +236,7 @@ pub(crate) mod secondary_indexes {
             match value.level.parse() {
                 Ok(level) => Some(level),
                 Err(_) => {
-                    debug!(level = tracing::field::display(&value.level), "got invalid log level");
+                    warn!(level = tracing::field::display(&value.level), "got invalid log level");
                     None
                 }
             }

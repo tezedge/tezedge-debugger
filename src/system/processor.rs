@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tracing::{error, trace, info};
+use tracing::{error, trace};
 use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
@@ -69,7 +69,7 @@ impl DatabaseProcessor {
                         Ok(id) => {
                             // report each 1024 message
                             if id & 0x3ff == 0 {
-                                info!(id, "stored new message")
+                                tracing::info!(id, "stored new message")
                             } else {
                                 trace!(id, "stored new message")
                             }

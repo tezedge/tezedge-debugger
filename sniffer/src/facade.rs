@@ -7,7 +7,7 @@ use std::{
     net::{SocketAddr, IpAddr},
 };
 use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, HashMap};
-use super::{SocketId, EventId, DataDescriptor, DataTag, Address, bpf_code::CODE};
+use super::{SocketId, EventId, DataDescriptor, DataTag, address::Address, bpf_code::CODE};
 
 pub struct Module(RawModule);
 
@@ -24,7 +24,8 @@ pub enum SnifferEvent<'a> {
     Write { id: EventId, data: &'a [u8] },
     Read { id: EventId, data: &'a [u8] },
     Connect { id: EventId, address: SocketAddr },
-    LocalAddress { id: EventId, address: SocketAddr },
+    Listen { id: EventId },
+    Accept { id: EventId, listen_on_fd: u32 },
     Close { id: EventId },
     Debug { id: EventId, msg: String },
 }
@@ -104,13 +105,9 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
                     address: Address::try_from(data).unwrap().into(),
                 })
             },
-            DataTag::SocketName => {
-                Ok(SnifferEvent::LocalAddress {
-                    id: descriptor.id,
-                    // should not fail, already checked inside bpf code
-                    address: Address::try_from(data).unwrap().into(),
-                })
-            },
+            DataTag::Listen => Ok(SnifferEvent::Listen { id: descriptor.id }),
+            // TODO: pass listen_on_fd
+            DataTag::Accept => Ok(SnifferEvent::Accept { id: descriptor.id, listen_on_fd: 0 }),
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
             DataTag::Debug => {
                 SnifferError::debug(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {

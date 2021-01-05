@@ -25,4 +25,5 @@ mod data_descriptor;
 pub use self::data_descriptor::{SocketId, EventId, DataDescriptor, DataTag};
 
 mod address;
+#[cfg(feature = "probes")]
 pub use self::address::Address;
