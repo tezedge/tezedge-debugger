@@ -17,7 +17,6 @@ use serde::{Serialize, Deserialize};
 use warp::reply::{WithStatus, Json};
 use std::net::SocketAddr;
 use std::convert::TryInto;
-use std::time::Duration;
 use itertools::Itertools;
 use crate::messages::p2p_message::SourceType;
 

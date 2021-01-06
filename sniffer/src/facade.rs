@@ -25,7 +25,7 @@ pub enum SnifferEvent<'a> {
     Read { id: EventId, data: &'a [u8] },
     Connect { id: EventId, address: SocketAddr },
     Listen { id: EventId },
-    Accept { id: EventId, listen_on_fd: u32 },
+    Accept { id: EventId, listen_on_fd: u32, address: SocketAddr },
     Close { id: EventId },
     Debug { id: EventId, msg: String },
 }
@@ -106,8 +106,13 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
                 })
             },
             DataTag::Listen => Ok(SnifferEvent::Listen { id: descriptor.id }),
-            // TODO: pass listen_on_fd
-            DataTag::Accept => Ok(SnifferEvent::Accept { id: descriptor.id, listen_on_fd: 0 }),
+            DataTag::Accept => {
+                Ok(SnifferEvent::Accept {
+                    id: descriptor.id,
+                    listen_on_fd: u32::from_le_bytes(TryFrom::try_from(&data[0..4]).unwrap()),
+                    address: Address::try_from(&data[4..]).unwrap().into(),
+                })
+            },
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
             DataTag::Debug => {
                 SnifferError::debug(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
@@ -141,17 +146,17 @@ impl Module {
         RingBuffer::from_map(&rb_map).unwrap()
     }
 
-    fn outgoing_connections_map(&self) -> HashMap<SocketId, u32> {
+    fn connections_map(&self) -> HashMap<SocketId, u32> {
         let map = self
             .0
             .maps
             .iter()
-            .find(|m| m.name == "outgoing_connections")
+            .find(|m| m.name == "connections")
             .unwrap();
         HashMap::new(map).unwrap()
     }
 
     pub fn ignore(&self, id: SocketId) {
-        self.outgoing_connections_map().delete(id);
+        self.connections_map().delete(id);
     }
 }

@@ -170,7 +170,7 @@ impl Parser {
                 (&Sender::Responder, &SourceType::Remote) => !incoming,
             };
             if !ok {
-                tracing::debug!(
+                tracing::warn!(
                     context = self.error_context(&state, incoming, &event_id),
                     sender = tracing::field::debug(&sender),
                     payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
