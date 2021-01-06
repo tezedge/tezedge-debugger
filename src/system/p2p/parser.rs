@@ -4,7 +4,6 @@
 use std::{net::SocketAddr, fmt};
 use futures::future::Either;
 use tokio::{stream::StreamExt, sync::mpsc};
-use serde::{Serialize, Deserialize};
 use tracing::field::DisplayValue;
 use tezos_messages::p2p::{
     encoding::{
@@ -18,6 +17,8 @@ use tezos_messages::p2p::{
 use tezos_encoding::binary_reader::BinaryReaderError;
 use tezos_conversation::{Identity, Conversation, Packet, ConsumeResult, ChunkMetadata, ChunkInfoPair, Sender};
 use sniffer::{SocketId, EventId};
+
+use super::{ConnectionReport, ParserStatistics, ParserErrorReport, ParserError};
 
 use crate::{
     system::SystemSettings,
@@ -48,34 +49,6 @@ pub struct Parser {
     pub remote_address: SocketAddr,
     pub id: SocketId,
     pub db: mpsc::UnboundedSender<P2pMessage>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ParserError {
-    FailedToWriteInDatabase,
-    FailedToDecrypt,
-    WrongProofOfWork,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConnectionReport {
-    pub remote_address: String,
-    pub source_type: SourceType,
-    pub report: ParserStatistics,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ParserErrorReport {
-    pub position: usize,
-    pub error: ParserError,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ParserStatistics {
-    pub total_chunks: usize,
-    pub decrypted_chunks: usize,
-    pub error_report: Option<ParserErrorReport>,
 }
 
 struct State {
