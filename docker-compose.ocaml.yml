@@ -6,7 +6,7 @@ services:
     image: simplestakingcom/tezedge-debugger:v0.3.1
     build:
       context: .
-      dockerfile: Dockerfile.light
+      dockerfile: Dockerfile
     privileged: true
     network_mode: "service:ocaml-network"
     environment:
@@ -44,7 +44,7 @@ services:
     image: simplestakingcom/tezedge-debugger:v0.3.1
     build:
       context: .
-      dockerfile: Dockerfile.light
+      dockerfile: Dockerfile
     ports:
       # Node specific ports
       - "11200:9732"       # node P2P port
