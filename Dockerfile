@@ -21,17 +21,17 @@ ENV KERNEL_VERSION=5.8.18
 
 # https://blog.mgattozzi.dev/caching-rust-docker-builds/
 # Prepare empty binaries and all the dependencies that we have in Cargo.toml
-RUN mkdir -p {.,sniffer}/src/bin && \
-    echo "fn main() {}" > ./src/bin/debugger.rs && \
-    echo "fn main() {}" > ./src/bin/drone_test_server.rs && \
-    echo "fn main() {}" > ./src/bin/drone_test_client.rs && \
-    echo "fn main() {}" > ./sniffer/src/bin/kprobe.rs && \
-    echo "pub fn foo() {}" > ./sniffer/src/lib.rs
-COPY Cargo.lock .
-COPY Cargo.toml .
-COPY sniffer/Cargo.toml sniffer
+#RUN mkdir -p {.,sniffer}/src/bin && \
+#    echo "fn main() {}" > ./src/bin/debugger.rs && \
+#    echo "fn main() {}" > ./src/bin/drone_test_server.rs && \
+#    echo "fn main() {}" > ./src/bin/drone_test_client.rs && \
+#    echo "fn main() {}" > ./sniffer/src/bin/kprobe.rs && \
+#    echo "pub fn foo() {}" > ./sniffer/src/lib.rs
+#COPY Cargo.lock .
+#COPY Cargo.toml .
+#COPY sniffer/Cargo.toml sniffer
 # This step cache's our deps!
-RUN cargo install --bins --path . --root . && rm -R ./src
+#RUN cargo install --bins --path . --root . && rm -R ./src
 # Copy the rest of the files into the container
 COPY . .
 RUN cargo install --bins --path . --root .

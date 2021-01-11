@@ -102,7 +102,7 @@ impl BpfSnifferInner {
     }
 
     async fn next_event(events: &mut RingBuffer, commands: &mut mpsc::UnboundedReceiver<BpfSnifferCommand>) -> Option<Either<RingBufferData, BpfSnifferCommand>> {
-        match commands.try_recv() {
+        /*match commands.try_recv() {
             Ok(command) => Some(Either::Right(command)),
             Err(TryRecvError::Closed) => events.next().await.map(Either::Left),
             Err(TryRecvError::Empty) => {
@@ -146,6 +146,26 @@ impl BpfSnifferInner {
                     Either::Right((Either::Right(event), _)) => event.map(Either::Left),
                     // our bad case, let's await it again
                     Either::Right((Either::Left(event_future), _)) => event_future.await.map(Either::Left),
+                }
+            }
+        }*/
+        match commands.try_recv() {
+            Ok(command) => Some(Either::Right(command)),
+            Err(TryRecvError::Closed) => events.next().await.map(Either::Left),
+            Err(TryRecvError::Empty) => {
+                let command = commands.recv().fuse();
+                pin_mut!(command);
+                let next_event = events.next().fuse();
+                pin_mut!(next_event);
+        
+                match future::select(command, next_event).await {
+                    Either::Left((None, events)) => {
+                        tracing::info!("command sender disconnected");
+                        events.await.map(Either::Left)
+                    },
+                    Either::Left((Some(BpfSnifferCommand::Terminate), _)) => None,
+                    Either::Left((Some(command), _)) => Some(Either::Right(command)),
+                    Either::Right((event, _)) => event.map(Either::Left),
                 }
             }
         }
