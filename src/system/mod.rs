@@ -12,28 +12,26 @@ pub use self::bpf_sniffer::{BpfSniffer, BpfSnifferCommand, BpfSnifferResponse, B
 mod processor;
 
 // old socket capturing system
-mod orchestrator;
-mod p2p_parser;
-mod raw_socket_producer;
+//mod orchestrator;
+//mod p2p_parser;
+//mod raw_socket_producer;
 
 // old socket capturing system
-pub use self::orchestrator::CONNECTIONS;
+//pub use self::orchestrator::CONNECTIONS;
 
 // old socket capturing system
 /// Create whole new system consisting of packet producer, packet orchestrator, parsers and final processor
-pub fn build_raw_socket_system(settings: SystemSettings) -> std::io::Result<()> {
-    raw_socket_producer::raw_socket_producer(settings)
-}
+//pub fn build_raw_socket_system(settings: SystemSettings) -> std::io::Result<()> {
+//    raw_socket_producer::raw_socket_producer(settings)
+//}
 
 mod system_settings {
     use std::net::IpAddr;
-    use crate::utility::identity::Identity;
     use crate::storage::MessageStore;
-    
+
     #[derive(Clone)]
     /// System settings describing the running system
     pub struct SystemSettings {
-        pub identity: Identity,
         pub local_address: IpAddr,
         pub storage: MessageStore,
         pub syslog_port: u16,

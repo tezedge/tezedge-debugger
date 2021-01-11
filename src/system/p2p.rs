@@ -43,6 +43,7 @@ pub enum Command {
 }
 
 pub struct Parser {
+    pub identity: Identity,
     pub settings: SystemSettings,
     pub source_type: SourceType,
     pub remote_address: SocketAddr,
@@ -126,11 +127,6 @@ impl Parser {
             },
         };
 
-        let identity = {
-            let identity_json = serde_json::to_string(&self.settings.identity).unwrap();
-            Identity::from_json(&identity_json).unwrap()
-        };
-
         // the local socket identifier is pair (pid, fd), but `Conversation` requires the packet
         // have local socket address; it needed only for distinguish between local and remote,
         // let's use fake socket address
@@ -162,7 +158,7 @@ impl Parser {
                 context = self.error_context(&state, incoming, &event_id),
                 payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
             );
-            let (result, sender, _) = state.conversation.add(Some(&identity), &packet);
+            let (result, sender, _) = state.conversation.add(Some(&self.identity), &packet);
             let ok = match (&sender, &self.source_type) {
                 (&Sender::Initiator, &SourceType::Local) => !incoming,
                 (&Sender::Initiator, &SourceType::Remote) => incoming,

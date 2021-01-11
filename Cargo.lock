@@ -240,7 +240,7 @@ dependencies = [
 [[package]]
 name = "bpf-sys"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#d24be441076089b5e78bdc32b52c50bc80d5b547"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#7c90ab9b3ba1b558d04e85dceed47561648b7912"
 dependencies = [
  "bindgen",
  "cc",
@@ -302,7 +302,7 @@ checksum = "ad1f8e949d755f9d79112b5bb46938e0ef9d3804a0b16dfab13aafcaa5f0fa72"
 [[package]]
 name = "cargo-bpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#d24be441076089b5e78bdc32b52c50bc80d5b547"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#7c90ab9b3ba1b558d04e85dceed47561648b7912"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -2070,7 +2070,7 @@ dependencies = [
 [[package]]
 name = "redbpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#d24be441076089b5e78bdc32b52c50bc80d5b547"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#7c90ab9b3ba1b558d04e85dceed47561648b7912"
 dependencies = [
  "bindgen",
  "bpf-sys",
@@ -2090,7 +2090,7 @@ dependencies = [
 [[package]]
 name = "redbpf-macros"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#d24be441076089b5e78bdc32b52c50bc80d5b547"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#7c90ab9b3ba1b558d04e85dceed47561648b7912"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
@@ -2101,7 +2101,7 @@ dependencies = [
 [[package]]
 name = "redbpf-probes"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#d24be441076089b5e78bdc32b52c50bc80d5b547"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#7c90ab9b3ba1b558d04e85dceed47561648b7912"
 dependencies = [
  "cargo-bpf",
  "cty",

@@ -13,6 +13,7 @@ use std::{
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
+use tezos_conversation::Identity;
 use tokio::{stream::StreamExt, sync::mpsc::{self, error::TryRecvError}};
 use serde::{Serialize, Deserialize};
 use sniffer::{SocketId, EventId, Module, SnifferEvent, RingBufferData, RingBuffer};
@@ -85,6 +86,33 @@ struct BpfSnifferInner {
     debug_stop_tx: Option<mpsc::Sender<p2p::ConnectionReport>>,
     debug_stop_rx: mpsc::Receiver<p2p::ConnectionReport>,
     last_timestamp: u64,
+    identity: Option<Identity>,
+}
+
+/// Try to load identity from one of the well defined paths
+fn load_identity() -> Result<Identity, ()> {
+    let identity_paths = [
+        "/tmp/volume/identity.json".to_string(),
+        "/tmp/volume/data/identity.json".to_string(),
+        format!("{}/.tezos-node/identity.json", std::env::var("HOME").unwrap()),
+    ];
+
+    for path in &identity_paths {
+        if !Path::new(path).is_file() {
+            continue;
+        }
+        match Identity::from_path(path.clone()) {
+            Ok(identity) => {
+                tracing::info!(file_path = tracing::field::display(&path), "loaded identity");
+                return Ok(identity);
+            },
+            Err(err) => {
+                tracing::warn!(error = tracing::field::display(&err), "identity file does not contains valid identity");
+            },
+        }
+    }
+
+    Err(())
 }
 
 impl BpfSnifferInner {
@@ -98,6 +126,7 @@ impl BpfSnifferInner {
             debug_stop_tx: Some(tx),
             debug_stop_rx: rx,
             last_timestamp: 0,
+            identity: None,
         }
     }
 
@@ -282,6 +311,24 @@ impl BpfSnifferInner {
             return;
         }
 
+        let identity = match &self.identity {
+            &Some(ref identity) => identity.clone(),
+            &None => {
+                match load_identity() {
+                    Ok(identity) => {
+                        tracing::info!(public_key = tracing::field::display(hex::encode(&identity.public_key())), "loaded identity");
+                        self.identity = Some(identity.clone());
+                        identity
+                    },
+                    Err(()) => {
+                        tracing::warn!("ignore connection because no identity");
+                        self.module.ignore(id.socket_id);
+                        return;
+                    },
+                }
+            }
+        };
+
         let (tx, rx) = mpsc::unbounded_channel();
         // drop old connection, it cause termination stream on the p2p parser,
         // so the p2p parser will know about it
@@ -293,6 +340,7 @@ impl BpfSnifferInner {
             remote_address: address,
             id: id.socket_id.clone(),
             db: db,
+            identity: identity,
         };
         tokio::spawn(async move {
             let remote_address = parser.remote_address.to_string();

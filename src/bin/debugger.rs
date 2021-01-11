@@ -4,13 +4,11 @@
 use tracing::{info, error, Level};
 use tezedge_debugger::{
     utility::{
-        identity::Identity,
         ip_settings::get_local_ip,
     },
 };
 use std::process::exit;
 use tezedge_debugger::system::SystemSettings;
-use std::time::Instant;
 use tezedge_debugger::storage::{MessageStore, get_ts, cfs};
 use std::path::Path;
 use std::sync::Arc;
@@ -24,46 +22,6 @@ fn open_database() -> Result<MessageStore, failure::Error> {
     let schemas = cfs();
     let rocksdb = Arc::new(open_kv(path, schemas, &DbConfiguration::default())?);
     Ok(MessageStore::new(rocksdb))
-}
-
-/// Try to load identity from one of the well defined paths
-/// This method will block until, some identity is found
-async fn load_identity() -> Identity {
-    // Wait until identity appears
-    let mut last_try = Instant::now();
-
-    let identity_paths = [
-        "/tmp/volume/identity.json".to_string(),
-        "/tmp/volume/data/identity.json".to_string(),
-        format!("{}/.tezos-node/identity.json", std::env::var("HOME").unwrap()),
-    ];
-
-    loop {
-        for (path, file) in identity_paths
-            .iter().map(|path| (path, tokio::fs::read_to_string(path)))
-        {
-            match file.await {
-                Ok(content) => {
-                    match serde_json::from_str::<Identity>(&content) {
-                        Ok(identity) => {
-                            info!(file_path = tracing::field::display(&path), "loaded identity");
-                            return identity;
-                        }
-                        Err(err) => {
-                            error!(error = tracing::field::display(&err), "identity file does not contains valid identity");
-                            exit(1);
-                        }
-                    }
-                }
-                Err(err) => {
-                    if last_try.elapsed().as_secs() >= 5 {
-                        last_try = Instant::now();
-                        info!(error = tracing::field::display(&err), "waiting for identity");
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[tokio::main]
@@ -83,11 +41,6 @@ async fn main() -> Result<(), failure::Error> {
 
     info!(ip_address = tracing::field::display(&local_address), "detected local IP address");
 
-    // Load identity
-    let identity = load_identity().await;
-
-    info!(peer_id = tracing::field::display(&identity.peer_id), "loaded identity");
-
     // Initialize storage for messages
     let storage = match open_database() {
         Ok(storage) => storage,
@@ -99,7 +52,6 @@ async fn main() -> Result<(), failure::Error> {
 
     // Create system setting to drive the rest of the system
     let settings = SystemSettings {
-        identity,
         local_address,
         storage: storage.clone(),
         syslog_port: 13131,
@@ -127,7 +79,7 @@ async fn main() -> Result<(), failure::Error> {
     // Wait for SIGTERM signal
     if let Err(err) = tokio::signal::ctrl_c().await {
         error!(error = tracing::field::display(&err), "failed while listening for signal");
-        exit(1)
+        exit(1);
     }
 
     info!("ctrl-c received");
