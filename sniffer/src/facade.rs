@@ -6,7 +6,7 @@ use std::{
     mem,
     net::{SocketAddr, IpAddr},
 };
-use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, HashMap};
+use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, ringbuf_sync::RingBufferSync, HashMap, Map};
 use super::{SocketId, EventId, DataDescriptor, DataTag, address::Address, bpf_code::CODE};
 
 pub struct Module(RawModule);
@@ -136,14 +136,23 @@ impl Module {
         Module(loaded.module)
     }
 
-    pub fn main_buffer(&self) -> RingBuffer {
-        let rb_map = self
+    pub fn main_buffer_map(&self) -> &Map {
+        self
             .0
             .maps
             .iter()
             .find(|m| m.name == "main_buffer")
-            .unwrap();
+            .unwrap()
+    }
+
+    pub fn main_buffer(&self) -> RingBuffer {
+        let rb_map = self.main_buffer_map();
         RingBuffer::from_map(&rb_map).unwrap()
+    }
+
+    pub fn main_buffer_sync(&self) -> RingBufferSync {
+        let rb_map = self.main_buffer_map();
+        RingBufferSync::from_map(&rb_map).unwrap()
     }
 
     fn connections_map(&self) -> HashMap<SocketId, u32> {
