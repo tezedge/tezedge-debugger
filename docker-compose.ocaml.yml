@@ -3,7 +3,7 @@ version: "3"
 services:
 
   ocaml-debugger:
-    image: simplestakingcom/tezedge-debugger:v0.3.1
+    image: simplestakingcom/tezedge-debugger:v0.3.2
     build:
       context: .
       dockerfile: Dockerfile
@@ -41,7 +41,7 @@ services:
       - "8080:8080"
 
   ocaml-network:
-    image: simplestakingcom/tezedge-debugger:v0.3.1
+    image: simplestakingcom/tezedge-debugger:v0.3.2
     build:
       context: .
       dockerfile: Dockerfile
