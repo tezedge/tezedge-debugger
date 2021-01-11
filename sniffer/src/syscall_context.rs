@@ -46,6 +46,14 @@ pub enum SyscallContext {
         fd: u32,
         address: &'static [u8],
     },
+    Listen {
+        fd: u32,
+        unused: usize,
+    },
+    Accept {
+        listen_on_fd: u32,
+        address: &'static [u8],
+    },
 }
 
 #[inline(always)]

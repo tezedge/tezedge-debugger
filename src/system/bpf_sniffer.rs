@@ -253,18 +253,14 @@ impl BpfSnifferInner {
                 Either::Left(slice) => {
                     match SnifferEvent::try_from(slice.as_ref()) {
                         Err(error) => tracing::error!("{:?}", error),
-                        Ok(SnifferEvent::Connect { id, address }) => s.on_connect(id, address, db.clone(), false),
+                        Ok(SnifferEvent::Connect { id, address }) => s.on_connect(id, address, db.clone(), None),
                         Ok(SnifferEvent::Listen { id }) => {
                             tracing::info!(
                                 id = tracing::field::display(&id),
                                 msg = "P2P Listen",
                             );
                         }
-                        Ok(SnifferEvent::Accept { id: _, listen_on_fd: _ }) => {
-                            // TODO: fix it
-                            // let address = SocketAddr::new(s.settings.local_address.clone(), 0x4321);
-                            // s.on_connect(id, address, db.clone(), true)
-                        },
+                        Ok(SnifferEvent::Accept { id, listen_on_fd, address }) => s.on_connect(id, address, db.clone(), Some(listen_on_fd)),
                         Ok(SnifferEvent::Close { id }) => s.on_close(id),
                         Ok(SnifferEvent::Read { id, data }) => s.on_data(id, data.to_vec(), true),
                         Ok(SnifferEvent::Write { id, data }) => s.on_data(id, data.to_vec(), false),
@@ -295,11 +291,11 @@ impl BpfSnifferInner {
         self.last_timestamp = ts;
     }
 
-    fn on_connect(&mut self, id: EventId, address: SocketAddr, db: mpsc::UnboundedSender<P2pMessage>, incoming: bool) {
+    fn on_connect(&mut self, id: EventId, address: SocketAddr, db: mpsc::UnboundedSender<P2pMessage>, listened_on: Option<u32>) {
         self.check(&id);
 
-        let should_ignore = !incoming && ignore(&self.settings, &address);
-        let msg = if incoming { "P2P New Incoming" } else { "P2P New Outgoing" };
+        let should_ignore = ignore(&self.settings, &address);
+        let msg = if listened_on.is_some() { "P2P New Incoming" } else { "P2P New Outgoing" };
         tracing::info!(
             address = tracing::field::debug(&address),
             id = tracing::field::display(&id),
@@ -336,7 +332,7 @@ impl BpfSnifferInner {
         let mut debug_tx = self.debug_stop_tx.as_ref().cloned().unwrap();
         let parser = p2p::Parser {
             settings: self.settings.clone(),
-            source_type: if incoming { SourceType::Remote } else { SourceType::Local },
+            source_type: if listened_on.is_some() { SourceType::Remote } else { SourceType::Local },
             remote_address: address,
             id: id.socket_id.clone(),
             db: db,

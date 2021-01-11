@@ -6,7 +6,7 @@ use std::{
     mem,
     net::{SocketAddr, IpAddr},
 };
-use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, HashMap};
+use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, ringbuf_sync::RingBufferSync, HashMap, Map};
 use super::{SocketId, EventId, DataDescriptor, DataTag, address::Address, bpf_code::CODE};
 
 pub struct Module(RawModule);
@@ -25,7 +25,7 @@ pub enum SnifferEvent<'a> {
     Read { id: EventId, data: &'a [u8] },
     Connect { id: EventId, address: SocketAddr },
     Listen { id: EventId },
-    Accept { id: EventId, listen_on_fd: u32 },
+    Accept { id: EventId, listen_on_fd: u32, address: SocketAddr },
     Close { id: EventId },
     Debug { id: EventId, msg: String },
 }
@@ -106,8 +106,13 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
                 })
             },
             DataTag::Listen => Ok(SnifferEvent::Listen { id: descriptor.id }),
-            // TODO: pass listen_on_fd
-            DataTag::Accept => Ok(SnifferEvent::Accept { id: descriptor.id, listen_on_fd: 0 }),
+            DataTag::Accept => {
+                Ok(SnifferEvent::Accept {
+                    id: descriptor.id,
+                    listen_on_fd: u32::from_le_bytes(TryFrom::try_from(&data[0..4]).unwrap()),
+                    address: Address::try_from(&data[4..]).unwrap().into(),
+                })
+            },
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
             DataTag::Debug => {
                 SnifferError::debug(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
@@ -131,27 +136,36 @@ impl Module {
         Module(loaded.module)
     }
 
-    pub fn main_buffer(&self) -> RingBuffer {
-        let rb_map = self
+    pub fn main_buffer_map(&self) -> &Map {
+        self
             .0
             .maps
             .iter()
             .find(|m| m.name == "main_buffer")
-            .unwrap();
+            .unwrap()
+    }
+
+    pub fn main_buffer(&self) -> RingBuffer {
+        let rb_map = self.main_buffer_map();
         RingBuffer::from_map(&rb_map).unwrap()
     }
 
-    fn outgoing_connections_map(&self) -> HashMap<SocketId, u32> {
+    pub fn main_buffer_sync(&self) -> RingBufferSync {
+        let rb_map = self.main_buffer_map();
+        RingBufferSync::from_map(&rb_map).unwrap()
+    }
+
+    fn connections_map(&self) -> HashMap<SocketId, u32> {
         let map = self
             .0
             .maps
             .iter()
-            .find(|m| m.name == "outgoing_connections")
+            .find(|m| m.name == "connections")
             .unwrap();
         HashMap::new(map).unwrap()
     }
 
     pub fn ignore(&self, id: SocketId) {
-        self.outgoing_connections_map().delete(id);
+        self.connections_map().delete(id);
     }
 }

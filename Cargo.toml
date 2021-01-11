@@ -14,6 +14,10 @@ name = "tezedge-debugger"
 path = "src/bin/debugger.rs"
 
 [[bin]]
+name = "tezedge-debugger-new"
+path = "src/bin/debugger_new.rs"
+
+[[bin]]
 name = "drone-server"
 path = "src/bin/drone_test_server.rs"
 
