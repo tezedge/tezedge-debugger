@@ -360,10 +360,16 @@ impl State {
                 &BinaryReaderError::Underflow { .. } => {
                     match PartialPeerMessage::from_bytes(self.buffer.as_slice()) {
                         Some(p) => Ok(TezosPeerMessage::PartialPeerMessage(p)),
-                        None => Err(e.to_string()),
+                        None => {
+                            self.buffer.clear();
+                            Err(e.to_string())
+                        },
                     }
                 },
-                _ => Err(e.to_string()),
+                _ => {
+                    self.buffer.clear();
+                    Err(e.to_string())
+                },
             },
             Ok(r) => {
                 self.buffer.clear();
