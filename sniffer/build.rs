@@ -91,7 +91,7 @@ mod facade {
         cargo_bpf::build_ext(&cargo, &module, &target.join("target"), vec![], k)
             .expect("couldn't compile module");
 
-        let m_target = PathBuf::from(env::var("CARGO_TARGET_DIR").unwrap_or("../target".to_string()));
+        let m_target = PathBuf::from("..").join(PathBuf::from(env::var("CARGO_TARGET_DIR").unwrap_or("target".to_string())));
         let output = Command::new("llvm-objdump-11")
             .args(&["-d", "--arch=bpf"])
             .arg(target.join("target/bpf/programs/kprobe/kprobe.elf"))

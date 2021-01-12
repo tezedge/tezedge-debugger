@@ -1,8 +1,9 @@
 # do manually 
-# cargo install --bins --debug --path . --root .
+# ./san.sh none
 # or 
-# cargo install --bins --path . --root .
+# ./san.sh none|memory|address|leak|thread
 # before build
 FROM ubuntu:20.04
 WORKDIR /home/appuser/
 COPY bin ./
+COPY cleanup_probes.sh ./
