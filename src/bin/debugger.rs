@@ -56,6 +56,7 @@ async fn main() -> Result<(), failure::Error> {
         storage: storage.clone(),
         syslog_port: 13131,
         rpc_port: 17732,
+        node_p2p_port: 9732,
         node_rpc_port: 18732,
     };
 

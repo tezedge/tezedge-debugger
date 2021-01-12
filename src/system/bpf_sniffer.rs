@@ -87,6 +87,7 @@ struct BpfSnifferInner {
     debug_stop_rx: mpsc::Receiver<p2p::ConnectionReport>,
     last_timestamp: u64,
     identity: Option<Identity>,
+    node_pid: Option<u32>,
 }
 
 /// Try to load identity from one of the well defined paths
@@ -127,6 +128,7 @@ impl BpfSnifferInner {
             debug_stop_rx: rx,
             last_timestamp: 0,
             identity: None,
+            node_pid: None,
         }
     }
 
@@ -206,24 +208,52 @@ impl BpfSnifferInner {
                 Either::Left(slice) => {
                     match SnifferEvent::try_from(slice.as_ref()) {
                         Err(error) => tracing::error!("{:?}", error),
-                        Ok(SnifferEvent::Connect { id, address }) => s.on_connect(id, address, db.clone(), None),
+                        Ok(SnifferEvent::Connect { id, address }) => {
+                            tracing::info!(
+                                id = tracing::field::display(&id),
+                                address = tracing::field::display(&address),
+                                msg = "Syscall Connect",
+                            );
+                            s.on_connect(id, address, db.clone(), None)
+                        },
                         Ok(SnifferEvent::Bind { id, address }) => {
                             tracing::info!(
                                 id = tracing::field::display(&id),
                                 address = tracing::field::display(&address),
-                                msg = "P2P Bind",
+                                msg = "Syscall Bind",
                             );
+                            if address.ip().is_unspecified() && address.port() == s.settings.node_p2p_port {
+                                s.node_pid = Some(id.socket_id.pid);
+                            }
                         },
                         Ok(SnifferEvent::Listen { id }) => {
                             tracing::info!(
                                 id = tracing::field::display(&id),
-                                msg = "P2P Listen",
+                                msg = "Syscall Listen",
                             );
                         },
-                        Ok(SnifferEvent::Accept { id, listen_on_fd, address }) => s.on_connect(id, address, db.clone(), Some(listen_on_fd)),
-                        Ok(SnifferEvent::Close { id }) => s.on_close(id),
-                        Ok(SnifferEvent::Read { id, data }) => s.on_data(id, data.to_vec(), true),
-                        Ok(SnifferEvent::Write { id, data }) => s.on_data(id, data.to_vec(), false),
+                        Ok(SnifferEvent::Accept { id, listen_on_fd, address }) => {
+                            tracing::info!(
+                                id = tracing::field::display(&id),
+                                listen_on_fd = tracing::field::display(&listen_on_fd),
+                                address = tracing::field::display(&address),
+                                msg = "Syscall Accept",
+                            );
+                            s.on_connect(id, address, db.clone(), Some(listen_on_fd))
+                        },
+                        Ok(SnifferEvent::Close { id }) => {
+                            tracing::info!(
+                                id = tracing::field::display(&id),
+                                msg = "Syscall Close",
+                            );
+                            s.on_close(id)
+                        },
+                        Ok(SnifferEvent::Read { id, data }) => {
+                            s.on_data(id, data.to_vec(), true)
+                        },
+                        Ok(SnifferEvent::Write { id, data }) => {
+                            s.on_data(id, data.to_vec(), false)
+                        },
                         Ok(SnifferEvent::Debug { id, msg }) => tracing::warn!("{} {}", id, msg),
                     }        
                 },
@@ -251,19 +281,27 @@ impl BpfSnifferInner {
         self.last_timestamp = ts;
     }
 
+    fn is_node_p2p_event(&self, id: &EventId) -> bool {
+        if let Some(node_pid) = self.node_pid {
+            id.socket_id.pid == node_pid
+        } else {
+            false
+        }
+    }
+
     fn on_connect(&mut self, id: EventId, address: SocketAddr, db: mpsc::UnboundedSender<P2pMessage>, listened_on: Option<u32>) {
         self.check(&id);
 
+        let belong_to_node = self.is_node_p2p_event(&id);
+        if !belong_to_node {
+            tracing::info!(id = tracing::field::display(&id), msg = "ignore, filtered by pid");
+            self.module.ignore(id.socket_id);
+            return;
+        }
+
         let should_ignore = ignore(&self.settings, &address);
-        let msg = if listened_on.is_some() { "P2P New Incoming" } else { "P2P New Outgoing" };
-        tracing::info!(
-            address = tracing::field::debug(&address),
-            id = tracing::field::display(&id),
-            listened_on = tracing::field::debug(&listened_on),
-            ignore = should_ignore,
-            msg = msg,
-        );
         if should_ignore {
+            tracing::info!(id = tracing::field::display(&id), msg = "ignore");
             self.module.ignore(id.socket_id);
             return;
         }
@@ -320,10 +358,6 @@ impl BpfSnifferInner {
     fn on_close(&mut self, id: EventId) {
         self.check(&id);
 
-        tracing::info!(
-            id = tracing::field::display(&id),
-            msg = "P2P Close",
-        );
         // can safely drop the old connection
         self.connections.remove(&id.socket_id);
     }

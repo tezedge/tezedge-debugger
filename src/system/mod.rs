@@ -36,6 +36,7 @@ mod system_settings {
         pub storage: MessageStore,
         pub syslog_port: u16,
         pub rpc_port: u16,
+        pub node_p2p_port: u16,
         pub node_rpc_port: u16,
     }
 }
