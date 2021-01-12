@@ -58,6 +58,7 @@ struct State {
     chunk_outgoing_counter: usize,
     buffer: Vec<u8>,
     statistics: ParserStatistics,
+    true_source_type: Option<SourceType>,
 }
 
 struct ErrorContext {
@@ -98,6 +99,7 @@ impl Parser {
                 decrypted_chunks: 0,
                 error_report: None,
             },
+            true_source_type: None,
         };
 
         // the local socket identifier is pair (pid, fd), but `Conversation` requires the packet
@@ -114,13 +116,28 @@ impl Parser {
                 Either::Right(Command::GetDebugData) => {
                     let report = ConnectionReport {
                         remote_address: self.remote_address.to_string(),
-                        source_type: self.source_type.clone(),
+                        source_type: state.true_source_type.unwrap_or(self.source_type),
                         report: state.statistics.clone(),
                     };
                     debug_tx.send(report).await.unwrap();
                     continue;
                 }
             };
+            // first parser invocation
+            if state.true_source_type.is_none() {
+                let source_type = if incoming {
+                    SourceType::Remote
+                } else {
+                    SourceType::Local
+                };
+                if self.source_type != source_type {
+                    tracing::warn!(
+                        context = self.error_context(&state, incoming, &event_id),
+                        msg = "source type determined wrong",
+                    );
+                }
+                state.true_source_type = Some(source_type);
+            }
             let packet = Packet {
                 source: if incoming { self.remote_address.clone() } else { fake_local.clone() },
                 destination: if incoming { fake_local.clone() } else { self.remote_address.clone() },
@@ -156,7 +173,7 @@ impl Parser {
                     let p2p_msg = P2pMessage::new(
                         self.remote_address.clone(),
                         incoming,
-                        self.source_type,
+                        state.true_source_type.unwrap_or(self.source_type),
                         chunk_info.data().to_vec(),
                         chunk_info.data().to_vec(),
                         message,
@@ -176,7 +193,7 @@ impl Parser {
                         let p2p_msg = P2pMessage::new(
                             self.remote_address.clone(),
                             incoming,
-                            self.source_type,
+                            state.true_source_type.unwrap_or(self.source_type),
                             encrypted.data().to_vec(),
                             decrypted.data().to_vec(),
                             message,
@@ -195,7 +212,7 @@ impl Parser {
                         let p2p_msg = P2pMessage::new(
                             self.remote_address.clone(),
                             incoming,
-                            self.source_type,
+                            state.true_source_type.unwrap_or(self.source_type),
                             chunk.data().to_vec(),
                             vec![],
                             Err("cannot decrypt".to_string()),
@@ -239,7 +256,7 @@ impl Parser {
     fn error_context(&self, state: &State, is_incoming: bool, event_id: &EventId) -> DisplayValue<ErrorContext> {
         let ctx = ErrorContext {
             is_incoming,
-            source_type: self.source_type,
+            source_type: state.true_source_type.unwrap_or(self.source_type),
             event_id: event_id.clone(),
             chunk_counter: state.chunk(is_incoming),
         };
