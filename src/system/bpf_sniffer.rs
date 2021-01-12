@@ -131,53 +131,6 @@ impl BpfSnifferInner {
     }
 
     async fn next_event(events: &mut RingBuffer, commands: &mut mpsc::UnboundedReceiver<BpfSnifferCommand>) -> Option<Either<RingBufferData, BpfSnifferCommand>> {
-        /*match commands.try_recv() {
-            Ok(command) => Some(Either::Right(command)),
-            Err(TryRecvError::Closed) => events.next().await.map(Either::Left),
-            Err(TryRecvError::Empty) => {
-                let command = commands.recv().fuse();
-                pin_mut!(command);
-
-                // TODO:
-                // WARNING: it is a hack
-                // sometimes ring buffer stop producing events, should be fixed on ring buffer side
-                // as a quick fix, lets poll it again if it does not issue any event in a second
-                let timer = tokio::time::delay_for(std::time::Duration::from_secs(1)).fuse();
-                pin_mut!(timer);
-                let next_event_intermediate = events.next().fuse();
-                pin_mut!(next_event_intermediate);
-
-                let next_event = future::select(timer, next_event_intermediate)
-                    .map(|either| match either {
-                        // bad variant, timer resolved earlier then any other event
-                        Either::Left((_, event_future)) => {
-                            tracing::warn!("ring buffer stuck");
-                            Either::Left(event_future)
-                        },
-                        Either::Right((event, timer)) => {
-                            // drop the timer
-                            let _ = timer;
-                            Either::Right(event)
-                        }
-                    });
-                pin_mut!(next_event);
-
-                match future::select(command, next_event).await {
-                    Either::Left((None, events)) => {
-                        tracing::info!("command sender disconnected");
-                        match events.await {
-                            Either::Right(event) => event.map(Either::Left),
-                            Either::Left(event_future) => event_future.await.map(Either::Left),
-                        }
-                    },
-                    Either::Left((Some(BpfSnifferCommand::Terminate), _)) => None,
-                    Either::Left((Some(command), _)) => Some(Either::Right(command)),
-                    Either::Right((Either::Right(event), _)) => event.map(Either::Left),
-                    // our bad case, let's await it again
-                    Either::Right((Either::Left(event_future), _)) => event_future.await.map(Either::Left),
-                }
-            }
-        }*/
         match commands.try_recv() {
             Ok(command) => Some(Either::Right(command)),
             Err(TryRecvError::Closed) => events.next().await.map(Either::Left),
@@ -254,12 +207,19 @@ impl BpfSnifferInner {
                     match SnifferEvent::try_from(slice.as_ref()) {
                         Err(error) => tracing::error!("{:?}", error),
                         Ok(SnifferEvent::Connect { id, address }) => s.on_connect(id, address, db.clone(), None),
+                        Ok(SnifferEvent::Bind { id, address }) => {
+                            tracing::info!(
+                                id = tracing::field::display(&id),
+                                address = tracing::field::display(&address),
+                                msg = "P2P Bind",
+                            );
+                        },
                         Ok(SnifferEvent::Listen { id }) => {
                             tracing::info!(
                                 id = tracing::field::display(&id),
                                 msg = "P2P Listen",
                             );
-                        }
+                        },
                         Ok(SnifferEvent::Accept { id, listen_on_fd, address }) => s.on_connect(id, address, db.clone(), Some(listen_on_fd)),
                         Ok(SnifferEvent::Close { id }) => s.on_close(id),
                         Ok(SnifferEvent::Read { id, data }) => s.on_data(id, data.to_vec(), true),
@@ -299,6 +259,7 @@ impl BpfSnifferInner {
         tracing::info!(
             address = tracing::field::debug(&address),
             id = tracing::field::display(&id),
+            listened_on = tracing::field::debug(&listened_on),
             ignore = should_ignore,
             msg = msg,
         );
@@ -412,7 +373,7 @@ fn ignore(settings: &SystemSettings, address: &SocketAddr) -> bool {
             return true;
         },
         // dns and other well known not tezos
-        53 | 80 | 443 => {
+        53 | 80 | 443 | 22 => {
             return true;
         },
         // our

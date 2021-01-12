@@ -24,6 +24,7 @@ pub enum SnifferEvent<'a> {
     Write { id: EventId, data: &'a [u8] },
     Read { id: EventId, data: &'a [u8] },
     Connect { id: EventId, address: SocketAddr },
+    Bind { id: EventId, address: SocketAddr },
     Listen { id: EventId },
     Accept { id: EventId, listen_on_fd: u32, address: SocketAddr },
     Close { id: EventId },
@@ -100,6 +101,13 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
             },
             DataTag::Connect => {
                 Ok(SnifferEvent::Connect {
+                    id: descriptor.id,
+                    // should not fail, already checked inside bpf code
+                    address: Address::try_from(data).unwrap().into(),
+                })
+            },
+            DataTag::Bind => {
+                Ok(SnifferEvent::Bind {
                     id: descriptor.id,
                     // should not fail, already checked inside bpf code
                     address: Address::try_from(data).unwrap().into(),

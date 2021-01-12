@@ -87,6 +87,7 @@ pub enum DataTag {
     RecvFrom,
 
     Connect,
+    Bind,
     Listen,
     Accept,
     Close,
@@ -109,6 +110,8 @@ impl DataTag {
             Some(Self::RecvFrom)
         } else if v == Self::Connect as u32 {
             Some(Self::Connect)
+        } else if v == Self::Bind as u32 {
+            Some(Self::Bind)
         } else if v == Self::Listen as u32 {
             Some(Self::Listen)
         } else if v == Self::Accept as u32 {

@@ -234,6 +234,51 @@ fn kretprobe_connect(regs: Registers) {
     });
 }
 
+#[kprobe("__sys_bind")]
+fn kprobe_bind(regs: Registers) {
+    let fd = regs.parm1() as u32;
+    let buf = regs.parm2() as *const u8;
+    let size = regs.parm3() as usize;
+
+    let address = unsafe { slice::from_raw_parts(buf, size) };
+
+    let context = SyscallContext::Bind { fd, address };
+    context.push(&regs, syscall_contexts_map(), rb());
+}
+
+#[kretprobe("__sys_bind")]
+fn kretprobe_bind(regs: Registers) {
+    SyscallContext::pop_with(&regs, syscall_contexts_map(), rb(), |s, ts| match s {
+        SyscallContext::Bind { fd, address } => {
+            if regs.is_syscall_success() {
+                let mut tmp = [0xff; Address::RAW_SIZE];
+                unsafe {
+                    gen::bpf_probe_read_user(
+                        tmp.as_mut_ptr() as _,
+                        tmp.len().min(address.len()) as u32,
+                        address.as_ptr() as _,
+                    )
+                };
+
+                if let Ok(_) = Address::try_from(tmp.as_ref()) {
+                    let id = event_id(fd, ts);
+                    reg_connection(&id.socket_id, false);
+                    send::sized::<typenum::U28, typenum::B0>(id, DataTag::Connect, address, rb())
+                } else {
+                    // AF_UNSPEC
+                    if tmp[0] == 0 && tmp[1] == 0 {
+                        forget_connection(&socket_id(fd));
+                        send::sized::<typenum::U0, typenum::B0>(event_id(fd, ts), DataTag::Close, &[], rb());
+                    }
+                    // ignore connection to other type of address
+                    // track only ipv4 (af_inet) and ipv6 (af_inet6)
+                }
+            }
+        },
+        _ => (),
+    });
+}
+
 #[kprobe("__sys_listen")]
 fn kprobe_listen(regs: Registers) {
     let fd = regs.parm1() as u32;
