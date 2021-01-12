@@ -263,7 +263,7 @@ fn kretprobe_bind(regs: Registers) {
                 if let Ok(_) = Address::try_from(tmp.as_ref()) {
                     let id = event_id(fd, ts);
                     reg_connection(&id.socket_id, false);
-                    send::sized::<typenum::U28, typenum::B0>(id, DataTag::Connect, address, rb())
+                    send::sized::<typenum::U28, typenum::B0>(id, DataTag::Bind, address, rb())
                 } else {
                     // AF_UNSPEC
                     if tmp[0] == 0 && tmp[1] == 0 {
