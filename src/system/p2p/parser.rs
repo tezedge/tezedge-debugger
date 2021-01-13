@@ -318,11 +318,28 @@ impl State {
                     .map(HandshakeMessage::AckMessage)
                     .map(TezosPeerMessage::HandshakeMessage)
                     .map_err(|error| error.to_string()),
-            _ => self.process_peer_message(content),
+            _ => self.process_peer_message(content, error_context),
         }
     }
 
-    fn process_peer_message(&mut self, content: &[u8]) -> Result<TezosPeerMessage, String> {
+    fn process_peer_message(&mut self, content: &[u8], error_context: DisplayValue<ErrorContext>) -> Result<TezosPeerMessage, String> {
+        if let Ok(r) = PeerMessageResponse::from_bytes(content) {
+            if !self.buffer.is_empty() {
+                // previous chunk (or chunks) contains incomplete message,
+                // but this chunk is not a continuation, but a new message,
+                // should not happen, maybe it is a bug in ocaml node
+                tracing::warn!(
+                    context = error_context,
+                    msg = "incomplete message dropped",
+                );
+                self.buffer.clear();
+            }
+            return r.messages()
+                .first()
+                .ok_or("empty".to_string())
+                .map(|m| TezosPeerMessage::PeerMessage(m.clone().into()))
+        }
+
         self.buffer.extend_from_slice(content);
         match PeerMessageResponse::from_bytes(self.buffer.as_slice()) {
             Err(e) => match &e {
