@@ -78,10 +78,55 @@ impl BpfSniffer {
     }
 }
 
+struct Connection {
+    tx: mpsc::UnboundedSender<Either<p2p::Message, p2p::Command>>,
+    source_type: SourceType,
+    // it is possible we receive/send connection message in wrong order
+    // do connect and receive the message and then send
+    // or do accept and send the message and then receive
+    // probably it is due to TCP Fast Open
+    unordered_connection_message: Option<(EventId, Vec<u8>)>,
+    empty: bool,
+}
+
+impl Connection {
+    fn new(source_type: SourceType) -> (Self, mpsc::UnboundedReceiver<Either<p2p::Message, p2p::Command>>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (
+            Connection {
+                tx,
+                source_type,
+                unordered_connection_message: None,
+                empty: true,
+            },
+            rx,
+        )
+    }
+
+    fn send_message(&mut self, counter: u64, incoming: bool, payload: Vec<u8>, id: &EventId) {
+        let message = p2p::Message {
+            payload,
+            incoming,
+            counter,
+            event_id: id.clone(),
+        };
+        match self.tx.send(Either::Left(message)) {
+            Ok(()) => (),
+            Err(_) => {
+                tracing::error!(
+                    id = tracing::field::display(&id),
+                    incoming = incoming,
+                    msg = "P2P Failed to forward message to the p2p parser",
+                )
+            },
+        }
+    }
+}
+
 struct BpfSnifferInner {
     module: Module,
     settings: SystemSettings,
-    connections: HashMap<SocketId, mpsc::UnboundedSender<Either<p2p::Message, p2p::Command>>>,
+    connections: HashMap<SocketId, Connection>,
     counter: u64,
     debug_stop_tx: Option<mpsc::Sender<p2p::ConnectionReport>>,
     debug_stop_rx: mpsc::Receiver<p2p::ConnectionReport>,
@@ -179,7 +224,7 @@ impl BpfSnifferInner {
         };
 
         for (_, connection) in &self.connections {
-            connection.send(Either::Right(p2p::Command::GetDebugData)).ok().unwrap();
+            connection.tx.send(Either::Right(p2p::Command::GetDebugData)).ok().unwrap();
             let running = self.debug_stop_rx.recv().await.unwrap();
             report.alive_connections.push(running);
         }
@@ -324,14 +369,15 @@ impl BpfSnifferInner {
             }
         };
 
-        let (tx, rx) = mpsc::unbounded_channel();
+        let source_type = if listened_on.is_some() { SourceType::Remote } else { SourceType::Local };
+        let (connection, rx) = Connection::new(source_type.clone());
         // drop old connection, it cause termination stream on the p2p parser,
         // so the p2p parser will know about it
-        self.connections.insert(id.socket_id.clone(), tx);
+        self.connections.insert(id.socket_id.clone(), connection);
         let mut debug_tx = self.debug_stop_tx.as_ref().cloned().unwrap();
         let parser = p2p::Parser {
             settings: self.settings.clone(),
-            source_type: if listened_on.is_some() { SourceType::Remote } else { SourceType::Local },
+            source_type,
             remote_address: address,
             id: id.socket_id.clone(),
             db: db,
@@ -367,22 +413,35 @@ impl BpfSnifferInner {
 
         match self.connections.get_mut(&id.socket_id) {
             Some(connection) => {
-                let message = p2p::Message {
-                    payload,
-                    incoming,
-                    counter: self.counter,
-                    event_id: id.clone(),
-                };
-                self.counter += 1;
-                match connection.send(Either::Left(message)) {
-                    Ok(()) => (),
-                    Err(_) => {
-                        tracing::error!(
-                            id = tracing::field::display(&id),
-                            incoming = incoming,
-                            msg = "P2P Failed to forward message to the p2p parser",
-                        )
+                match (connection.empty, connection.source_type, incoming) {
+                    // send stored message first if any
+                    (false, _, _) => {
+                        if let Some((id, payload)) = connection.unordered_connection_message.take() {
+                            connection.send_message(self.counter, !incoming, payload, &id);
+                            self.counter += 1;
+                        }
+                        connection.send_message(self.counter, incoming, payload, &id);
+                        self.counter += 1;
                     },
+                    // connection is empty, we are initiator and receive an incoming message
+                    // or we are responder and send an outgoing message
+                    // should reorder connection messages in such case
+                    (true, SourceType::Local, true) | (true, SourceType::Remote, false) => {
+                        tracing::info!(
+                            id = tracing::field::display(&id),
+                            msg = "P2P receive connection messages in wrong order",        
+                        );
+                        // store the message without sending
+                        connection.unordered_connection_message = Some((id, payload));
+                        connection.empty = false;
+                    },
+                    // ok case, should not reorder
+                    // mark as non empty and send message normally
+                    (true, SourceType::Local, false) | (true, SourceType::Remote, true) => {
+                        connection.empty = false;
+                        connection.send_message(self.counter, incoming, payload, &id);
+                        self.counter += 1;
+                    }
                 }
             },
             None => {

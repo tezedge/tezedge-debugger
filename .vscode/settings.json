@@ -17,6 +17,7 @@
         "kretprobe",
         "ksys",
         "ktime",
+        "nanos",
         "oneshot",
         "percpu",
         "printk",
