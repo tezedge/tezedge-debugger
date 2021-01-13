@@ -15,14 +15,17 @@ pub struct ConnectionReport {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParserStatistics {
-    pub total_chunks: usize,
-    pub decrypted_chunks: usize,
+    pub sent_bytes: u128,
+    pub received_bytes: u128,
+    pub incomplete_dropped_messages: u64,
+    pub total_chunks: u64,
+    pub decrypted_chunks: u64,
     pub error_report: Option<ParserErrorReport>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParserErrorReport {
-    pub position: usize,
+    pub position: u64,
     pub error: ParserError,
 }
 

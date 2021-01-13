@@ -94,6 +94,9 @@ impl Parser {
             chunk_outgoing_counter: 0,
             buffer: vec![],
             statistics: ParserStatistics {
+                sent_bytes: 0,
+                received_bytes: 0,
+                incomplete_dropped_messages: 0,
                 total_chunks: 0,
                 decrypted_chunks: 0,
                 error_report: None,
@@ -139,7 +142,7 @@ impl Parser {
                 (&Sender::Responder, &SourceType::Remote) => !incoming,
             };
             if !ok {
-                tracing::warn!(
+                tracing::debug!(
                     context = self.error_context(&state, incoming, &event_id),
                     sender = tracing::field::debug(&sender),
                     payload = tracing::field::display(hex::encode(packet.payload.as_slice())),
@@ -161,7 +164,7 @@ impl Parser {
                         chunk_info.data().to_vec(),
                         message,
                     );
-                    state.inc(incoming, true);
+                    state.inc(incoming, true, chunk_info.data().len());
                     let error_context = self.error_context(&state, incoming, &event_id);
                     self.store_db(&mut state, p2p_msg, error_context)?;
                     tracing::info!(
@@ -181,7 +184,7 @@ impl Parser {
                             decrypted.data().to_vec(),
                             message,
                         );
-                        state.inc(incoming, true);
+                        state.inc(incoming, true, decrypted.data().len());
                         let error_context = self.error_context(&state, incoming, &event_id);
                         self.store_db(&mut state, p2p_msg, error_context)?;
                     }
@@ -200,7 +203,7 @@ impl Parser {
                             vec![],
                             Err("cannot decrypt".to_string()),
                         );
-                        state.inc(incoming, false);
+                        state.inc(incoming, false, chunk.data().len());
                         let error_context = self.error_context(&state, incoming, &event_id);
                         self.store_db(&mut state, p2p_msg, error_context)?;
                     }
@@ -270,14 +273,16 @@ impl State {
         }
     }
 
-    fn inc(&mut self, incoming: bool, decrypted: bool) {
+    fn inc(&mut self, incoming: bool, decrypted: bool, length: usize) {
         self.statistics.total_chunks += 1;
         if decrypted {
             self.statistics.decrypted_chunks += 1;
         }
         if incoming {
+            self.statistics.received_bytes += length as u128;
             self.chunk_incoming_counter += 1;
         } else {
+            self.statistics.sent_bytes += length as u128;
             self.chunk_outgoing_counter += 1;
         }
     }
@@ -332,6 +337,7 @@ impl State {
                     context = error_context,
                     msg = "incomplete message dropped",
                 );
+                self.statistics.incomplete_dropped_messages += 1;
                 self.buffer.clear();
             }
             return r.messages()

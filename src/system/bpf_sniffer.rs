@@ -28,10 +28,10 @@ use crate::messages::p2p_message::{P2pMessage, SourceType};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BpfSnifferReport {
     pub timestamp: u128,
+    pub total_chunks: u64,
+    pub decrypted_chunks: u64,
     pub closed_connections: Vec<p2p::ConnectionReport>,
     pub alive_connections: Vec<p2p::ConnectionReport>,
-    pub total_chunks: usize,
-    pub decrypted_chunks: usize,
 }
 
 #[derive(Debug)]
