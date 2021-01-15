@@ -34,5 +34,8 @@ pub struct ParserErrorReport {
 pub enum ParserError {
     FailedToWriteInDatabase,
     FailedToDecrypt,
+    FirstPacketContainMultipleChunks,
     WrongProofOfWork,
+    NoDecipher,
+    Unknown,
 }

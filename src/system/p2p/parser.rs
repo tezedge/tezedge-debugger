@@ -218,7 +218,7 @@ impl Parser {
                     } else {
                         tracing::error!(context = context, msg = "identity wrong");
                     }
-                    state.report_error(ParserError::WrongProofOfWork);
+                    state.report_error(ParserError::NoDecipher);
                 },
                 ConsumeResult::PowInvalid => {
                     let context = self.error_context(&state, incoming, &event_id);
@@ -230,8 +230,11 @@ impl Parser {
                     }
                     state.report_error(ParserError::WrongProofOfWork);
                 },
-                ConsumeResult::UnexpectedChunks | ConsumeResult::InvalidConversation => {
-                    state.report_error(ParserError::FailedToDecrypt);
+                ConsumeResult::UnexpectedChunks => {
+                    state.report_error(ParserError::FirstPacketContainMultipleChunks);
+                },
+                ConsumeResult::InvalidConversation => {
+                    state.report_error(ParserError::Unknown);
                 },
             }
         }
