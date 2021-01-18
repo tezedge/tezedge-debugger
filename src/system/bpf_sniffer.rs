@@ -87,10 +87,11 @@ struct Connection {
     // probably it is due to TCP Fast Open
     unordered_connection_message: Option<(EventId, Vec<u8>)>,
     empty: bool,
+    remote_address: SocketAddr,
 }
 
 impl Connection {
-    fn new(source_type: SourceType) -> (Self, mpsc::UnboundedReceiver<Either<p2p::Message, p2p::Command>>) {
+    fn new(source_type: SourceType, remote_address: SocketAddr) -> (Self, mpsc::UnboundedReceiver<Either<p2p::Message, p2p::Command>>) {
         let (tx, rx) = mpsc::unbounded_channel();
         (
             Connection {
@@ -98,6 +99,7 @@ impl Connection {
                 source_type,
                 unordered_connection_message: None,
                 empty: true,
+                remote_address,
             },
             rx,
         )
@@ -370,7 +372,7 @@ impl BpfSnifferInner {
         };
 
         let source_type = if listened_on.is_some() { SourceType::Remote } else { SourceType::Local };
-        let (connection, rx) = Connection::new(source_type.clone());
+        let (connection, rx) = Connection::new(source_type.clone(), address.clone());
         // drop old connection, it cause termination stream on the p2p parser,
         // so the p2p parser will know about it
         self.connections.insert(id.socket_id.clone(), connection);
@@ -427,6 +429,15 @@ impl BpfSnifferInner {
                     // or we are responder and send an outgoing message
                     // should reorder connection messages in such case
                     (true, SourceType::Local, true) | (true, SourceType::Remote, false) => {
+                        if payload.len() == 24 && incoming {
+                            tracing::error!(
+                                id = tracing::field::display(&id),
+                                payload = tracing::field::display(hex::encode(payload.as_slice())),
+                                msg = "P2P unexpected 24 bytes message",
+                                address = tracing::field::display(&connection.remote_address),
+                            );
+                            return;
+                        }
                         tracing::info!(
                             id = tracing::field::display(&id),
                             msg = "P2P receive connection messages in wrong order",        

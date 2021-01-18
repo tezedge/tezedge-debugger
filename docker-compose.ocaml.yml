@@ -21,7 +21,7 @@ services:
     network_mode: "service:ocaml-network"
     depends_on:
       - ocaml-debugger
-    entrypoint: sh -c "sleep 5 && /usr/local/bin/entrypoint.sh tezos-node --cors-header='content-type' --cors-origin='*'"
+    entrypoint: sh -c "sleep 5 && /usr/local/bin/entrypoint.sh tezos-node --cors-header='content-type' --cors-origin='*' --rpc-addr localhost"
     logging:
       # Produce syslogs instead of terminal logs
       driver: "syslog"
@@ -48,7 +48,7 @@ services:
     ports:
       # Node specific ports
       - "11200:9732"       # node P2P port
-      - "11100:18732"       # node RPC port
+      - "11100:8732"       # node RPC port
       # Debugger Ports must be specified on node service, because of debugger network_mode attaches
       # debugger's container to the node container, allowing it to analyze node's traffic
       - "17732:17732"      # debugger RPC port
