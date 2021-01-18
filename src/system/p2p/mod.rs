@@ -3,6 +3,9 @@ pub use self::parser::{Parser, Command, Message};
 
 pub mod report;
 
+mod compare;
+pub use self::compare::{PeerMetadata, Peer};
+
 use serde::{Serialize, Deserialize};
 use crate::messages::p2p_message::SourceType;
 
@@ -15,11 +18,13 @@ pub struct ConnectionReport {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParserStatistics {
+    pub peer_id: Option<String>,
     pub sent_bytes: u128,
     pub received_bytes: u128,
     pub incomplete_dropped_messages: u64,
     pub total_chunks: u64,
     pub decrypted_chunks: u64,
+    pub peer_metadata: PeerMetadata,
     pub error_report: Option<ParserErrorReport>,
 }
 

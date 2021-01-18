@@ -14,11 +14,12 @@ use tezos_messages::p2p::{
     },
     binary_message::BinaryMessage,
 };
+use crypto::{hash::HashType, blake2b};
 use tezos_encoding::binary_reader::BinaryReaderError;
 use tezos_conversation::{Identity, Conversation, Packet, ConsumeResult, ChunkMetadata, ChunkInfoPair, Sender};
 use sniffer::{SocketId, EventId};
 
-use super::{ConnectionReport, ParserStatistics, ParserErrorReport, ParserError};
+use super::{ConnectionReport, ParserStatistics, ParserErrorReport, ParserError, PeerMetadata};
 
 use crate::{
     system::SystemSettings,
@@ -94,11 +95,13 @@ impl Parser {
             chunk_outgoing_counter: 0,
             buffer: vec![],
             statistics: ParserStatistics {
+                peer_id: None,
                 sent_bytes: 0,
                 received_bytes: 0,
                 incomplete_dropped_messages: 0,
                 total_chunks: 0,
                 decrypted_chunks: 0,
+                peer_metadata: PeerMetadata::default(),
                 error_report: None,
             },
         };
@@ -153,7 +156,14 @@ impl Parser {
                 ConsumeResult::Pending => (),
                 ConsumeResult::ConnectionMessage(chunk_info) => {
                     let message = ConnectionMessage::from_bytes(&chunk_info.data()[2..])
-                        .map(HandshakeMessage::ConnectionMessage)
+                        .map(|cm: ConnectionMessage| {
+                            if incoming {
+                                let hash = blake2b::digest_128(&chunk_info.data()[4..36]);
+                                state.statistics.peer_id =
+                                    Some(HashType::CryptoboxPublicKeyHash.hash_to_b58check(&hash));
+                            }
+                            HandshakeMessage::ConnectionMessage(cm)
+                        })
                         .map(TezosPeerMessage::HandshakeMessage)
                         .map_err(|error| error.to_string());
                     let p2p_msg = P2pMessage::new(
@@ -326,11 +336,11 @@ impl State {
                     .map(HandshakeMessage::AckMessage)
                     .map(TezosPeerMessage::HandshakeMessage)
                     .map_err(|error| error.to_string()),
-            _ => self.process_peer_message(content, error_context),
+            _ => self.process_peer_message(content, incoming, error_context),
         }
     }
 
-    fn process_peer_message(&mut self, content: &[u8], error_context: DisplayValue<ErrorContext>) -> Result<TezosPeerMessage, String> {
+    fn process_peer_message(&mut self, content: &[u8], incoming: bool, error_context: DisplayValue<ErrorContext>) -> Result<TezosPeerMessage, String> {
         if let Ok(r) = PeerMessageResponse::from_bytes(content) {
             if !self.buffer.is_empty() {
                 // previous chunk (or chunks) contains incomplete message,
@@ -346,7 +356,11 @@ impl State {
             return r.messages()
                 .first()
                 .ok_or("empty".to_string())
-                .map(|m| TezosPeerMessage::PeerMessage(m.clone().into()))
+                .map(|m| {
+                    let m = m.clone().into();
+                    self.statistics.peer_metadata.count_message(&m, incoming);
+                    TezosPeerMessage::PeerMessage(m)
+                })
         }
 
         self.buffer.extend_from_slice(content);
@@ -371,7 +385,11 @@ impl State {
                 r.messages()
                     .first()
                     .ok_or("empty".to_string())
-                    .map(|m| TezosPeerMessage::PeerMessage(m.clone().into()))
+                    .map(|m| {
+                        let m = m.clone().into();
+                        self.statistics.peer_metadata.count_message(&m, incoming);
+                        TezosPeerMessage::PeerMessage(m)
+                    })
             },
         }
     }

@@ -42,6 +42,7 @@ async-trait = "0.1"
 lazy_static = "1.4"
 strum = { version = "0.20", features = ["derive"] }
 pnet = "0.27"
+chrono = "0.4"
 
 serde_cbor = "0.11"
 reqwest = "0.10"
@@ -56,11 +57,11 @@ serde = { version = "1.0", features = ["derive"] }
 
 smoltcp = { branch = "fix", git = "https://github.com/simplestaking/smoltcp" }
 
-crypto = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezedge" }
-storage = { tag = "v0.8.0", git = "htps://github.com/simplestaking/tezedge" }
-tezos_encoding = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezedge" }
-tezos_messages = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezedge" }
-networking = { tag = "v0.8.0", git = "https://github.com/simplestaking/tezedge" }
+crypto = { tag = "v0.9.1", git = "https://github.com/simplestaking/tezedge" }
+storage = { tag = "v0.9.1", git = "htps://github.com/simplestaking/tezedge" }
+tezos_encoding = { tag = "v0.9.1", git = "https://github.com/simplestaking/tezedge" }
+tezos_messages = { tag = "v0.9.1", git = "https://github.com/simplestaking/tezedge" }
+networking = { tag = "v0.9.1", git = "https://github.com/simplestaking/tezedge" }
 tezos-conversation = { branch = "develop", git = "https://github.com/simplestaking/tezos-dissector" }
 #tezos-conversation = { path = "../tezos-dissector/tezos-conversation" }
 

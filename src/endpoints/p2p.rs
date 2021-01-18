@@ -89,9 +89,9 @@ pub fn p2p(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), E
 /// Basic handler for p2p message endpoint with cursor
 pub fn p2p_report(sniffer: BpfSniffer) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "p2p_summary")
-        .and(warp::query::query())
-        .map(move |()| -> WithStatus<Json> {
-            sniffer.send(BpfSnifferCommand::GetDebugData { filename: None, report: true });
+        .and(warp::query::raw())
+        .map(move |s| -> WithStatus<Json> {
+            sniffer.send(BpfSnifferCommand::GetDebugData { filename: None, report: true, difference: s == "difference" });
             let report = tokio::task::block_in_place(|| futures::executor::block_on(async {
                 // TODO: fix
                 tokio::time::delay_for(std::time::Duration::from_millis(100)).await;

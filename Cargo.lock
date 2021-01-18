@@ -576,8 +576,8 @@ dependencies = [
 
 [[package]]
 name = "crypto"
-version = "0.8.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
+version = "0.9.1"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.9.1#c440246edbfca0e93954c04ad6a58597d082ad15"
 dependencies = [
  "base58",
  "failure",
@@ -825,9 +825,9 @@ checksum = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
 
 [[package]]
 name = "futures"
-version = "0.3.10"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "309f13e3f4be6d5917178c84db67c0b9a09177ac16d4f9a7313a767a68adaa77"
+checksum = "da9052a1a50244d8d5aa9bf55cbc2fb6f357c86cc52e46c62ed390a7180cf150"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -840,9 +840,9 @@ dependencies = [
 
 [[package]]
 name = "futures-channel"
-version = "0.3.10"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a3b03bd32f6ec7885edeb99acd1e47e20e34fd4dfd3c6deed6fcac8a9d28f6a"
+checksum = "f2d31b7ec7efab6eefc7c57233bb10b847986139d88cc2f5a02a1ae6871a1846"
 dependencies = [
  "futures-core",
  "futures-sink",
@@ -850,15 +850,15 @@ dependencies = [
 
 [[package]]
 name = "futures-core"
-version = "0.3.10"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed8aeae2b6ab243ebabe6f54cd4cf53054d98883d5d326128af7d57a9ca5cd3d"
+checksum = "79e5145dde8da7d1b3892dad07a9c98fc04bc39892b1ecc9692cf53e2b780a65"
 
 [[package]]
 name = "futures-executor"
-version = "0.3.10"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f7836b36b7533d16fd5937311d98ba8965ab81030de8b0024c299dd5d51fb9b"
+checksum = "e9e59fdc009a4b3096bf94f740a0f2424c082521f20a9b08c5c07c48d90fd9b9"
 dependencies = [
  "futures-core",
  "futures-task",
@@ -868,15 +868,15 @@ dependencies = [
 
 [[package]]
 name = "futures-io"
-version = "0.3.10"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d41234e71d5e8ca73d01563974ef6f50e516d71e18f1a2f1184742e31f5d469f"
+checksum = "28be053525281ad8259d47e4de5de657b25e7bac113458555bb4b70bc6870500"
 
 [[package]]
 name = "futures-macro"
-version = "0.3.10"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3520e0eb4e704e88d771b92d51273ee212997f0d8282f17f5d8ff1cb39104e42"
+checksum = "c287d25add322d9f9abdcdc5927ca398917996600182178774032e9f8258fedd"
 dependencies = [
  "proc-macro-hack",
  "proc-macro2 1.0.24",
@@ -886,24 +886,24 @@ dependencies = [
 
 [[package]]
 name = "futures-sink"
-version = "0.3.10"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c72d188479368953c6c8c7140e40d7a4401674ab3b98a41e60e515d6cbdbe5de"
+checksum = "caf5c69029bda2e743fddd0582d1083951d65cc9539aebf8812f36c3491342d6"
 
 [[package]]
 name = "futures-task"
-version = "0.3.10"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08944cea9021170d383287169859c0ca8147d9ec285978393109954448f33cc7"
+checksum = "13de07eb8ea81ae445aca7b69f5f7bf15d7bf4912d8ca37d6645c77ae8a58d86"
 dependencies = [
  "once_cell",
 ]
 
 [[package]]
 name = "futures-util"
-version = "0.3.10"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3dd206efbe2ca683b2ce138ccdf61e1b0a63f5816dcedc9d8654c500ba0cea6"
+checksum = "632a8cd0f2a4b3fdea1657f08bde063848c3bd00f9bbf6e256b8be78802e624b"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -1023,9 +1023,9 @@ dependencies = [
 
 [[package]]
 name = "half"
-version = "1.6.0"
+version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d36fab90f82edc3c747f9d438e06cf0a491055896f2a279638bb5beed6c40177"
+checksum = "62aca2aba2d62b4a7f5b33f3712cb1b0692779a56fb510499d5c0aa594daeaf3"
 
 [[package]]
 name = "hashbrown"
@@ -1035,13 +1035,13 @@ checksum = "d7afe4a420e3fe79967a00898cc1f4db7c8a49a9333a29f8a4bd76a253d5cd04"
 
 [[package]]
 name = "headers"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed18eb2459bf1a09ad2d6b1547840c3e5e62882fa09b9a6a20b1de8e3228848f"
+checksum = "62689dc57c7456e69712607ffcbd0aa1dfcccf9af73727e9b25bc1825375cac3"
 dependencies = [
- "base64 0.12.3",
+ "base64 0.13.0",
  "bitflags 1.2.1",
- "bytes 0.5.6",
+ "bytes 1.0.1",
  "headers-core",
  "http",
  "mime",
@@ -1069,9 +1069,9 @@ dependencies = [
 
 [[package]]
 name = "hermit-abi"
-version = "0.1.17"
+version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aca5565f760fb5b220e499d72710ed156fdb74e631659e99377d9ebfbd13ae8"
+checksum = "322f4de77956e22ed0e5032c359a0f1273f1f7f0d79bfa3b8ffbc730d7fbcc5c"
 dependencies = [
  "libc",
 ]
@@ -1312,9 +1312,9 @@ checksum = "89203f3fba0a3795506acaad8ebce3c80c0af93f994d5a1d7a0b1eeb23271929"
 
 [[package]]
 name = "libloading"
-version = "0.6.6"
+version = "0.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9367bdfa836b7e3cf895867f7a570283444da90562980ec2263d6e1569b16bc"
+checksum = "351a32417a12d5f7e82c368a66781e307834dae04c6ce0cd4456d52989229883"
 dependencies = [
  "cfg-if 1.0.0",
  "winapi 0.3.9",
@@ -1592,18 +1592,19 @@ dependencies = [
 
 [[package]]
 name = "networking"
-version = "0.8.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
+version = "0.9.1"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.9.1#c440246edbfca0e93954c04ad6a58597d082ad15"
 dependencies = [
  "bytes 0.5.6",
- "crypto 0.8.0",
+ "crypto 0.9.1",
  "failure",
  "futures",
  "hex",
  "riker",
  "slog",
- "tezos_encoding 0.8.0",
- "tezos_messages 0.8.0",
+ "tezos_encoding 0.9.1",
+ "tezos_identity",
+ "tezos_messages 0.9.1",
  "tokio",
 ]
 
@@ -1971,9 +1972,9 @@ checksum = "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
 
 [[package]]
 name = "proc-macro-nested"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eba180dafb9038b050a4c280019bbedf9f2467b61e5d892dcad585bb57aadc5a"
+checksum = "bc881b2c22681370c6a780e47af9840ef841837bc98118431d4e1868bd0c1086"
 
 [[package]]
 name = "proc-macro2"
@@ -2300,9 +2301,9 @@ checksum = "dcf128d1287d2ea9d80910b5f1120d0b8eede3fbf1abe91c40d39ea7d51e6fda"
 
 [[package]]
 name = "rustc_version"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "397d411cfc34097bdb176984180f7d9980eb161aaf1368ceea96c9834d8f8b85"
+checksum = "f0dfe2087c51c460008730de8b57e6a320782fbfb312e1f4d520e6c6fae155ee"
 dependencies = [
  "semver",
 ]
@@ -2650,14 +2651,14 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "storage"
-version = "0.8.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
+version = "0.9.1"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.9.1#c440246edbfca0e93954c04ad6a58597d082ad15"
 dependencies = [
  "bincode",
  "blake2",
  "bytes 0.5.6",
  "commitlog",
- "crypto 0.8.0",
+ "crypto 0.9.1",
  "derive_builder",
  "failure",
  "getset",
@@ -2670,7 +2671,7 @@ dependencies = [
  "slog",
  "tezos_api",
  "tezos_context",
- "tezos_messages 0.8.0",
+ "tezos_messages 0.9.1",
 ]
 
 [[package]]
@@ -2877,7 +2878,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes 0.5.6",
- "crypto 0.8.0",
+ "chrono",
+ "crypto 0.9.1",
  "failure",
  "futures",
  "hex",
@@ -2897,8 +2899,8 @@ dependencies = [
  "strum",
  "syslog_loose",
  "tezos-conversation",
- "tezos_encoding 0.8.0",
- "tezos_messages 0.8.0",
+ "tezos_encoding 0.9.1",
+ "tezos_messages 0.9.1",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2929,24 +2931,25 @@ dependencies = [
 
 [[package]]
 name = "tezos_api"
-version = "0.8.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
+version = "0.9.1"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.9.1#c440246edbfca0e93954c04ad6a58597d082ad15"
 dependencies = [
  "chrono",
- "crypto 0.8.0",
+ "crypto 0.9.1",
  "derive_builder",
  "enum-iterator",
  "failure",
  "lazy_static",
  "ocaml-interop",
  "serde 1.0.119",
- "tezos_messages 0.8.0",
+ "serde_json",
+ "tezos_messages 0.9.1",
 ]
 
 [[package]]
 name = "tezos_context"
-version = "0.8.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
+version = "0.9.1"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.9.1#c440246edbfca0e93954c04ad6a58597d082ad15"
 dependencies = [
  "crossbeam",
  "lazy_static",
@@ -2972,19 +2975,32 @@ dependencies = [
 
 [[package]]
 name = "tezos_encoding"
-version = "0.8.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
+version = "0.9.1"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.9.1#c440246edbfca0e93954c04ad6a58597d082ad15"
 dependencies = [
  "bit-vec",
  "byteorder",
  "bytes 0.5.6",
  "chrono",
- "crypto 0.8.0",
+ "crypto 0.9.1",
  "failure",
  "hex",
  "num-bigint",
  "num-traits 0.2.14",
  "serde 1.0.119",
+]
+
+[[package]]
+name = "tezos_identity"
+version = "0.9.1"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.9.1#c440246edbfca0e93954c04ad6a58597d082ad15"
+dependencies = [
+ "crypto 0.9.1",
+ "failure",
+ "failure_derive",
+ "hex",
+ "serde 1.0.119",
+ "serde_json",
 ]
 
 [[package]]
@@ -3009,12 +3025,12 @@ dependencies = [
 
 [[package]]
 name = "tezos_messages"
-version = "0.8.0"
-source = "git+https://github.com/simplestaking/tezedge?tag=v0.8.0#5b6d015742045cee886580d8b6e26a5e263933c0"
+version = "0.9.1"
+source = "git+https://github.com/simplestaking/tezedge?tag=v0.9.1#c440246edbfca0e93954c04ad6a58597d082ad15"
 dependencies = [
  "bytes 0.5.6",
  "chrono",
- "crypto 0.8.0",
+ "crypto 0.9.1",
  "derive_builder",
  "failure",
  "getset",
@@ -3023,7 +3039,7 @@ dependencies = [
  "num-bigint",
  "num-traits 0.2.14",
  "serde 1.0.119",
- "tezos_encoding 0.8.0",
+ "tezos_encoding 0.9.1",
 ]
 
 [[package]]

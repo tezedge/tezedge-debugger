@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
+        "Cryptobox",
         "EMSGSIZE",
         "Inet",
         "SIGTERM",
@@ -20,6 +21,7 @@
         "nanos",
         "oneshot",
         "percpu",
+        "prevalidator",
         "printk",
         "recvfrom",
         "redbpf",
@@ -32,6 +34,7 @@
         "syslogs",
         "tgid",
         "typenum",
+        "unactivated",
         "userspace"
     ]
 }

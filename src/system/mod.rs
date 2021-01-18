@@ -3,7 +3,7 @@
 
 pub mod syslog_producer;
 pub mod rpc_parser;
-pub mod replayer;
+//pub mod replayer;
 
 // new socket capturing system
 mod bpf_sniffer;
