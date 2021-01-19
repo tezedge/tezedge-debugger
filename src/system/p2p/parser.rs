@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, fmt};
+use std::{fmt, net::SocketAddr};
 use futures::future::Either;
 use tokio::{stream::StreamExt, sync::mpsc};
 use tracing::field::DisplayValue;
@@ -109,10 +109,7 @@ impl Parser {
         // the local socket identifier is pair (pid, fd), but `Conversation` requires the packet
         // have local socket address; it needed only for distinguish between local and remote,
         // let's use fake socket address
-        let fake_local = {
-            let local_address = self.settings.local_address.clone();
-            SocketAddr::new(local_address, 0b1100011110001111)
-        };
+        let fake_local = "0.0.0.0:54321".parse::<SocketAddr>().unwrap();
 
         while let Some(event) = events.next().await {
             let Message { payload, incoming, counter, event_id } = match event {

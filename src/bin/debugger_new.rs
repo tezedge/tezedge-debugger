@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tracing::{info, error, Level};
+use tracing::{error, Level};
 use storage::persistent::{open_kv, DbConfiguration};
 use std::{sync::Arc, path::Path, process::exit};
 use tezedge_debugger::storage::{MessageStore, get_ts, cfs};
@@ -22,7 +22,7 @@ fn main() -> Result<(), failure::Error> {
         .init();
 
     // Initialize storage for messages
-    let storage = match open_database() {
+    let _storage = match open_database() {
         Ok(storage) => storage,
         Err(err) => {
             error!(error = tracing::field::display(&err), "failed to open database");

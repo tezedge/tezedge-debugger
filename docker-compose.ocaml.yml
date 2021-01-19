@@ -6,22 +6,25 @@ services:
     image: simplestakingcom/tezedge-debugger:v0.3.2
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     privileged: true
-    network_mode: "service:ocaml-network"
     environment:
       - RUST_BACKTRACE=1
     volumes:
       - "ocaml-shared-data:/tmp/volume"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
+    ports:
+      # Debugger Ports must be specified on node service, because of debugger network_mode attaches
+      # debugger's container to the node container, allowing it to analyze node's traffic
+      - "17732:17732"      # debugger RPC port
+      - "11001:13131/udp"  # debugger syslog port
     entrypoint: sh -c "./cleanup_probes.sh && ./tezedge-debugger"
 
   ocaml-node:
     image: tezos/tezos:v7.0
-    network_mode: "service:ocaml-network"
     depends_on:
       - ocaml-debugger
-    entrypoint: sh -c "sleep 5 && /usr/local/bin/entrypoint.sh tezos-node --cors-header='content-type' --cors-origin='*' --rpc-addr localhost"
+    entrypoint: sh -c "sleep 1 && /usr/local/bin/entrypoint.sh tezos-node --cors-header='content-type' --cors-origin='*' --rpc-addr localhost"
     logging:
       # Produce syslogs instead of terminal logs
       driver: "syslog"
@@ -32,6 +35,10 @@ services:
         syslog-format: "rfc5424micro"
     volumes:
       - "ocaml-shared-data:/var/run/tezos/node"
+    ports:
+      # Node specific ports
+      - "11200:9732"       # node P2P port
+      - "11100:8732"       # node RPC port
 
   ocaml-explorer:
     image: simplestakingcom/tezedge-explorer:v0.6.0
@@ -39,21 +46,6 @@ services:
       - ocaml-debugger
     ports:
       - "8080:8080"
-
-  ocaml-network:
-    image: simplestakingcom/tezedge-debugger:v0.3.2
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      # Node specific ports
-      - "11200:9732"       # node P2P port
-      - "11100:8732"       # node RPC port
-      # Debugger Ports must be specified on node service, because of debugger network_mode attaches
-      # debugger's container to the node container, allowing it to analyze node's traffic
-      - "17732:17732"      # debugger RPC port
-      - "11001:13131/udp"  # debugger syslog port
-    entrypoint: sleep inf
 
 volumes:
   ocaml-shared-data:

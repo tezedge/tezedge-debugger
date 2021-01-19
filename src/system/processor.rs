@@ -66,15 +66,8 @@ impl DatabaseProcessor {
             loop {
                 if let Some(mut msg) = receiver.recv().await {
                     match store.p2p().store_message(&mut msg) {
-                        Ok(id) => {
-                            // report each 1024 message
-                            if id & 0x3ff == 0 {
-                                tracing::info!(id, "stored new message")
-                            } else {
-                                trace!(id, "stored new message")
-                            }
-                        },
-                        Err(err) => { error!(error = tracing::field::display(&err), "failed to store message"); },
+                        Ok(id) => trace!(id, "stored new message"),
+                        Err(err) => error!(error = tracing::field::display(&err), "failed to store message"),
                     }
                 }
             }

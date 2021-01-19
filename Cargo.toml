@@ -17,14 +17,6 @@ path = "src/bin/debugger.rs"
 name = "tezedge-debugger-new"
 path = "src/bin/debugger_new.rs"
 
-[[bin]]
-name = "drone-server"
-path = "src/bin/drone_test_server.rs"
-
-[[bin]]
-name = "drone-client"
-path = "src/bin/drone_test_client.rs"
-
 [dev-dependencies]
 ws = "0.9"
 url = "2.2"
@@ -39,13 +31,10 @@ itertools = "0.9"
 structopt = "0.3"
 serde_json = "1.0"
 async-trait = "0.1"
-lazy_static = "1.4"
 strum = { version = "0.20", features = ["derive"] }
-pnet = "0.27"
 chrono = "0.4"
 
 serde_cbor = "0.11"
-reqwest = "0.10"
 syslog_loose = "0.7"
 
 tracing = "0.1.22"
@@ -55,15 +44,12 @@ tokio = { version = "0.2", features = ["full"] }
 futures = { version = "0.3" }
 serde = { version = "1.0", features = ["derive"] }
 
-smoltcp = { branch = "fix", git = "https://github.com/simplestaking/smoltcp" }
-
 crypto = { tag = "v0.9.1", git = "https://github.com/simplestaking/tezedge" }
 storage = { tag = "v0.9.1", git = "htps://github.com/simplestaking/tezedge" }
 tezos_encoding = { tag = "v0.9.1", git = "https://github.com/simplestaking/tezedge" }
 tezos_messages = { tag = "v0.9.1", git = "https://github.com/simplestaking/tezedge" }
 networking = { tag = "v0.9.1", git = "https://github.com/simplestaking/tezedge" }
 tezos-conversation = { branch = "develop", git = "https://github.com/simplestaking/tezos-dissector" }
-#tezos-conversation = { path = "../tezos-dissector/tezos-conversation" }
 
 sniffer = { path = "sniffer", features = ["facade"] }
 
@@ -76,9 +62,3 @@ redbpf = { git = "https://github.com/simplestaking/redbpf.git", branch = "develo
 redbpf-probes = { git = "https://github.com/simplestaking/redbpf.git", branch = "develop" }
 redbpf-macros = { git = "https://github.com/simplestaking/redbpf.git", branch = "develop" }
 cargo-bpf = { git = "https://github.com/simplestaking/redbpf.git", branch = "develop" }
-
-#bpf-sys = { path = "../redbpf/bpf-sys" }
-#redbpf = { path = "../redbpf/redbpf" }
-#redbpf-probes = { path = "../redbpf/redbpf-probes" }
-#redbpf-macros = { path = "../redbpf/redbpf-macros" }
-#cargo-bpf = { path = "../redbpf/cargo-bpf" }

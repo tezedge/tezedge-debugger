@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# TODO: rewrite in rust
+
 for probe in /sys/kernel/debug/tracing/events/kprobes/*; do
     if [ -d "$probe" ]; then
         echo "removing" "$probe"
