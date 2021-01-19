@@ -18,6 +18,7 @@ mod system_settings {
     /// System settings describing the running system
     pub struct SystemSettings {
         pub storage: MessageStore,
+        pub namespace: String,
         pub syslog_port: u16,
         pub rpc_port: u16,
         pub node_p2p_port: u16,

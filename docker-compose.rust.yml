@@ -11,10 +11,12 @@ services:
     network_mode: "service:rust-network"
     environment:
       - RUST_BACKTRACE=1
+      - NAMESPACE=rust
+      - P2P_PORT=9732
     volumes:
       - "rust-shared-data:/tmp/volume"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
-    entrypoint: sh -c "./cleanup_probes.sh && ./tezedge-debugger"
+    entrypoint: sh -c "./tezedge-debugger"
 
   rust-node:
     image: simplestakingcom/tezedge:v0.9.1

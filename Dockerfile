@@ -39,5 +39,4 @@ RUN cargo install --bins --path . --root .
 FROM ubuntu:20.04
 WORKDIR /home/appuser/
 COPY --from=builder /home/appuser/bin ./
-COPY cleanup_probes.sh ./
 #CMD ["./tezedge-debugger"]

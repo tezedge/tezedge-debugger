@@ -10,6 +10,8 @@ services:
     privileged: true
     environment:
       - RUST_BACKTRACE=1
+      - NAMESPACE=ocaml
+      - P2P_PORT=9733
     volumes:
       - "ocaml-shared-data:/tmp/volume"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
@@ -18,13 +20,13 @@ services:
       # debugger's container to the node container, allowing it to analyze node's traffic
       - "11000:17732"      # debugger RPC port
       - "11001:13131/udp"  # debugger syslog port
-    entrypoint: sh -c "./cleanup_probes.sh && ./tezedge-debugger"
+    entrypoint: sh -c "./tezedge-debugger"
 
   ocaml-node:
     image: tezos/tezos:v7.0
     depends_on:
       - ocaml-debugger
-    entrypoint: sh -c "sleep 1 && /usr/local/bin/entrypoint.sh tezos-node --cors-header='content-type' --cors-origin='*' --rpc-addr localhost"
+    entrypoint: sh -c "sleep 1 && /usr/local/bin/entrypoint.sh tezos-node --cors-header='content-type' --cors-origin='*' --rpc-addr=[::]:8732 --net-addr=[::]:9733"
     logging:
       # Produce syslogs instead of terminal logs
       driver: "syslog"
@@ -37,7 +39,7 @@ services:
       - "ocaml-shared-data:/var/run/tezos/node"
     ports:
       # Node specific ports
-      - "11200:9732"       # node P2P port
+      - "11200:9733"       # node P2P port
       - "11100:8732"       # node RPC port
 
   ocaml-explorer:

@@ -6,4 +6,3 @@
 FROM ubuntu:20.04
 WORKDIR /home/appuser/
 COPY bin ./
-COPY cleanup_probes.sh ./

@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{process::exit, path::Path, sync::Arc};
+use std::{process::exit, path::Path, sync::Arc, env::var};
 use tracing::{info, error, Level};
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::{
@@ -38,9 +38,10 @@ async fn main() -> Result<(), failure::Error> {
     // Create system setting to drive the rest of the system
     let settings = SystemSettings {
         storage: storage.clone(),
+        namespace: var("NAMESPACE").unwrap(),
         syslog_port: 13131,
         rpc_port: 17732,
-        node_p2p_port: 9732,
+        node_p2p_port: var("P2P_PORT").unwrap().parse().unwrap(),
         node_rpc_port: 8732,
     };
 

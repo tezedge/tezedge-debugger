@@ -201,7 +201,7 @@ impl BpfSnifferInner {
     pub fn new(settings: &SystemSettings) -> Self {
         let (tx, rx) = mpsc::channel(0x1000);
         BpfSnifferInner {
-            module: Module::load(),
+            module: Module::load(&settings.namespace),
             settings: settings.clone(),
             connections: HashMap::new(),
             counter: 1,

@@ -142,7 +142,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f30d3a39baa26f9651f17b375061f3233dde33424a8b72b0dbe93a68a0bc896d"
 dependencies = [
  "byteorder",
- "serde 1.0.119",
+ "serde 1.0.120",
 ]
 
 [[package]]
@@ -234,7 +234,7 @@ dependencies = [
 [[package]]
 name = "bpf-sys"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#a63231b66f9e7281302d5cc81bf6baa3ccf0856c"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#2cc9bf1150b7ca9e113834a8d01f2120028f8493"
 dependencies = [
  "bindgen",
  "cc",
@@ -290,7 +290,7 @@ checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
 [[package]]
 name = "cargo-bpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#a63231b66f9e7281302d5cc81bf6baa3ccf0856c"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#2cc9bf1150b7ca9e113834a8d01f2120028f8493"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -345,7 +345,7 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits 0.2.14",
- "serde 1.0.119",
+ "serde 1.0.120",
  "time",
  "winapi 0.3.9",
 ]
@@ -412,7 +412,7 @@ dependencies = [
  "lazy_static",
  "nom",
  "rust-ini",
- "serde 1.0.119",
+ "serde 1.0.120",
  "serde-hjson",
  "serde_json",
  "toml",
@@ -435,7 +435,7 @@ version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "615f6e27d000a2bffbc7f2f6a8669179378fa27ee4d0a509e985dfc0a7defb40"
 dependencies = [
- "getrandom 0.2.1",
+ "getrandom 0.2.2",
  "lazy_static",
  "proc-macro-hack",
  "tiny-keccak",
@@ -899,9 +899,9 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4060f4657be78b8e766215b02b18a2e862d83745545de804638e2b545e81aee6"
+checksum = "c9495705279e7140bf035dde1f6e750c162df8b625267cd52cc44e0b156732c8"
 dependencies = [
  "cfg-if 1.0.0",
  "libc",
@@ -1116,7 +1116,7 @@ dependencies = [
  "bitmaps",
  "rand_core 0.5.1",
  "rand_xoshiro",
- "serde 1.0.119",
+ "serde 1.0.120",
  "sized-chunks",
  "typenum",
  "version_check",
@@ -1501,7 +1501,7 @@ dependencies = [
  "num-integer",
  "num-traits 0.2.14",
  "rand 0.7.3",
- "serde 1.0.119",
+ "serde 1.0.120",
 ]
 
 [[package]]
@@ -1829,7 +1829,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c026d7df8b298d90ccbbc5190bd04d85e159eaf5576caeacf8741da93ccbd2e5"
 dependencies = [
- "getrandom 0.2.1",
+ "getrandom 0.2.2",
 ]
 
 [[package]]
@@ -1862,7 +1862,7 @@ dependencies = [
 [[package]]
 name = "redbpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#a63231b66f9e7281302d5cc81bf6baa3ccf0856c"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#2cc9bf1150b7ca9e113834a8d01f2120028f8493"
 dependencies = [
  "bindgen",
  "bpf-sys",
@@ -1882,7 +1882,7 @@ dependencies = [
 [[package]]
 name = "redbpf-macros"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#a63231b66f9e7281302d5cc81bf6baa3ccf0856c"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#2cc9bf1150b7ca9e113834a8d01f2120028f8493"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
@@ -1893,7 +1893,7 @@ dependencies = [
 [[package]]
 name = "redbpf-probes"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#a63231b66f9e7281302d5cc81bf6baa3ccf0856c"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#2cc9bf1150b7ca9e113834a8d01f2120028f8493"
 dependencies = [
  "cargo-bpf",
  "cty",
@@ -2088,9 +2088,9 @@ checksum = "9dad3f759919b92c3068c696c15c3d17238234498bbdcc80f2c469606f948ac8"
 
 [[package]]
 name = "serde"
-version = "1.0.119"
+version = "1.0.120"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bdd36f49e35b61d49efd8aa7fc068fd295961fd2286d0b2ee9a4c7a14e99cc3"
+checksum = "166b2349061381baf54a58e4b13c89369feb0ef2eaa57198899e2312aac30aab"
 dependencies = [
  "serde_derive",
 ]
@@ -2115,14 +2115,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e18acfa2f90e8b735b2836ab8d538de304cbb6729a7360729ea5a895d15a622"
 dependencies = [
  "half",
- "serde 1.0.119",
+ "serde 1.0.120",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.119"
+version = "1.0.120"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "552954ce79a059ddd5fd68c271592374bd15cab2274970380c000118aeffe1cd"
+checksum = "0ca2a8cb5805ce9e3b95435e3765b7b553cecc762d938d409434338386cb5775"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
@@ -2137,7 +2137,7 @@ checksum = "4fceb2595057b6891a4ee808f70054bd2d12f0e97f1cbb78689b59f676df325a"
 dependencies = [
  "itoa",
  "ryu",
- "serde 1.0.119",
+ "serde 1.0.120",
 ]
 
 [[package]]
@@ -2157,7 +2157,7 @@ checksum = "9ec5d77e2d4c73717816afac02670d5c4f534ea95ed430442cad02e7a6e32c97"
 dependencies = [
  "dtoa",
  "itoa",
- "serde 1.0.119",
+ "serde 1.0.120",
  "url",
 ]
 
@@ -2293,7 +2293,7 @@ checksum = "7038b67c941e23501573cb7242ffb08709abe9b11eb74bceff875bbda024a6a8"
 dependencies = [
  "libc",
  "libsodium-sys",
- "serde 1.0.119",
+ "serde 1.0.120",
 ]
 
 [[package]]
@@ -2320,7 +2320,7 @@ dependencies = [
  "itertools",
  "num_cpus",
  "rocksdb",
- "serde 1.0.119",
+ "serde 1.0.120",
  "slog",
  "tezos_api",
  "tezos_context",
@@ -2480,7 +2480,7 @@ dependencies = [
  "itertools",
  "networking",
  "rocksdb",
- "serde 1.0.119",
+ "serde 1.0.120",
  "serde_cbor",
  "serde_json",
  "sniffer",
@@ -2512,7 +2512,7 @@ dependencies = [
  "hex",
  "log",
  "num-bigint",
- "serde 1.0.119",
+ "serde 1.0.120",
  "serde_json",
  "tezos_encoding 0.5.0",
  "tezos_messages 0.5.0",
@@ -2531,7 +2531,7 @@ dependencies = [
  "failure",
  "lazy_static",
  "ocaml-interop",
- "serde 1.0.119",
+ "serde 1.0.120",
  "serde_json",
  "tezos_messages 0.9.1",
 ]
@@ -2543,7 +2543,7 @@ source = "git+https://github.com/simplestaking/tezedge?tag=v0.9.1#c440246edbfca0
 dependencies = [
  "crossbeam",
  "lazy_static",
- "serde 1.0.119",
+ "serde 1.0.120",
 ]
 
 [[package]]
@@ -2560,7 +2560,7 @@ dependencies = [
  "hex",
  "num-bigint",
  "num-traits 0.2.14",
- "serde 1.0.119",
+ "serde 1.0.120",
 ]
 
 [[package]]
@@ -2577,7 +2577,7 @@ dependencies = [
  "hex",
  "num-bigint",
  "num-traits 0.2.14",
- "serde 1.0.119",
+ "serde 1.0.120",
 ]
 
 [[package]]
@@ -2589,7 +2589,7 @@ dependencies = [
  "failure",
  "failure_derive",
  "hex",
- "serde 1.0.119",
+ "serde 1.0.120",
  "serde_json",
 ]
 
@@ -2608,7 +2608,7 @@ dependencies = [
  "lazy_static",
  "num-bigint",
  "num-traits 0.2.14",
- "serde 1.0.119",
+ "serde 1.0.120",
  "serde_json",
  "tezos_encoding 0.5.0",
 ]
@@ -2628,7 +2628,7 @@ dependencies = [
  "lazy_static",
  "num-bigint",
  "num-traits 0.2.14",
- "serde 1.0.119",
+ "serde 1.0.120",
  "tezos_encoding 0.9.1",
 ]
 
@@ -2743,7 +2743,7 @@ version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31142970826733df8241ef35dc040ef98c679ab14d7c3e54d827099b3acecaa"
 dependencies = [
- "serde 1.0.119",
+ "serde 1.0.120",
 ]
 
 [[package]]
@@ -2823,7 +2823,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb65ea441fbb84f9f6748fd496cf7f63ec9af5bca94dd86456978d055e8eb28b"
 dependencies = [
- "serde 1.0.119",
+ "serde 1.0.120",
  "tracing-core",
 ]
 
@@ -2838,7 +2838,7 @@ dependencies = [
  "lazy_static",
  "matchers",
  "regex",
- "serde 1.0.119",
+ "serde 1.0.120",
  "serde_json",
  "sharded-slab",
  "smallvec",
@@ -3014,7 +3014,7 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
- "getrandom 0.2.1",
+ "getrandom 0.2.2",
 ]
 
 [[package]]
@@ -3062,7 +3062,7 @@ dependencies = [
  "multipart",
  "pin-project 0.4.27",
  "scoped-tls",
- "serde 1.0.119",
+ "serde 1.0.120",
  "serde_json",
  "serde_urlencoded",
  "tokio",
