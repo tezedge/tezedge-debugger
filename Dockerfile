@@ -5,7 +5,7 @@ RUN apt-get update && \
     wget lsb-release software-properties-common \
     libarchive-tools flex bison libssl-dev bc libelf-dev \
     && \
-    rustup install nightly-2020-10-24 && rustup default nightly-2020-10-24
+    rustup install nightly-2020-12-31 && rustup default nightly-2020-12-31
 
 # llvm 11
 RUN wget https://apt.llvm.org/llvm.sh && \

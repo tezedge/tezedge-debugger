@@ -6,7 +6,7 @@ services:
     image: simplestakingcom/tezedge-debugger:v0.3.2
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     privileged: true
     environment:
       - RUST_BACKTRACE=1
