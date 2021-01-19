@@ -32,26 +32,40 @@ pub struct BpfSnifferReport {
     pub decrypted_chunks: u64,
     pub closed_connections: Vec<p2p::ConnectionReport>,
     pub alive_connections: Vec<p2p::ConnectionReport>,
-    pub difference: Vec<PeerDifference>,
+    pub difference: Difference,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "case", rename_all = "snake_case")]
-pub enum PeerDifference {
-    Difference {
-        remote_address: SocketAddr,
-        peer_id: String,
-        metadata: p2p::PeerMetadata,
+pub enum Difference {
+    NoNodeReport,
+    None,
+    Some {
+        node_has_debugger_has_not: Vec<NodeHasDebuggerHasNotReport>,
+        debugger_has_node_has_not: Vec<DebuggerHasNodeHasNotReport>,
+        debugger_has_more: Vec<PeerDifferenceReport>,
+        arbitrary: Vec<PeerDifferenceReport>,
     },
-    NodeHasDebuggerHasNot {
-        peer_id: String,
-        metadata: p2p::PeerMetadata,
-    },
-    DebuggerHasNodeHasNot {
-        remote_address: SocketAddr,
-        peer_id: String,
-        metadata: p2p::PeerMetadata,
-    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeHasDebuggerHasNotReport {
+    peer_id: String,
+    metadata: p2p::PeerMetadata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebuggerHasNodeHasNotReport {
+    remote_address: String,
+    peer_id: String,
+    metadata: p2p::PeerMetadata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerDifferenceReport {
+    remote_address: String,
+    peer_id: String,
+    metadata: p2p::PeerMetadataDiff,
 }
 
 #[derive(Debug)]
@@ -64,7 +78,6 @@ pub enum BpfSnifferCommand {
     GetDebugData {
         filename: Option<PathBuf>,
         report: bool,
-        difference: bool,
     },
 }
 
@@ -235,7 +248,7 @@ impl BpfSnifferInner {
         tracing::info!(path = tracing::field::debug(filename), msg = "written dump");
     }
 
-    async fn prepare_report(&mut self, closed_connections: &Vec<p2p::ConnectionReport>, difference: bool) -> BpfSnifferReport {
+    async fn prepare_report(&mut self, closed_connections: &Vec<p2p::ConnectionReport>) -> BpfSnifferReport {
         debug_assert!(self.debug_stop_rx.try_recv().is_err(), "should collect all reports in main loop");
 
         let mut report = BpfSnifferReport {
@@ -244,7 +257,7 @@ impl BpfSnifferInner {
             alive_connections: vec![],
             total_chunks: 0,
             decrypted_chunks: 0,
-            difference: vec![],
+            difference: Difference::NoNodeReport,
         };
 
         for (_, connection) in &self.connections {
@@ -262,50 +275,76 @@ impl BpfSnifferInner {
         report.total_chunks = total_chunks_closed + total_chunks_running;
         report.decrypted_chunks = decrypted_chunks_closed + decrypted_chunks_running;
 
-        if difference {
-            let i = report.closed_connections.iter().chain(report.alive_connections.iter());
-            let difference = self.prepare_difference(i);
-            report.difference = difference;
-        }
+        let i = report.closed_connections.iter().chain(report.alive_connections.iter());
+        let difference = self.prepare_difference(i);
+        report.difference = difference;
 
         report
     }
 
-    fn prepare_difference<'a, 'b, I>(&'b mut self, i: I) -> Vec<PeerDifference>
+    fn prepare_difference<'a, 'b, I>(&'b mut self, i: I) -> Difference
     where
         I: Iterator<Item = &'a p2p::ConnectionReport>,
     {
         // TODO: move to settings
-        let node_report = serde_json::from_reader::<_, Vec<p2p::Peer>>(
-            File::open("/tmp/volume/data/peers.json").unwrap(),
-        ).unwrap();
+        let node_report = File::open("/tmp/volume/data/peers.json")
+            .ok()
+            .and_then(|file| serde_json::from_reader::<_, Vec<p2p::Peer>>(file).ok())
+            .unwrap_or(vec![]);
+        if node_report.is_empty() {
+            return Difference::NoNodeReport;
+        }
+
         let mut node_report = node_report.into_iter().map(|p| (p.peer_id, p.peer_metadata))
             .collect::<HashMap<_, _>>();
 
-        let mut difference = i.filter_map(|connection| {
-                connection.report.peer_id.as_ref()
-                    .map(|peer_id| {
-                        if let Some(metadata) = node_report.remove(peer_id) {
-                            PeerDifference::Difference {
-                                remote_address: connection.remote_address.parse().unwrap(),
+        let mut debugger_has_node_has_not = vec![];
+        let mut debugger_has_more = vec![];
+        let mut arbitrary = vec![];
+        for connection in i {
+            if let Some(peer_id) = &connection.report.peer_id {
+                if let Some(metadata) = node_report.remove(peer_id) {
+                    if let Some(metadata) = (&connection.report.peer_metadata - &metadata).none() {
+                        if metadata.positive() {
+                            debugger_has_more.push(PeerDifferenceReport {
+                                remote_address: connection.remote_address.clone(),
                                 peer_id: peer_id.clone(),
-                                metadata: &connection.report.peer_metadata - &metadata,
-                            }
+                                metadata
+                            })
                         } else {
-                            PeerDifference::DebuggerHasNodeHasNot {
-                                remote_address: connection.remote_address.parse().unwrap(),
+                            arbitrary.push(PeerDifferenceReport {
+                                remote_address: connection.remote_address.clone(),
                                 peer_id: peer_id.clone(),
-                                metadata: connection.report.peer_metadata.clone(),
-                            }
+                                metadata
+                            })    
                         }
-                    })
-            })
-            .collect::<Vec<_>>();
-        for (peer_id, metadata) in node_report {
-            difference.push(PeerDifference::NodeHasDebuggerHasNot { peer_id, metadata })
+                    }
+                } else {
+                    if connection.report.total_chunks > 6 {
+                        debugger_has_node_has_not.push(DebuggerHasNodeHasNotReport {
+                            remote_address: connection.remote_address.clone(),
+                            peer_id: peer_id.clone(),
+                            metadata: connection.report.peer_metadata.clone(),
+                        })
+                    }
+                }
+            }
         }
+        let node_has_debugger_has_not = node_report
+            .into_iter()
+            .map(|(peer_id, metadata)| NodeHasDebuggerHasNotReport { peer_id, metadata })
+            .collect::<Vec<_>>();
 
-        difference
+        if debugger_has_node_has_not.is_empty() && node_has_debugger_has_not.is_empty() && debugger_has_more.is_empty() && arbitrary.is_empty() {
+            Difference::None
+        } else {
+            Difference::Some {
+                node_has_debugger_has_not,
+                debugger_has_node_has_not,
+                debugger_has_more,
+                arbitrary,
+            }
+        }
     }
 
     pub async fn run(self, command_rx: mpsc::UnboundedReceiver<BpfSnifferCommand>) {
@@ -369,12 +408,12 @@ impl BpfSnifferInner {
                     }        
                 },
                 Either::Right(BpfSnifferCommand::Terminate) => break,
-                Either::Right(BpfSnifferCommand::GetDebugData { filename, report, difference }) => {
+                Either::Right(BpfSnifferCommand::GetDebugData { filename, report }) => {
                     if let Some(filename) = filename {
                         Self::dump_rb(&filename, &mut events).await;
                     }
                     if report {
-                        let report = s.prepare_report(&closed_connections, difference).await;
+                        let report = s.prepare_report(&closed_connections).await;
                         let mut response = SNIFFER_RESPONSE.lock().unwrap();
                         *response = Some(BpfSnifferResponse::Report(report));
                     }

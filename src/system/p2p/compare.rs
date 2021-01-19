@@ -3,7 +3,7 @@
 
 // incomplete
 
-use std::{fmt, string::ToString, ops::{Add, Sub}};
+use std::{fmt, string::ToString, ops::{Add, Sub, Range}};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize, ser, de};
 use crate::messages::p2p_message::FullPeerMessage;
@@ -41,18 +41,34 @@ pub struct PeerMetadata {
     //advertisements: (),
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct PeerMetadataDiff {
+    responses: Option<CountsByGroupsDiff>,
+    requests: Option<CountsByGroupsDiff>,
+}
+
+impl PeerMetadataDiff {
+    pub fn none(self) -> Option<Self> {
+        if self.responses.is_none() && self.requests.is_none() {
+            None
+        } else {
+            Some(self)
+        }
+    }
+
+    pub fn positive(&self) -> bool {
+        self.requests.as_ref().map(CountsByGroupsDiff::positive).unwrap_or(true) &&
+        self.responses.as_ref().map(CountsByGroupsDiff::positive).unwrap_or(true)
+    }
+}
+
 impl<'a, 'b> Sub<&'b PeerMetadata> for &'a PeerMetadata {
-    type Output = PeerMetadata;
+    type Output = PeerMetadataDiff;
 
     fn sub(self, rhs: &'b PeerMetadata) -> Self::Output {
-        PeerMetadata {
-            responses: &self.responses - &rhs.responses,
-            requests: &self.requests - &rhs.requests,
-            valid_blocks: self.valid_blocks - rhs.valid_blocks,
-            old_heads: self.old_heads - rhs.old_heads,
-            unactivated_chains: self.unactivated_chains - rhs.unactivated_chains,
-            inactive_chains: self.inactive_chains - rhs.inactive_chains,
-            future_blocks_advertised: self.future_blocks_advertised - rhs.future_blocks_advertised,
+        PeerMetadataDiff {
+            responses: (&self.responses - &rhs.responses).none(),
+            requests: (&self.requests - &rhs.requests).none(),
         }
     }
 }
@@ -93,15 +109,37 @@ pub struct CountsByGroups {
     scheduled: CountsByKind,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct CountsByGroupsDiff {
+    sent: Option<CountsByKind>,
+    received: Option<CountsByKind>,
+    failed: Option<CountsByKind>,
+}
+
+impl CountsByGroupsDiff {
+    fn none(self) -> Option<Self> {
+        if self.sent.is_none() && self.received.is_none() && self.failed.is_none() {
+            None
+        } else {
+            Some(self)
+        }
+    }
+
+    fn positive(&self) -> bool {
+        self.sent.as_ref().map(CountsByKind::positive).unwrap_or(true) &&
+        self.received.as_ref().map(CountsByKind::positive).unwrap_or(true) &&
+        self.failed.as_ref().map(CountsByKind::positive).unwrap_or(true)
+    }
+}
+
 impl<'a, 'b> Sub<&'b CountsByGroups> for &'a CountsByGroups {
-    type Output = CountsByGroups;
+    type Output = CountsByGroupsDiff;
 
     fn sub(self, rhs: &'b CountsByGroups) -> Self::Output {
-        CountsByGroups {
-            sent: &(&self.sent + &self.scheduled) - &(&rhs.sent + &rhs.scheduled),
-            received: &self.received - &rhs.received,
-            failed: &self.failed - &rhs.failed,
-            scheduled: Default::default(),
+        CountsByGroupsDiff {
+            sent: (&(&self.sent + &self.scheduled) - &(&rhs.sent + &rhs.scheduled)).none(),
+            received: (&self.received - &rhs.received).none(),
+            failed: (&self.failed - &rhs.failed).none(),
         }
     }
 }
@@ -142,6 +180,27 @@ pub struct CountsByKind {
     #[serde(serialize_with = "parse_int_ser")]
     #[serde(deserialize_with = "parse_int_de")]
     other: i64,
+}
+
+impl CountsByKind {
+    // range is inclusive at right, [0, 1) means only 0 allowed
+    const ALLOWED_RANGE: Range<i64> = 0..1;
+ 
+    fn none(self) -> Option<Self> {
+        let sum = self.branch + self.head + self.block_header + self.operations + self.protocols
+                + self.operation_hashes_for_block + self.operations_for_block + self.other;
+        if Self::ALLOWED_RANGE.contains(&sum) {
+            None
+        } else {
+            Some(self)
+        }
+    }
+
+    fn positive(&self) -> bool {
+        self.branch >= 0 && self.head >= 0 && self.block_header >= 0 && self.operations >= 0 &&
+        self.protocols >= 0 && self.operation_hashes_for_block >= 0 &&
+        self.operations_for_block >= 0 && self.other >= 0
+    }
 }
 
 impl<'a, 'b> Add<&'b CountsByKind> for &'a CountsByKind {

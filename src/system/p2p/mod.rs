@@ -4,7 +4,7 @@ pub use self::parser::{Parser, Command, Message};
 pub mod report;
 
 mod compare;
-pub use self::compare::{PeerMetadata, Peer};
+pub use self::compare::{PeerMetadata, PeerMetadataDiff, Peer};
 
 use serde::{Serialize, Deserialize};
 use crate::messages::p2p_message::SourceType;
