@@ -13,10 +13,6 @@ edition = "2018"
 name = "tezedge-debugger"
 path = "src/bin/debugger.rs"
 
-[[bin]]
-name = "tezedge-debugger-new"
-path = "src/bin/debugger_new.rs"
-
 [dev-dependencies]
 ws = "0.9"
 url = "2.2"

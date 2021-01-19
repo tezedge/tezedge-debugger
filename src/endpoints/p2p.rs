@@ -94,8 +94,13 @@ pub fn p2p_report(sniffer: BpfSniffer) -> impl Filter<Extract=(WithStatus<Json>,
             sniffer.send(BpfSnifferCommand::GetDebugData { filename: None, report: true });
             let report = tokio::task::block_in_place(|| futures::executor::block_on(async {
                 // TODO: fix
-                tokio::time::delay_for(std::time::Duration::from_millis(100)).await;
-                BpfSniffer::recv()
+                loop {
+                    if let Some(r) = BpfSniffer::recv() {
+                        break r;
+                    } else {
+                        tokio::time::delay_for(std::time::Duration::from_millis(50)).await;
+                    }
+                }
             }));
 
             with_status(json(&report), StatusCode::OK)
