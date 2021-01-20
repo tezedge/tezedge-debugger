@@ -1,115 +1,20 @@
 kind: pipeline
-type: docker
-name: default
+name: docker-deploy-develop
+
+# TODO: tests
 
 steps:
-  - name: set_server_identity
-    image: ubuntu
-    pull: if-not-exists
-    volumes:
-      - name: server-identity
-        path: /tmp/volume
-      - name: binaries
-        path: /tmp/binaries
-    commands:
-      - cp ./tests/server_identity.json /tmp/volume/identity.json
-      - cp ./tests/wait_until.sh /tmp/binaries
-  - name: set_client_identity
-    image: ubuntu
-    pull: if-not-exists
-    volumes:
-      - name: client-identity
-        path: /tmp/volume
-    commands:
-      - cp ./tests/client_identity.json /tmp/volume/identity.json
-  - name: build
-    image: simplestakingcom/tezedge-ci-builder:latest
-    pull: if-not-exists
-    environment:
-      RUST_BACKTRACE: 1
-    volumes:
-      - name: binaries
-        path: /tmp/binaries
-      - name: snapshot
-        path: /tmp/snapshot
-    commands:
-      - cargo install --bins --path . --root .
-      - cp ./bin/* /tmp/binaries
-      - cp -r ./tests/rust-node-record /tmp/snapshot/rust-node-record
-  - name: server
-    image: simplestakingcom/tezedge-ci-builder:latest
-    pull: if-not-exists
-    detach: true
-    volumes:
-      - name: binaries
-        path: /etc/bin
-      - name: server-identity
-        path: /tmp/volume
-      - name:
-    commands:
-      - /etc/bin/drone-server
-  - name: client
-    image: simplestakingcom/tezedge-ci-builder:latest
-    pull: if-not-exists
-    environment:
-      DEBUGGER_URL: "http://client:17732"
-    volumes:
-      - name: binaries
-        path: /etc/bin
-      - name: client-identity
-        path: /tmp/volume
-      - name: snapshot
-        path: /tmp/snapshot
-    commands:
-      - /etc/bin/tezedge-debugger &
-      - sleep 2
-      - /etc/bin/drone-client --server server:13030
-      - cp -r $(find /tmp/volume/ -type d -name "[0-9]*") /tmp/snapshot/snapshot
-      - cargo test
-  #- name: drone-replay
-  #  image: simplestakingcom/tezedge-ci-builder:latest
-  #  pull: if-not-exists
-  #  volumes:
-  #    - name: binaries
-  #      path: /etc/bin
-  #    - name: client-identity
-  #      path: /tmp/volume
-  #    - name: snapshot
-  #      path: /tmp/snapshot
-  #  commands:
-  #    - apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y libpcap-dev
-  #    - /etc/bin/drone-server &
-  #    - sleep 1
-  #    - /etc/bin/replayer --node-ip "0.0.0.0:13030" --path "/tmp/snapshot/snapshot" --last-message-id 6
-  - name: live-replay
-    image: simplestakingcom/tezedge:v0.5.0
-    pull: if-not-exists
-    volumes:
-      - name: binaries
-        path: /etc/bin
-      - name: client-identity
-        path: /tmp/volume
-      - name: snapshot
-        path: /tmp/snapshot
-    commands:
-      - mkdir /tmp/replay
-      - cp -r /tmp/snapshot/rust-node-record /tmp/replay/
-      - cd /home/appuser/tezedge
-      - /home/appuser/tezedge/run.sh release --peers 127.0.0.1:9732 &
-      - /etc/bin/wait_until.sh
-      - /etc/bin/replayer --peer-ip 51.15.220.7:9732 --path "/tmp/replay/rust-node-record" --node-ip 127.0.0.1:9732 --limit 256
-
-volumes:
-  - name: binaries
-    temp: {}
-  - name: snapshot
-    temp: {}
-  - name: server-identity
-    temp: {}
-  - name: client-identity
-    temp: {}
+- name: build-tezedge-debugger-image  
+  image: plugins/docker
+  settings:
+    repo: simplestakingcom/tezedge-debugger
+    tag: latest
+    dockerfile: Dockerfile
+    username:
+      from_secret: docker_hub_username
+    password:
+      from_secret: docker_hub_pswd
 
 trigger:
-  branch:
-    - master
-    - dev
+  branch: develop
+  event: push

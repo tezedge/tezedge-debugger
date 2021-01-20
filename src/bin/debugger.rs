@@ -36,12 +36,13 @@ async fn main() -> Result<(), failure::Error> {
     };
 
     // Create system setting to drive the rest of the system
+    let p2p_port_str = var("P2P_PORT").unwrap();
     let settings = SystemSettings {
         storage: storage.clone(),
-        namespace: var("NAMESPACE").unwrap(),
+        namespace: format!("n{}", p2p_port_str),
         syslog_port: 13131,
         rpc_port: 17732,
-        node_p2p_port: var("P2P_PORT").unwrap().parse().unwrap(),
+        node_p2p_port: p2p_port_str.parse().unwrap(),
         node_rpc_port: 8732,
     };
 
