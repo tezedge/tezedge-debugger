@@ -11,7 +11,7 @@ steps:
     tag: latest
     dockerfile: Dockerfile
     build_args:
-      - BRANCH=develop
+      - branch=develop
     username:
       from_secret: docker_hub_username
     password:

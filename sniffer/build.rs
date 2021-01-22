@@ -13,7 +13,7 @@ mod facade {
         path::{Path, PathBuf},
         process::{Command, Stdio},
         fs,
-        io::Write,
+        //io::Write,
     };
     use cargo_bpf_lib as cargo_bpf;
 
