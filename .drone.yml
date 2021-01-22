@@ -10,6 +10,8 @@ steps:
     repo: simplestakingcom/tezedge-debugger
     tag: latest
     dockerfile: Dockerfile
+    build_args:
+      - BRANCH=develop
     username:
       from_secret: docker_hub_username
     password:

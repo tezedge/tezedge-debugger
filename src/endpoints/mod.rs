@@ -5,6 +5,7 @@ pub mod p2p;
 pub mod rpc;
 pub mod log;
 pub mod stat;
+mod version;
 
 use warp::{
     Filter, Reply,
@@ -26,6 +27,7 @@ pub fn routes(storage: MessageStore, sniffer: BpfSniffer) -> impl Filter<Extract
             .or(rpc(storage.clone()))
             .or(log(storage.clone()))
             .or(stat(storage.clone()))
+            .or(self::version::api_call())
     )
         .with(header("Content-Type", "application/json"))
         .with(header("Access-Control-Allow-Origin", "*"))
