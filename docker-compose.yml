@@ -6,9 +6,7 @@ services:
     image: simplestakingcom/tezedge-debugger:latest
     build:
       context: .
-      dockerfile: Dockerfile
-      args:
-        branch: ${BRANCH}
+      dockerfile: Dockerfile.dev
     privileged: true
     environment:
       - RUST_BACKTRACE=1
@@ -25,9 +23,7 @@ services:
     image: simplestakingcom/tezedge-debugger:latest
     build:
       context: .
-      dockerfile: Dockerfile
-      args:
-        branch: ${BRANCH}
+      dockerfile: Dockerfile.dev
     privileged: true
     environment:
       - RUST_BACKTRACE=1

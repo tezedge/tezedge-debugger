@@ -20,3 +20,24 @@ steps:
 trigger:
   branch: develop
   event: push
+
+kind: pipeline
+name: docker-deploy-release
+
+steps:
+  - name: build-tezedge-debugger-image
+    image: plugins/docker
+    settings:
+      repo: simplestakingcom/tezedge-debugger
+      tag: ${DRONE_TAG}
+      dockerfile: Dockerfile
+      build_args:
+        - branch=${DRONE_TAG}
+      username:
+        from_secret: docker_hub_username
+      password:
+        from_secret: docker_hub_pswd
+
+trigger:
+  ref: refs/tags/**
+  event: tag
