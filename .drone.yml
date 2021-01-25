@@ -1,7 +1,7 @@
+# TODO: tests
+
 kind: pipeline
 name: docker-deploy-develop
-
-# TODO: tests
 
 steps:
 - name: build-tezedge-debugger-image  
