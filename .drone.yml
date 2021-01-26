@@ -21,6 +21,8 @@ trigger:
   branch: develop
   event: push
 
+---
+
 kind: pipeline
 name: docker-deploy-release
 
