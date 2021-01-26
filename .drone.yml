@@ -36,7 +36,7 @@ steps:
         - latest-release
       dockerfile: Dockerfile
       build_args:
-        - branch=${DRONE_TAG}
+        - branch=master
       username:
         from_secret: docker_hub_username
       password:
