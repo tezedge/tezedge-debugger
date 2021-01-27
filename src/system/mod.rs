@@ -23,6 +23,7 @@ mod system_settings {
         pub rpc_port: u16,
         pub node_p2p_port: u16,
         pub node_rpc_port: u16,
+        pub max_message_number: u64,
     }
 }
 pub use self::system_settings::SystemSettings;

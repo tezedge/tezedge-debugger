@@ -26,7 +26,7 @@ pub fn spawn_processor(settings: SystemSettings) -> UnboundedSender<P2pMessage> 
     tokio::spawn(async move {
         let mut processors: Vec<Box<ProcessorTrait>> = Default::default();
         // Initially, only database processor is spawned
-        processors.push(Box::new(DatabaseProcessor::new(settings.storage.clone())));
+        processors.push(Box::new(DatabaseProcessor::new(settings.storage.clone(), settings.max_message_number)));
         loop {
             if let Some(message) = receiver.recv().await {
                 for processor in processors.iter_mut() {
@@ -46,27 +46,37 @@ pub fn spawn_processor(settings: SystemSettings) -> UnboundedSender<P2pMessage> 
 struct DatabaseProcessor {
     store: MessageStore,
     sender: UnboundedSender<P2pMessage>,
+    max_message_number: u64,
 }
 
 impl DatabaseProcessor {
     /// Create new processor on top of the given message store
-    pub fn new(store: MessageStore) -> Self {
+    pub fn new(store: MessageStore, max_message_number: u64) -> Self {
         let ret = Self {
-            sender: Self::start_database_task(store.clone()),
+            sender: Self::start_database_task(store.clone(), max_message_number),
             store,
+            max_message_number,
         };
 
         ret
     }
 
     /// Start the processing task
-    fn start_database_task(store: MessageStore) -> UnboundedSender<P2pMessage> {
+    fn start_database_task(store: MessageStore, max_message_number: u64) -> UnboundedSender<P2pMessage> {
         let (sender, mut receiver) = unbounded_channel::<P2pMessage>();
         tokio::spawn(async move {
             loop {
                 if let Some(mut msg) = receiver.recv().await {
                     match store.p2p().store_message(&mut msg) {
-                        Ok(id) => trace!(id, "stored new message"),
+                        Ok(id) => {
+                            trace!(id, "stored new message");
+                            if id >= max_message_number {
+                                match store.p2p().delete_message(id - max_message_number) {
+                                    Ok(()) => trace!(id, "removed old message"),
+                                    Err(err) => error!(error = tracing::field::display(&err), "failed to remove message"),
+                                }
+                            }
+                        },
                         Err(err) => error!(error = tracing::field::display(&err), "failed to store message"),
                     }
                 }
@@ -83,7 +93,7 @@ impl Processor for DatabaseProcessor {
             if let Err(err) = self.sender.send(msg) {
                 error!(error = tracing::field::display(&err), "database channel closed abruptly");
                 msg = err.0;
-                self.sender = Self::start_database_task(self.store.clone());
+                self.sender = Self::start_database_task(self.store.clone(), self.max_message_number);
             } else {
                 return;
             }

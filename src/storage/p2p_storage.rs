@@ -123,6 +123,15 @@ impl P2pStore {
         Ok(index)
     }
 
+    /// Deletes the message and corresponding secondary indices.
+    pub fn delete_message(&self, id: u64) -> Result<(), StorageError> {
+        if let Some(value) = self.kv.get(&id)? {
+            self.delete_indexes(id, &value)?;
+            self.kv.delete(&id)?;
+        }
+        Ok(())
+    }
+
     /// Create iterator ending on given index. If no value is provided
     /// start at the end
     pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filters: P2pFilters) -> Result<Vec<P2pMessage>, StorageError> {

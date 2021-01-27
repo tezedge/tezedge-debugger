@@ -44,6 +44,7 @@ async fn main() -> Result<(), failure::Error> {
         rpc_port: 17732,
         node_p2p_port: p2p_port_str.parse().unwrap(),
         node_rpc_port: 8732,
+        max_message_number: var("P2P_MESSAGE_NUMBER_LIMIT").unwrap_or("1000000".to_string()).parse().unwrap(),
     };
 
     // Create syslog server to capture logs from docker / syslogs
