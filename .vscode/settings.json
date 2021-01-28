@@ -28,6 +28,7 @@
         "redbpf",
         "regs",
         "repr",
+        "reqwest",
         "ringbuf",
         "rocksdb",
         "sendmsg",

@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "sniffer"]
+members = [".", "sniffer", "tester"]
 
 [package]
 name = "tezedge_debugger"
