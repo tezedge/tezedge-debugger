@@ -75,8 +75,8 @@ trigger:
   branch: develop
   event: push
 
-depends_on:
-  - build-and-tests
+#depends_on:
+#  - build-and-tests
 
 ---
 
@@ -103,5 +103,5 @@ trigger:
   ref: refs/tags/**
   event: tag
 
-depends_on:
-  - build-and-tests
+#depends_on:
+#  - build-and-tests

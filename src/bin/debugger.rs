@@ -1,19 +1,21 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{process::exit, path::Path, sync::Arc, env::var};
+use std::{process::exit, path::Path, sync::Arc, env::var, fs};
 use tracing::{info, error, Level};
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::{
     system::{SystemSettings, syslog_producer::syslog_producer, BpfSniffer},
     endpoints::routes,
-    storage::{MessageStore, get_ts, cfs},
+    storage::{MessageStore, cfs},
 };
 
 /// Create new message store, from well defined path
 fn open_database() -> Result<MessageStore, failure::Error> {
-    let storage_path = format!("/tmp/volume/{}", get_ts());
-    let path = Path::new(&storage_path);
+    let path = Path::new("/tmp/volume/debugger_db");
+    if path.exists() {
+        fs::remove_dir_all(path).unwrap();
+    }
     let schemas = cfs();
     let rocksdb = Arc::new(open_kv(path, schemas, &DbConfiguration::default())?);
     Ok(MessageStore::new(rocksdb))
