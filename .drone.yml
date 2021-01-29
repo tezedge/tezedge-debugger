@@ -46,6 +46,9 @@ volumes:
     host:
       path: /var/run/docker.sock
 
+image_pull_secrets:
+  - docker_pull_secret
+
 trigger:
   branch:
     - master
@@ -70,6 +73,9 @@ steps:
         from_secret: docker_hub_username
       password:
         from_secret: docker_hub_pswd
+
+image_pull_secrets:
+  - docker_pull_secret
 
 trigger:
   branch: develop
@@ -98,6 +104,9 @@ steps:
         from_secret: docker_hub_username
       password:
         from_secret: docker_hub_pswd
+
+image_pull_secrets:
+  - docker_pull_secret
 
 trigger:
   ref: refs/tags/**
