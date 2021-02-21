@@ -1,13 +1,17 @@
 use std::{net::SocketAddr, mem};
-use futures::future::Either;
 use tokio::sync::mpsc::{self, error::SendError};
+use futures::future::Either;
 
-use super::p2p;
+use super::{
+    parser::{Command, Message},
+    report::ConnectionReport,
+};
 use crate::messages::p2p_message::SourceType;
 
 pub struct Connection {
     state: ConnectionState,
-    tx: mpsc::UnboundedSender<Either<p2p::Message, p2p::Command>>,
+    tx: mpsc::UnboundedSender<Either<Message, Command>>,
+    rx_report: mpsc::Receiver<ConnectionReport>,
     source_type: SourceType,
     // it is possible we receive/send connection message in wrong order
     // do connect and receive the message and then send
@@ -20,25 +24,27 @@ enum ConnectionState {
     Initial,
     Completed,
     CorrectOrder,
-    Unordered(p2p::Message),
+    Unordered(Message),
     Invalid,
 }
 
 impl Connection {
     pub fn new(
-        tx: mpsc::UnboundedSender<Either<p2p::Message, p2p::Command>>,
+        tx: mpsc::UnboundedSender<Either<Message, Command>>,
+        rx_report: mpsc::Receiver<ConnectionReport>,
         source_type: SourceType,
         remote_address: SocketAddr,
     ) -> Self {
         Connection {
             state: ConnectionState::Initial,
             tx,
+            rx_report,
             source_type,
             remote_address,
         }
     }
 
-    pub fn process(&mut self, message: p2p::Message) {
+    pub fn process(&mut self, message: Message) {
         let local_is_initiator = self.source_type.is_local();
         let state = mem::replace(&mut self.state, ConnectionState::Invalid);
         let state = match state {
@@ -86,8 +92,8 @@ impl Connection {
         let _ = mem::replace(&mut self.state, state);
     }
 
-    fn send_message(&mut self, message: p2p::Message) {
-        match self.tx.send(Either::Left(message)) {
+    fn send(&mut self, item: Either<Message, Command>) {
+        match self.tx.send(item) {
             Err(SendError(Either::Left(message))) => {
                 tracing::error!(
                     id = tracing::field::display(&message.event_id),
@@ -95,7 +101,25 @@ impl Connection {
                     msg = "P2P Failed to forward message to the p2p parser",
                 )
             },
-            _ => (),
+            Err(SendError(Either::Right(command))) => {
+                tracing::error!(
+                    command = tracing::field::debug(&command),
+                    msg = "P2P Failed to forward command to the p2p parser",
+                )
+            },
+            Ok(()) => (),
         }
+    }
+
+    fn send_message(&mut self, message: Message) {
+        self.send(Either::Left(message))
+    }
+
+    pub fn send_command(&mut self, command: Command) {
+        self.send(Either::Right(command))
+    }
+
+    pub async fn receive_report(&mut self) -> Option<ConnectionReport> {
+        self.rx_report.recv().await
     }
 }

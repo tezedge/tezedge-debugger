@@ -27,6 +27,7 @@
         "recvfrom",
         "redbpf",
         "regs",
+        "replayer",
         "repr",
         "reqwest",
         "ringbuf",
