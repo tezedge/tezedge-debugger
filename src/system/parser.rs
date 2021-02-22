@@ -47,7 +47,7 @@ impl Parser {
     async fn run(
         self,
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
-        tx_p2p_report: mpsc::Sender<serde_json::Value>,
+        tx_p2p_report: mpsc::Sender<p2p::Report>,
     ) {
         let db = processor::spawn_processor(self.settings.clone());
         let rb = self.module.main_buffer();

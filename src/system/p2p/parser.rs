@@ -36,7 +36,7 @@ pub struct ProcessingConnectionResult {
 
 pub struct Parser {
     identity_cache: Option<Identity>,
-    tx_report: mpsc::Sender<serde_json::Value>,
+    tx_report: mpsc::Sender<Report>,
     connections: HashMap<SocketId, ConnectionState>,
 }
 
@@ -46,7 +46,7 @@ enum ConnectionState {
 }
 
 impl Parser {
-    pub fn new(tx_report: mpsc::Sender<serde_json::Value>) -> Self {
+    pub fn new(tx_report: mpsc::Sender<Report>) -> Self {
         Parser {
             identity_cache: None,
             tx_report,
@@ -62,7 +62,7 @@ impl Parser {
         }
     }
 
-    async fn execute_inner(&mut self, command: Command) -> serde_json::Value {
+    async fn execute_inner(&mut self, command: Command) -> Report {
         for (_, connection_state) in &mut self.connections {
             match connection_state {
                 ConnectionState::Running(connection, _) => connection.send_command(command),
@@ -83,9 +83,7 @@ impl Parser {
             }
         }
 
-        let report = Report::prepare(closed_connections, working_connections);
-
-        serde_json::to_value(report).unwrap()
+        Report::prepare(closed_connections, working_connections)
     }
 
     /// Try to load identity lazy from one of the well defined paths
