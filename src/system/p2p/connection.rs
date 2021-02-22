@@ -2,16 +2,13 @@ use std::{net::SocketAddr, mem};
 use tokio::sync::mpsc::{self, error::SendError};
 use futures::future::Either;
 
-use super::{
-    parser::{Command, Message},
-    report::ConnectionReport,
-};
+use super::parser::{Command, Message};
 use crate::messages::p2p_message::SourceType;
 
-pub struct Connection {
+pub struct Connection<R> {
     state: ConnectionState,
     tx: mpsc::UnboundedSender<Either<Message, Command>>,
-    rx_report: mpsc::Receiver<ConnectionReport>,
+    rx_report: mpsc::Receiver<R>,
     source_type: SourceType,
     // it is possible we receive/send connection message in wrong order
     // do connect and receive the message and then send
@@ -28,10 +25,10 @@ enum ConnectionState {
     Invalid,
 }
 
-impl Connection {
+impl<R> Connection<R> {
     pub fn new(
         tx: mpsc::UnboundedSender<Either<Message, Command>>,
-        rx_report: mpsc::Receiver<ConnectionReport>,
+        rx_report: mpsc::Receiver<R>,
         source_type: SourceType,
         remote_address: SocketAddr,
     ) -> Self {
@@ -119,7 +116,7 @@ impl Connection {
         self.send(Either::Right(command))
     }
 
-    pub async fn receive_report(&mut self) -> Option<ConnectionReport> {
+    pub async fn receive_report(&mut self) -> Option<R> {
         self.rx_report.recv().await
     }
 }

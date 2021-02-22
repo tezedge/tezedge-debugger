@@ -120,11 +120,13 @@ impl Parser {
         while let Some(event) = events.next().await {
             let Message { payload, incoming, counter, event_id } = match event {
                 Either::Left(message) => message,
-                Either::Right(Command) => {
+                Either::Right(Command::GetReport) => {
                     let report = state.statistics.clone();
                     tx_report.send(report).await.unwrap();
                     continue;
-                }
+                },
+                // TODO:
+                Either::Right(Command::GetFinalReport) => continue,
             };
             let packet = Packet {
                 source: if incoming { self.remote_address.clone() } else { fake_local.clone() },

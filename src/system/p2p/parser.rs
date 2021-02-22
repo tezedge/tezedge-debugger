@@ -24,8 +24,11 @@ pub struct Message {
     pub event_id: EventId,
 }
 
-#[derive(Debug)]
-pub struct Command;
+#[derive(Debug, Clone, Copy)]
+pub enum Command {
+    GetReport,
+    GetFinalReport,
+}
 
 pub struct ProcessingConnectionResult {
     pub have_identity: bool,
@@ -33,17 +36,17 @@ pub struct ProcessingConnectionResult {
 
 pub struct Parser {
     identity_cache: Option<Identity>,
-    tx_report: mpsc::Sender<Report>,
+    tx_report: mpsc::Sender<serde_json::Value>,
     connections: HashMap<SocketId, ConnectionState>,
 }
 
 enum ConnectionState {
-    Running(Connection, JoinHandle<ConnectionReport>),
+    Running(Connection<ConnectionReport>, JoinHandle<ConnectionReport>),
     Closed(ConnectionReport),
 }
 
 impl Parser {
-    pub fn new(tx_report: mpsc::Sender<Report>) -> Self {
+    pub fn new(tx_report: mpsc::Sender<serde_json::Value>) -> Self {
         Parser {
             identity_cache: None,
             tx_report,
@@ -52,21 +55,17 @@ impl Parser {
     }
 
     pub async fn execute(&mut self, command: Command) {
-        match command {
-            Command => {
-                let report = self.prepare_report().await;
-                match self.tx_report.send(report).await {
-                    Ok(()) => (),
-                    Err(_) => (),
-                }
-            },
+        let report = self.execute_inner(command).await;
+        match self.tx_report.send(report).await {
+            Ok(()) => (),
+            Err(_) => (),
         }
     }
 
-    async fn prepare_report(&mut self) -> Report {
+    async fn execute_inner(&mut self, command: Command) -> serde_json::Value {
         for (_, connection_state) in &mut self.connections {
             match connection_state {
-                ConnectionState::Running(connection, _) => connection.send_command(Command),
+                ConnectionState::Running(connection, _) => connection.send_command(command),
                 ConnectionState::Closed(_) => (),
             }
         }
@@ -84,7 +83,9 @@ impl Parser {
             }
         }
 
-        Report::prepare(closed_connections, working_connections)
+        let report = Report::prepare(closed_connections, working_connections);
+
+        serde_json::to_value(report).unwrap()
     }
 
     /// Try to load identity lazy from one of the well defined paths

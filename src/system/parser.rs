@@ -40,14 +40,14 @@ impl Parser {
         let (tx_p2p_command, rx_p2p_command) = mpsc::channel(1);
         let (tx_p2p_report, rx_p2p_report) = mpsc::channel(1);
         tokio::spawn(self.run(rx_p2p_command, tx_p2p_report));
-        let reporter = Reporter { tx_p2p_command, rx_p2p_report };
+        let reporter = Reporter::new(tx_p2p_command, rx_p2p_report);
         Arc::new(Mutex::new(reporter))
     }
 
     async fn run(
         self,
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
-        tx_p2p_report: mpsc::Sender<p2p::Report>,
+        tx_p2p_report: mpsc::Sender<serde_json::Value>,
     ) {
         let db = processor::spawn_processor(self.settings.clone());
         let rb = self.module.main_buffer();
