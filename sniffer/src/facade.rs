@@ -6,10 +6,10 @@ use std::{
     mem,
     net::{SocketAddr, IpAddr},
 };
-use redbpf::{load::Loader, Module as RawModule, ringbuf::RingBuffer, ringbuf_sync::RingBufferSync, HashMap, Map};
+use redbpf::{load::Loader, Module, ringbuf::RingBuffer, ringbuf_sync::RingBufferSync, HashMap, Map};
 use super::{SocketId, EventId, DataDescriptor, DataTag, address::Address, bpf_code::CODE};
 
-pub struct Module(RawModule);
+pub struct BpfModule(Module);
 
 impl From<Address> for SocketAddr {
     fn from(a: Address) -> Self {
@@ -132,7 +132,7 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
     }
 }
 
-impl Module {
+impl BpfModule {
     // TODO: handle error
     pub fn load(namespace: &str) -> Self {
         let mut loaded = Loader::load(CODE).expect("Error loading BPF program");
@@ -144,10 +144,10 @@ impl Module {
                 .attach_kprobe_namespace(namespace, &probe.name(), 0)
                 .expect(&format!("Error attaching kprobe program {}", probe.name()));
         }
-        Module(loaded.module)
+        BpfModule(loaded.module)
     }
 
-    pub fn main_buffer_map(&self) -> &Map {
+    fn main_buffer_map(&self) -> &Map {
         self
             .0
             .maps
