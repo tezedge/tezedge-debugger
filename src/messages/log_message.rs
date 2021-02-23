@@ -18,6 +18,8 @@ pub struct LogMessage {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ordinal_id: Option<u64>,
 }
 
 impl LogMessage {
@@ -29,6 +31,7 @@ impl LogMessage {
             section: "".to_string(),
             id: None,
             message: line,
+            ordinal_id: None,
         }
     }
 
@@ -79,6 +82,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                     message: message.to_string(),
                     section: "".to_string(),
                     id: None,
+                    ordinal_id: None,
                 }
             } else {
                 Self {
@@ -87,6 +91,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                     section: "".to_string(),
                     id: None,
                     message: line.to_string(),
+                    ordinal_id: None,
                 }
             }
         } else {
@@ -97,6 +102,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                     message: message.to_string(),
                     section: "".to_string(),
                     id: None,
+                    ordinal_id: None,
                 }
             } else {
                 Self {
@@ -105,6 +111,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                     section: "".to_string(),
                     id: None,
                     message: line.to_string(),
+                    ordinal_id: None,
                 }
             }
         }

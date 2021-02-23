@@ -48,6 +48,7 @@ pub struct P2pMessage {
     pub decrypted_bytes: Vec<u8>,
     pub error: Vec<String>,
     pub message: Vec<TezosPeerMessage>,
+    pub ordinal_id: Option<u64>,
 }
 
 impl Decoder for P2pMessage {
@@ -95,6 +96,7 @@ impl P2pMessage {
             decrypted_bytes,
             error,
             message,
+            ordinal_id: None,
         }
     }
 
