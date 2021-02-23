@@ -31,11 +31,15 @@ impl LogCursor {
     }
 
     /// Parse given log level as an database-understandable value
-    fn get_level(&self) -> Result<Option<LogLevel>, ParseLogLevel> {
+    fn get_level(&self) -> Result<Vec<LogLevel>, ParseLogLevel> {
         if let Some(ref level) = self.level {
-            Ok(Some(level.parse()?))
+            let mut ret = vec![];
+            for l in level.split(',') {
+                ret.push(l.parse()?);
+            }
+            Ok(ret)
         } else {
-            Ok(None)
+            Ok(vec![])
         }
     }
 }
