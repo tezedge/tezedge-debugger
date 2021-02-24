@@ -48,7 +48,7 @@ pub struct P2pMessage {
     pub decrypted_bytes: Vec<u8>,
     pub error: Vec<String>,
     pub message: Vec<TezosPeerMessage>,
-    #[serde(skip)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub ordinal_id: Option<u64>,
 }
 

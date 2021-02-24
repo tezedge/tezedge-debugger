@@ -18,7 +18,7 @@ pub struct LogMessage {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<u64>,
-    #[serde(skip)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub ordinal_id: Option<u64>,
 }
 
