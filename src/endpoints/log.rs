@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::storage::{MessageStore, log_indexes::{LogLevel, ParseLogLevel}, LogFilters};
+use crate::messages::log_message::LogMessage;
 use failure::Error;
 use warp::{
     Filter, Reply, Rejection,
@@ -64,7 +65,10 @@ pub fn log(storage: MessageStore) -> impl Filter<Extract=impl Reply, Error=Rejec
             let cursor_id = cursor.cursor_id.clone();
             match cursor.try_into() {
                 Ok(filters) => match storage.log().get_cursor(cursor_id, limit, filters) {
-                    Ok(msgs) => with_status(json(&msgs), StatusCode::OK),
+                    Ok(msgs) => {
+                        let msgs = LogMessage::enumerate(msgs);
+                        with_status(json(&msgs), StatusCode::OK)
+                    },
                     Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
                 },
                 Err(level_error) => with_status(json(&format!("invalid type-name: {}", level_error)), StatusCode::BAD_REQUEST),

@@ -18,7 +18,20 @@ pub struct LogMessage {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Received logs saved in the database
+pub struct LogMessageWithId {
+    pub level: String,
+    #[serde(alias = "timestamp", alias = "time", rename(serialize = "timestamp"))]
+    pub date: u128,
+    #[serde(alias = "module")]
+    pub section: String,
+    #[serde(alias = "msg", rename(serialize = "message"))]
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<u64>,
     pub ordinal_id: Option<u64>,
 }
 
@@ -31,8 +44,21 @@ impl LogMessage {
             section: "".to_string(),
             id: None,
             message: line,
-            ordinal_id: None,
         }
+    }
+
+    pub fn enumerate(v: Vec<Self>) -> Vec<LogMessageWithId> {
+        v.into_iter()
+            .enumerate()
+            .map(|(ordinal, x)| LogMessageWithId {
+                level: x.level,
+                date: x.date,
+                section: x.section,
+                message: x.message,
+                id: x.id,
+                ordinal_id: Some(ordinal as u64),
+            })
+            .collect()
     }
 
     /// Parse rust formatted log
@@ -82,7 +108,6 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                     message: message.to_string(),
                     section: "".to_string(),
                     id: None,
-                    ordinal_id: None,
                 }
             } else {
                 Self {
@@ -91,7 +116,6 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                     section: "".to_string(),
                     id: None,
                     message: line.to_string(),
-                    ordinal_id: None,
                 }
             }
         } else {
@@ -102,7 +126,6 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                     message: message.to_string(),
                     section: "".to_string(),
                     id: None,
-                    ordinal_id: None,
                 }
             } else {
                 Self {
@@ -111,7 +134,6 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                     section: "".to_string(),
                     id: None,
                     message: line.to_string(),
-                    ordinal_id: None,
                 }
             }
         }
