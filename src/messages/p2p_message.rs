@@ -25,6 +25,15 @@ pub enum SourceType {
     Remote,
 }
 
+impl SourceType {
+    pub fn is_local(&self) -> bool {
+        match self {
+            &SourceType::Local => true,
+            &SourceType::Remote => false,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 /// P2PMessage as stored in the database
 pub struct P2pMessage {

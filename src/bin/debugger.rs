@@ -5,7 +5,7 @@ use std::{process::exit, path::Path, sync::Arc, env::var, fs};
 use tracing::{info, error, Level};
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::{
-    system::{SystemSettings, syslog_producer::syslog_producer, BpfSniffer},
+    system::{SystemSettings, syslog_producer::syslog_producer, Parser},
     endpoints::routes,
     storage::{MessageStore, cfs},
 };
@@ -56,10 +56,10 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     // Create and spawn bpf sniffing system
-    let sniffer = BpfSniffer::spawn(&settings);
+    let reporter = Parser::new(&settings).spawn();
 
     // Spawn warp RPC server
-    tokio::spawn(warp::serve(routes(storage, sniffer)).run(([0, 0, 0, 0], settings.rpc_port)));
+    tokio::spawn(warp::serve(routes(storage, reporter)).run(([0, 0, 0, 0], settings.rpc_port)));
 
     // Wait for SIGTERM signal
     if let Err(err) = tokio::signal::ctrl_c().await {
