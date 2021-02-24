@@ -124,6 +124,9 @@ impl LogStore {
             }
             ret.extend(self.load_indexes(sorted_intersect(iters, limit).into_iter()));
         }
+        for (ordinal, message) in ret.iter_mut().enumerate() {
+            message.ordinal_id = Some(ordinal as u64);
+        }
         Ok(ret)
     }
 
