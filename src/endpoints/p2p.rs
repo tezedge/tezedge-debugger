@@ -6,7 +6,7 @@ use crate::{
         {MessageStore, P2pFilters},
         p2p_indexes::{ParseTypeError, Type},
     },
-    system::Reporter,
+    system::{BpfSniffer, BpfSnifferCommand},
 };
 use warp::{
     Filter, Rejection,
@@ -15,11 +15,8 @@ use warp::{
 };
 use serde::{Serialize, Deserialize};
 use warp::reply::{WithStatus, Json};
-use std::{
-    net::SocketAddr,
-    convert::TryInto,
-    sync::{Arc, Mutex},
-};
+use std::net::SocketAddr;
+use std::convert::TryInto;
 use itertools::Itertools;
 use crate::messages::p2p_message::SourceType;
 
@@ -90,11 +87,21 @@ pub fn p2p(storage: MessageStore) -> impl Filter<Extract=(WithStatus<Json>, ), E
 }
 
 /// Basic handler for p2p message endpoint with cursor
-pub fn p2p_report(reporter: Arc<Mutex<Reporter>>) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
+pub fn p2p_report(sniffer: BpfSniffer) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "p2p_summary")
         .and(warp::query::query())
         .map(move |()| -> WithStatus<Json> {
-            let report = tokio::task::block_in_place(|| futures::executor::block_on(reporter.lock().unwrap().get_p2p_report()));
+            sniffer.send(BpfSnifferCommand::GetDebugData { filename: None, report: true });
+            let report = tokio::task::block_in_place(|| futures::executor::block_on(async {
+                // TODO: fix
+                loop {
+                    if let Some(r) = BpfSniffer::recv() {
+                        break r;
+                    } else {
+                        tokio::time::delay_for(std::time::Duration::from_millis(50)).await;
+                    }
+                }
+            }));
 
             with_status(json(&report), StatusCode::OK)
         })

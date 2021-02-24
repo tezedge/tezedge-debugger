@@ -6,16 +6,9 @@ pub mod syslog_producer;
 //pub mod replayer;
 
 // new socket capturing system
-mod parser;
-mod reporter;
+mod bpf_sniffer;
 mod p2p;
-
-pub use self::{
-    parser::Parser,
-    reporter::Reporter,
-    p2p::Report as P2pReport,
-};
-
+pub use self::bpf_sniffer::{BpfSniffer, BpfSnifferCommand, BpfSnifferResponse, BpfSnifferReport};
 mod processor;
 
 mod system_settings {

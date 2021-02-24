@@ -25,15 +25,6 @@ pub enum SourceType {
     Remote,
 }
 
-impl SourceType {
-    pub fn is_local(&self) -> bool {
-        match self {
-            &SourceType::Local => true,
-            &SourceType::Remote => false,
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 /// P2PMessage as stored in the database
 pub struct P2pMessage {
@@ -48,7 +39,6 @@ pub struct P2pMessage {
     pub decrypted_bytes: Vec<u8>,
     pub error: Vec<String>,
     pub message: Vec<TezosPeerMessage>,
-    pub ordinal_id: Option<u64>,
 }
 
 impl Decoder for P2pMessage {
@@ -96,7 +86,6 @@ impl P2pMessage {
             decrypted_bytes,
             error,
             message,
-            ordinal_id: None,
         }
     }
 
