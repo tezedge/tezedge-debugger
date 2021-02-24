@@ -11,6 +11,7 @@ use storage::{StorageError, IteratorMode, Direction};
 use crate::storage::log_storage::secondary_indexes::{LevelIndex, LogLevel, TimestampIndex};
 use crate::storage::secondary_index::SecondaryIndex;
 use crate::storage::sorted_intersect::sorted_intersect;
+use itertools::Itertools;
 
 /// Defined Key Value store for Log storage
 pub type LogStorageKV = dyn KeyValueStoreWithSchema<LogStore> + Sync + Send;
@@ -18,14 +19,14 @@ pub type LogStorageKV = dyn KeyValueStoreWithSchema<LogStore> + Sync + Send;
 #[derive(Debug, Default, Clone)]
 /// Allowed filters for log message store
 pub struct LogFilters {
-    pub level: Option<LogLevel>,
+    pub level: Vec<LogLevel>,
     pub date: Option<u128>,
 }
 
 impl LogFilters {
     /// Check, if there are no set filters
     pub fn empty(&self) -> bool {
-        self.level.is_none() && self.date.is_none()
+        self.level.is_empty() && self.date.is_none()
     }
 }
 
@@ -115,8 +116,8 @@ impl LogStore {
             ret.extend(self.cursor_iterator(cursor_index)?.map(|(_, v)| v).take(limit));
         } else {
             let mut iters: Vec<Box<dyn Iterator<Item=u64>>> = Default::default();
-            if let Some(level) = filters.level {
-                iters.push(self.level_iterator(cursor_index, level)?);
+            if !filters.level.is_empty() {
+                iters.push(self.level_iterator(cursor_index, filters.level)?);
             }
             if let Some(timestamp) = filters.date {
                 iters.push(self.timestamp_iterator(cursor_index, timestamp)?);
@@ -136,11 +137,15 @@ impl LogStore {
     }
 
     /// Create iterator with at maximum given index, having specified log level
-    pub fn level_iterator<'a>(&'a self, cursor_index: Option<u64>, level: LogLevel) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
-        Ok(Box::new(self.level_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), level)?
-            .filter_map(|(_, value)| {
-                value.ok()
-            })))
+    pub fn level_iterator<'a>(&'a self, cursor_index: Option<u64>, level: Vec<LogLevel>) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        let mut iterators = Vec::with_capacity(level.len());
+        for level in level {
+            iterators.push(self.level_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), level)?
+                .filter_map(|(_, value)| {
+                    value.ok()
+                }));
+        }
+        Ok(Box::new(iterators.into_iter().kmerge_by(|x, y| x > y)))
     }
 
     /// Create iterator with at maximum given index, having specified log level
