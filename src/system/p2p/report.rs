@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Serialize, Deserialize};
+use super::compare::PeerMetadata;
 use crate::messages::p2p_message::SourceType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +41,7 @@ pub struct ConnectionReport {
     pub total_chunks: u64,
     pub decrypted_chunks: u64,
     pub error_report: Option<ParserErrorReport>,
+    pub metadata: Option<PeerMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

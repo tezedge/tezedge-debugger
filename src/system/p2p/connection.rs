@@ -1,14 +1,17 @@
 use std::{net::SocketAddr, mem};
-use tokio::sync::mpsc::{self, error::SendError};
+use tokio::{
+    sync::mpsc::{self, error::SendError},
+    task::{JoinHandle, JoinError},
+};
 use futures::future::Either;
 
-use super::parser::{Command, Message};
+use super::{connection_parser::Parser, parser::{Command, Message}, report::ConnectionReport};
 use crate::messages::p2p_message::SourceType;
 
-pub struct Connection<R> {
+pub struct Connection {
     state: ConnectionState,
     tx: mpsc::UnboundedSender<Either<Message, Command>>,
-    rx_report: mpsc::Receiver<R>,
+    handle: JoinHandle<ConnectionReport>,
     source_type: SourceType,
     // it is possible we receive/send connection message in wrong order
     // do connect and receive the message and then send
@@ -25,17 +28,19 @@ enum ConnectionState {
     Invalid,
 }
 
-impl<R> Connection<R> {
-    pub fn new(
-        tx: mpsc::UnboundedSender<Either<Message, Command>>,
-        rx_report: mpsc::Receiver<R>,
-        source_type: SourceType,
-        remote_address: SocketAddr,
+impl Connection {
+    pub fn spawn(
+        tx_report: mpsc::Sender<ConnectionReport>,
+        parser: Parser,
     ) -> Self {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let source_type = parser.source_type.clone();
+        let remote_address = parser.remote_address.clone();
+        let handle = tokio::spawn(parser.run(rx, tx_report));
         Connection {
             state: ConnectionState::Initial,
             tx,
-            rx_report,
+            handle,
             source_type,
             remote_address,
         }
@@ -116,7 +121,8 @@ impl<R> Connection<R> {
         self.send(Either::Right(command))
     }
 
-    pub async fn receive_report(&mut self) -> Option<R> {
-        self.rx_report.recv().await
+    pub async fn join(mut self) -> Result<ConnectionReport, JoinError> {
+        self.send_command(Command::Terminate);
+        self.handle.await
     }
 }

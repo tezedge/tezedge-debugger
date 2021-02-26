@@ -92,7 +92,7 @@ impl Parser {
                     address = tracing::field::display(&address),
                     msg = "Syscall Connect",
                 );
-                self.process_connect(parser, id, address, &db, None);
+                self.process_connect(parser, id, address, &db, None).await;
             },
             Ok(SnifferEvent::Accept { id, listen_on_fd, address }) => {
                 tracing::info!(
@@ -101,7 +101,7 @@ impl Parser {
                     address = tracing::field::display(&address),
                     msg = "Syscall Accept",
                 );
-                self.process_connect(parser, id, address, &db, Some(listen_on_fd))
+                self.process_connect(parser, id, address, &db, Some(listen_on_fd)).await;
             },
             Ok(SnifferEvent::Close { id }) => {
                 tracing::info!(
@@ -147,7 +147,7 @@ impl Parser {
         return false;
     }
 
-    fn process_connect(
+    async fn process_connect(
         &mut self,
         parser: &mut p2p::Parser,
         id: EventId,
@@ -170,7 +170,7 @@ impl Parser {
             tracing::info!(id = tracing::field::display(&id), msg = "ignore");
             self.module.ignore(socket_id);
         } else {
-            let r = parser.process_connect(&self.settings, id, address, db, source_type);
+            let r = parser.process_connect(&self.settings, id, address, db, source_type).await;
             if !r.have_identity {
                 tracing::warn!("ignore connection because no identity");
                 self.module.ignore(socket_id);

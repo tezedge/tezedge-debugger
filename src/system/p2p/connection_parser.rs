@@ -51,7 +51,6 @@ struct State {
     chunk_outgoing_counter: usize,
     buffer: Vec<u8>,
     statistics: ConnectionReport,
-    // TODO: send this info with the report
     metadata: PeerMetadata,
 }
 
@@ -108,6 +107,7 @@ impl Parser {
                 total_chunks: 0,
                 decrypted_chunks: 0,
                 error_report: None,
+                metadata: None,
             },
             metadata: PeerMetadata::default(),
         };
@@ -126,7 +126,7 @@ impl Parser {
                     continue;
                 },
                 // TODO:
-                Either::Right(Command::GetFinalReport) => continue,
+                Either::Right(Command::Terminate) => break,
             };
             let packet = Packet {
                 source: if incoming { self.remote_address.clone() } else { fake_local.clone() },
@@ -250,7 +250,10 @@ impl Parser {
             }
         }
 
-        Ok(state.statistics)
+        let metadata = state.metadata;
+        let mut statistics = state.statistics;
+        statistics.metadata = Some(metadata);
+        Ok(statistics)
     }
 
     fn error_context(&self, state: &State, is_incoming: bool, event_id: &EventId) -> DisplayValue<ErrorContext> {
