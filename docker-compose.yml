@@ -8,6 +8,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     privileged: true
+    init: true
     environment:
       - RUST_BACKTRACE=1
       - P2P_PORT=9732
@@ -25,6 +26,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     privileged: true
+    init: true
     environment:
       - RUST_BACKTRACE=1
       - P2P_PORT=9733
@@ -38,9 +40,8 @@ services:
 
   rust-node:
     image: simplestakingcom/tezedge:latest
-    command: "/light-node --config-file /tezedge.config --network delphi"
-    depends_on:
-      - rust-debugger
+    command: ["--network", "delphi", "--actions-store-backend", "rocksdb", "file"]
+    init: true
     logging:
       # Produce syslogs instead of terminal logs
       driver: "syslog"
@@ -80,8 +81,7 @@ services:
     image: simplestakingcom/tezedge-explorer:latest
     environment:
       - SANDBOX=https://carthage.tezedge.com:3030
-      #- API=[{"id":"rust.master","name":"rust.master.dev.tezedge","http":"http://master.dev.tezedge.com:18732","debugger":"http://master.dev.tezedge.com:17732","ws":"ws://master.dev.tezedge.com:4927"},{"id":"ocaml.master","name":"ocaml.master.dev.tezedge","http":"http://master.dev.tezedge.com:18733","debugger":"http://master.dev.tezedge.com:17733","ws":false}]
-      - API=[{"id":"rust","name":"rust.157.90.4.51","http":"http://157.90.4.51:18732","debugger":"http://157.90.4.51:17732","ws":"ws://157.90.4.51:4927"},{"id":"ocaml","name":"ocaml.157.90.4.51","http":"http://157.90.4.51:18733","debugger":"http://157.90.4.51:17733","ws":false}]
+      - API=[{"id":"rust","name":"rust","http":"http://localhost:18732","debugger":"http://localhost:17732","ws":"ws://localhost:4927"},{"id":"ocaml","name":"ocaml","http":"http://localhost:18733","debugger":"http://localhost:17733","ws":false}]
     depends_on:
       - rust-node
       - ocaml-node
