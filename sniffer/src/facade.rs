@@ -83,7 +83,7 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
             .map_err(|()| SnifferError::SliceTooShort(value.len()))?;
         let data = &value[mem::size_of::<DataDescriptor>()..];
         match descriptor.tag {
-            DataTag::Write | DataTag::SendTo | DataTag::SendMsg => {
+            DataTag::Write | DataTag::SendTo => {
                 SnifferError::write(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
                     SnifferEvent::Write {
                         id,

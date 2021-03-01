@@ -3,7 +3,7 @@
 
 use core::{mem, ptr};
 use redbpf_probes::{maps::{HashMap, RingBuffer}, helpers, registers::Registers};
-use super::{data_descriptor::{SocketId, EventId, DataTag}, send};
+use super::{data_descriptor::{EventId, DataTag}, send};
 
 #[derive(Clone)]
 pub struct SyscallContextKey {
@@ -27,10 +27,6 @@ pub enum SyscallContext {
     SendTo {
         fd: u32,
         data_ptr: usize,
-    },
-    SendMsg {
-        fd: u32,
-        message: &'static [u8],
     },
 
     Read {
@@ -60,17 +56,6 @@ pub enum SyscallContext {
     },
 }
 
-#[inline(always)]
-fn e_unknown_fd(id: u64) -> EventId {
-    let ts = helpers::bpf_ktime_get_ns();
-    let socket_id = SocketId {
-        pid: (id >> 32) as u32,
-        fd: 0,
-    };
-    // same timestamp because event is instant
-    EventId::new(socket_id, ts, ts)
-}
-
 impl SyscallContext {
     #[inline(always)]
     pub fn push(self, regs: &Registers, map: &mut HashMap<SyscallContextKey, SyscallContextFull>, rb: &mut RingBuffer) {
@@ -80,7 +65,7 @@ impl SyscallContext {
             pid: (id & 0xffffffff) as u32,
         };
         if map.get(&key).is_some() {
-            send::sized::<typenum::U8, typenum::B1>(e_unknown_fd(id), DataTag::Debug, 0xdeadbeef_u64.to_be_bytes().as_ref(), rb);
+            send::sized::<typenum::U8, typenum::B1>(EventId::unknown_fd(), DataTag::Debug, 0xdeadbeef_u64.to_be_bytes().as_ref(), rb);
             map.delete(&key);
         } else {
             let mut s = SyscallContextFull {

@@ -39,6 +39,7 @@
         "tgid",
         "typenum",
         "unactivated",
-        "userspace"
+        "userspace",
+        "UNSPEC"
     ]
 }

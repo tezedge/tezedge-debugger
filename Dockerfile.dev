@@ -3,6 +3,6 @@
 # or 
 # ./san.sh none|memory|address|leak|thread
 # before build
-FROM ubuntu:20.04
+FROM ubuntu:20.10
 WORKDIR /home/appuser/
 COPY bin ./
