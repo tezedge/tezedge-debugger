@@ -37,6 +37,7 @@ impl SourceType {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 /// P2PMessage as stored in the database
 pub struct P2pMessage {
+    pub node_name: String,
     pub id: Option<u64>,
     pub timestamp: u128,
     pub remote_addr: SocketAddr,
@@ -74,6 +75,7 @@ impl P2pMessage {
 
     /// Make new P2pMessage from parts
     pub fn new(
+        node_name: String,
         remote_addr: SocketAddr,
         incoming: bool,
         source_type: SourceType,
@@ -88,6 +90,7 @@ impl P2pMessage {
             Err(e) => error.push(e),
         };
         P2pMessage {
+            node_name,
             id: None,
             timestamp: Self::make_ts(),
             source_type,

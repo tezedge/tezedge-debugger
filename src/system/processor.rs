@@ -6,7 +6,7 @@ use tokio::sync::mpsc::{
     UnboundedSender, unbounded_channel,
 };
 use async_trait::async_trait;
-use crate::system::SystemSettings;
+use crate::system::DebuggerConfig;
 use crate::messages::p2p_message::P2pMessage;
 use crate::storage::MessageStore;
 
@@ -20,13 +20,13 @@ pub trait Processor {
 }
 
 /// Spawn new primary processor, returning channel to send the messages
-pub fn spawn_processor(settings: SystemSettings) -> UnboundedSender<P2pMessage> {
+pub fn spawn_processor(storage: MessageStore, config: DebuggerConfig) -> UnboundedSender<P2pMessage> {
     let (sender, mut receiver) = unbounded_channel::<P2pMessage>();
 
     tokio::spawn(async move {
         let mut processors: Vec<Box<ProcessorTrait>> = Default::default();
         // Initially, only database processor is spawned
-        processors.push(Box::new(DatabaseProcessor::new(settings.storage.clone(), settings.max_message_number)));
+        processors.push(Box::new(DatabaseProcessor::new(storage, config.p2p_message_limit)));
         loop {
             if let Some(message) = receiver.recv().await {
                 for processor in processors.iter_mut() {

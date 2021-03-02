@@ -18,19 +18,24 @@ pub use self::{
 
 mod processor;
 
-mod system_settings {
-    use crate::storage::MessageStore;
+mod settings {
+    use serde::Deserialize;
 
-    #[derive(Clone)]
-    /// System settings describing the running system
-    pub struct SystemSettings {
-        pub storage: MessageStore,
-        pub namespace: String,
+    #[derive(Clone, Deserialize)]
+    pub struct NodeConfig {
+        pub name: String,
+        pub identity_path: String,
         pub syslog_port: u16,
+        pub p2p_port: u16,
+    }
+
+    #[derive(Clone, Deserialize)]
+    pub struct DebuggerConfig {
+        pub db_path: String,
         pub rpc_port: u16,
-        pub node_p2p_port: u16,
-        pub node_rpc_port: u16,
-        pub max_message_number: u64,
+        pub p2p_message_limit: u64,
+        pub log_message_limit: u64,
+        pub nodes: Vec<NodeConfig>,
     }
 }
-pub use self::system_settings::SystemSettings;
+pub use self::settings::{NodeConfig, DebuggerConfig};

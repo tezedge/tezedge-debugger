@@ -134,14 +134,14 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
 
 impl BpfModule {
     // TODO: handle error
-    pub fn load(namespace: &str) -> Self {
+    pub fn load() -> Self {
         let mut loaded = Loader::load(CODE).expect("Error loading BPF program");
         for probe in loaded.kprobes_mut() {
             // try to detach the kprobe, if previous run of the sniffer did not cleanup
             let _ = probe
-                .detach_kprobe_namespace(namespace, &probe.name());
+                .detach_kprobe_namespace("default", &probe.name());
             probe
-                .attach_kprobe_namespace(namespace, &probe.name(), 0)
+                .attach_kprobe_namespace("default", &probe.name(), 0)
                 .expect(&format!("Error attaching kprobe program {}", probe.name()));
         }
         BpfModule(loaded.module)
