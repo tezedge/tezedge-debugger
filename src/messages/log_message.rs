@@ -24,6 +24,7 @@ pub struct LogMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// Received logs saved in the database
 pub struct LogMessageWithId {
+    pub name: String,
     pub level: String,
     #[serde(alias = "timestamp", alias = "time", rename(serialize = "timestamp"))]
     pub date: u128,
@@ -53,6 +54,7 @@ impl LogMessage {
         v.into_iter()
             .enumerate()
             .map(|(ordinal, x)| LogMessageWithId {
+                name: x.name,
                 level: x.level,
                 date: x.date,
                 section: x.section,
