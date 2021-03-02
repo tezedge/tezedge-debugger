@@ -1,24 +1,31 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{process::exit, path::Path, sync::Arc, env::var, fs};
+use std::{fs, io::Read, path::Path, process::exit, sync::Arc};
 use tracing::{info, error, Level};
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::{
-    system::{SystemSettings, syslog_producer::syslog_producer, Parser},
+    system::{DebuggerConfig, syslog_producer::syslog_producer, Parser},
     endpoints::routes,
     storage::{MessageStore, cfs},
 };
 
 /// Create new message store, from well defined path
-fn open_database() -> Result<MessageStore, failure::Error> {
-    let path = Path::new("/tmp/volume/debugger_db");
+fn open_database(db_path: &String) -> Result<MessageStore, failure::Error> {
+    let path = Path::new(db_path);
     if path.exists() {
         fs::remove_dir_all(path).unwrap();
     }
     let schemas = cfs();
     let rocksdb = Arc::new(open_kv(path, schemas, &DbConfiguration::default())?);
     Ok(MessageStore::new(rocksdb))
+}
+
+fn load_config() -> Result<DebuggerConfig, failure::Error> {
+    let mut settings_file = fs::File::open("debugger_config.toml")?;
+    let mut settings_toml = String::new();
+    settings_file.read_to_string(&mut settings_toml)?;
+    toml::from_str(&settings_toml).map_err(|e| failure::Error::from_boxed_compat(Box::new(e)))
 }
 
 #[tokio::main]
@@ -28,8 +35,17 @@ async fn main() -> Result<(), failure::Error> {
         .with_max_level(Level::INFO)
         .init();
 
+    // Load system config to drive the rest of the system
+    let config = match load_config() {
+        Ok(config) => config,
+        Err(err) => {
+            error!(error = tracing::field::display(&err), "failed to load config");
+            exit(1);
+        }
+    };
+
     // Initialize storage for messages
-    let storage = match open_database() {
+    let storage = match open_database(&config.db_path) {
         Ok(storage) => storage,
         Err(err) => {
             error!(error = tracing::field::display(&err), "failed to open database");
@@ -37,29 +53,19 @@ async fn main() -> Result<(), failure::Error> {
         }
     };
 
-    // Create system setting to drive the rest of the system
-    let p2p_port_str = var("P2P_PORT").unwrap();
-    let settings = SystemSettings {
-        storage: storage.clone(),
-        namespace: format!("n{}", p2p_port_str),
-        syslog_port: 13131,
-        rpc_port: 17732,
-        node_p2p_port: p2p_port_str.parse().unwrap(),
-        node_rpc_port: 8732,
-        max_message_number: var("P2P_MESSAGE_NUMBER_LIMIT").unwrap_or("1000000".to_string()).parse().unwrap(),
-    };
-
-    // Create syslog server to capture logs from docker / syslogs
-    if let Err(err) = syslog_producer(settings.clone()).await {
-        error!(error = tracing::field::display(&err), "failed to build syslog server");
-        exit(1);
+    // Create syslog server for each node to capture logs from docker / syslogs
+    for node_config in &config.nodes {
+        if let Err(err) = syslog_producer(&storage, node_config).await {
+            error!(error = tracing::field::display(&err), "failed to build syslog server");
+            exit(1);
+        }
     }
 
     // Create and spawn bpf sniffing system
-    let reporter = Parser::new(&settings).spawn();
+    let reporter = Parser::new(&storage, &config).spawn();
 
     // Spawn warp RPC server
-    tokio::spawn(warp::serve(routes(storage, reporter)).run(([0, 0, 0, 0], settings.rpc_port)));
+    tokio::spawn(warp::serve(routes(storage, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
 
     // Wait for SIGTERM signal
     if let Err(err) = tokio::signal::ctrl_c().await {

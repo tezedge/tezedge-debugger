@@ -9,7 +9,7 @@ use sniffer::{EventId, SocketId};
 
 use crate::{
     messages::p2p_message::{SourceType, P2pMessage},
-    system::SystemSettings,
+    system::NodeConfig,
 };
 use super::{
     connection::Connection,
@@ -87,50 +87,41 @@ impl Parser {
     }
 
     /// Try to load identity lazy from one of the well defined paths
-    fn load_identity() -> Result<Identity, ()> {
-        let identity_paths = [
-            "/tmp/volume/identity.json".to_string(),
-            "/tmp/volume/data/identity.json".to_string(),
-            format!("{}/.tezos-node/identity.json", std::env::var("HOME").unwrap()),
-        ];
-
-        for path in &identity_paths {
-            if !Path::new(path).is_file() {
-                continue;
-            }
-            match Identity::from_path(path.clone()) {
-                Ok(identity) => {
-                    tracing::info!(file_path = tracing::field::display(&path), "loaded identity");
-                    return Ok(identity);
-                },
-                Err(err) => {
-                    tracing::warn!(error = tracing::field::display(&err), "identity file does not contains valid identity");
-                },
-            }
+    fn load_identity(path: &str) -> Result<Identity, ()> {
+        if !Path::new(path).is_file() {
+            return Err(());
         }
-
-        Err(())
+        match Identity::from_path(path.to_string()) {
+            Ok(identity) => {
+                tracing::info!(file_path = tracing::field::display(&path), "loaded identity");
+                return Ok(identity);
+            },
+            Err(err) => {
+                tracing::warn!(error = tracing::field::display(&err), "identity file does not contains valid identity");
+                Err(())
+            },
+        }
     }
 
-    fn try_load_identity(&mut self) -> Option<Identity> {
+    fn try_load_identity(&mut self, path: &str) -> Option<Identity> {
         if self.identity_cache.is_none() {
-            self.identity_cache = Self::load_identity().ok();
+            self.identity_cache = Self::load_identity(path).ok();
         }
         self.identity_cache.clone()
     }
 
     pub async fn process_connect(
         &mut self,
-        settings: &SystemSettings,
+        config: &NodeConfig,
         id: EventId,
         remote_address: SocketAddr,
         db: &mpsc::UnboundedSender<P2pMessage>,
         source_type: SourceType,
     ) -> ProcessingConnectionResult {
-        let have_identity = if let Some(identity) = self.try_load_identity() {
+        let have_identity = if let Some(identity) = self.try_load_identity(&config.identity_path) {
             let parser = connection_parser::Parser {
                 identity,
-                settings: settings.clone(),
+                config: config.clone(),
                 source_type,
                 remote_address,
                 id: id.socket_id.clone(),

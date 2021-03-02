@@ -26,7 +26,7 @@ use super::{
 };
 
 use crate::{
-    system::SystemSettings,
+    system::NodeConfig,
     messages::p2p_message::{
         P2pMessage,
         SourceType,
@@ -38,7 +38,7 @@ use crate::{
 
 pub struct Parser {
     pub identity: Identity,
-    pub settings: SystemSettings,
+    pub config: NodeConfig,
     pub source_type: SourceType,
     pub remote_address: SocketAddr,
     pub id: SocketId,
@@ -168,6 +168,7 @@ impl Parser {
                         .map(TezosPeerMessage::HandshakeMessage)
                         .map_err(|error| error.to_string());
                     let p2p_msg = P2pMessage::new(
+                        self.config.name.clone(),
                         self.remote_address.clone(),
                         incoming,
                         self.source_type,
@@ -188,6 +189,7 @@ impl Parser {
                         let ec = self.error_context(&state, incoming, &event_id);
                         let message = state.process(decrypted.data(), ec, incoming);
                         let p2p_msg = P2pMessage::new(
+                            self.config.name.clone(),
                             self.remote_address.clone(),
                             incoming,
                             self.source_type,
@@ -207,6 +209,7 @@ impl Parser {
                             tracing::error!(context = context, msg = "cannot decrypt");
                         }
                         let p2p_msg = P2pMessage::new(
+                            self.config.name.clone(),
                             self.remote_address.clone(),
                             incoming,
                             self.source_type,

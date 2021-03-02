@@ -2802,6 +2802,7 @@ dependencies = [
  "tezos_encoding 0.9.1",
  "tezos_messages 0.9.1",
  "tokio 0.2.24",
+ "toml",
  "tracing",
  "tracing-subscriber",
  "url",

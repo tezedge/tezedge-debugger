@@ -22,28 +22,11 @@ pub struct EventId {
 
 impl EventId {
     #[cfg(feature = "probes")]
-    fn new(socket_id: SocketId, _ts_start: u64, ts_finish: u64) -> Self {
+    pub fn new(socket_id: SocketId, _ts_start: u64, ts_finish: u64) -> Self {
         EventId {
             socket_id: socket_id,
             ts: ts_finish,
         }
-    }
-
-    #[cfg(feature = "probes")]
-    pub fn unknown_fd() -> Self {
-        let ts = helpers::bpf_ktime_get_ns();
-        let id = helpers::bpf_get_current_pid_tgid();
-        let socket_id = SocketId {
-            pid: (id >> 32) as u32,
-            fd: 0,
-        };
-        // same timestamp because event is instant
-        Self::new(socket_id, ts, ts)
-    }
-
-    #[cfg(feature = "probes")]
-    pub fn now(fd: u32, ts0: u64) -> EventId {
-        Self::new(SocketId::this(fd), ts0, helpers::bpf_ktime_get_ns())
     }
 
     pub fn ts_start(&self) -> u64 {
@@ -65,18 +48,6 @@ impl fmt::Display for EventId {
 pub struct SocketId {
     pub pid: u32,
     pub fd: u32,
-}
-
-impl SocketId {
-    #[cfg(feature = "probes")]
-    pub fn this(fd: u32) -> SocketId {
-        let id = helpers::bpf_get_current_pid_tgid();
-
-        SocketId {
-            pid: (id >> 32) as u32,
-            fd: fd,
-        }
-    }
 }
 
 impl fmt::Display for SocketId {
@@ -113,10 +84,8 @@ impl TryFrom<&[u8]> for DataDescriptor {
 #[derive(Debug)]
 pub enum DataTag {
     Write,
-    SendTo,
 
     Read,
-    RecvFrom,
 
     Connect,
     Bind,
@@ -132,12 +101,8 @@ impl DataTag {
     fn try_from_u32(v: u32) -> Option<Self> {
         if v == Self::Write as u32 {
             Some(Self::Write)
-        } else if v == Self::SendTo as u32 {
-            Some(Self::SendTo)
         } else if v == Self::Read as u32 {
             Some(Self::Read)
-        } else if v == Self::RecvFrom as u32 {
-            Some(Self::RecvFrom)
         } else if v == Self::Connect as u32 {
             Some(Self::Connect)
         } else if v == Self::Bind as u32 {

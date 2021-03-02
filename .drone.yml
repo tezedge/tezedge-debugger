@@ -67,8 +67,6 @@ steps:
       repo: simplestakingcom/tezedge-debugger
       tag: latest
       dockerfile: Dockerfile
-      build_args:
-        - branch=develop
       username:
         from_secret: docker_hub_username
       password:
@@ -98,8 +96,6 @@ steps:
         - ${DRONE_TAG}
         - latest-release
       dockerfile: Dockerfile
-      build_args:
-        - branch=master
       username:
         from_secret: docker_hub_username
       password:

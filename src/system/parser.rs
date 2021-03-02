@@ -1,19 +1,19 @@
-use std::{
-    convert::TryFrom,
-    net::{SocketAddr, IpAddr},
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, convert::TryFrom, net::{SocketAddr, IpAddr}, sync::{Arc, Mutex}};
 use tokio::{stream::StreamExt, sync::mpsc};
 use sniffer::{BpfModule, SnifferEvent, RingBufferData, EventId};
 
-use super::{p2p, reporter::Reporter, processor, SystemSettings};
-use crate::{messages::p2p_message::{P2pMessage, SourceType}};
+use super::{p2p, reporter::Reporter, processor, DebuggerConfig, NodeConfig};
+use crate::{
+    messages::p2p_message::{P2pMessage, SourceType},
+    storage::MessageStore,
+};
 
 pub struct Parser {
     module: BpfModule,
-    settings: SystemSettings,
+    config: DebuggerConfig,
+    storage: MessageStore,
+    pid_to_config: HashMap<u32, NodeConfig>,
     counter: u64,
-    node_pid: Option<u32>,
 }
 
 enum Event {
@@ -22,15 +22,13 @@ enum Event {
 }
 
 impl Parser {
-    pub fn new(settings: &SystemSettings) -> Self {
+    pub fn new(storage: &MessageStore, config: &DebuggerConfig) -> Self {
         Parser {
-            module: BpfModule::load(&settings.namespace),
-            settings: settings.clone(),
+            module: BpfModule::load(),
+            config: config.clone(),
+            storage: storage.clone(),
+            pid_to_config: HashMap::new(),
             counter: 0,
-            // unknown for now,
-            // consider the process which first do bind syscall on `settings.node_p2p_port`
-            // is our node
-            node_pid: None,
         }
     }
 
@@ -49,7 +47,10 @@ impl Parser {
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     ) {
-        let db = processor::spawn_processor(self.settings.clone());
+        let db = processor::spawn_processor(self.storage.clone(), self.config.clone());
+        for node_config in &self.config.nodes {
+            self.module.watch_port(node_config.p2p_port);
+        }
         let rb = self.module.main_buffer();
         let mut s = self;
         // merge streams, let await either some data from the kernel,
@@ -76,8 +77,15 @@ impl Parser {
                     address = tracing::field::display(&address),
                     msg = "Syscall Bind",
                 );
-                if address.ip().is_unspecified() && address.port() == self.settings.node_p2p_port {
-                    self.node_pid = Some(id.socket_id.pid);
+                let p2p_port = address.port();
+                if let Some(node_config) = self.config.nodes.iter().find(|c| c.p2p_port == p2p_port) {
+                    self.pid_to_config.insert(id.socket_id.pid, node_config.clone());
+                } else {
+                    tracing::warn!(
+                        id = tracing::field::display(&id),
+                        address = tracing::field::display(&address),
+                        msg = "Intercept bind call for irrelevant port, ignore",
+                    )
                 }
             },
             Ok(SnifferEvent::Listen { id }) => {
@@ -129,11 +137,12 @@ impl Parser {
             53 | 80 | 443 | 22 => {
                 return true;
             },
-            // ignore rpc for now
-            p if p == self.settings.syslog_port || p == self.settings.rpc_port => {
-                return true;
+            // ignore syslog
+            p => {
+                if self.config.nodes.iter().find(|c| c.syslog_port == p).is_some() {
+                    return true;
+                }
             },
-            _ => (),
         }
         // lo v6
         if address.ip() == "::1".parse::<IpAddr>().unwrap() {
@@ -163,17 +172,22 @@ impl Parser {
         let socket_id = id.socket_id.clone();
 
         // the message is not belong to the node
-        if Some(socket_id.pid) != self.node_pid {
-            tracing::info!(id = tracing::field::display(&id), msg = "ignore, filtered by pid");
-            self.module.ignore(socket_id);
-        } else if self.should_ignore(&address) {
+        if self.should_ignore(&address) {
             tracing::info!(id = tracing::field::display(&id), msg = "ignore");
             self.module.ignore(socket_id);
         } else {
-            let r = parser.process_connect(&self.settings, id, address, db, source_type).await;
-            if !r.have_identity {
-                tracing::warn!("ignore connection because no identity");
-                self.module.ignore(socket_id);
+            if let Some(config) = self.pid_to_config.get(&id.socket_id.pid) {
+                let r = parser.process_connect(&config, id, address, db, source_type).await;
+                if !r.have_identity {
+                    tracing::warn!("ignore connection because no identity");
+                    self.module.ignore(socket_id);
+                }    
+            } else {
+                tracing::warn!(
+                    id = tracing::field::display(&id),
+                    address = tracing::field::display(&address),
+                    msg = "Config not found",
+                )
             }
         }
     }

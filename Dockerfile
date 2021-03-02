@@ -1,9 +1,9 @@
 FROM simplestakingcom/tezedge-bpf-builder:latest as builder
 
-RUN apt install -y g++
+RUN apt install -y g++ git
 
-ARG branch
-RUN cargo install --bins --root . --git https://github.com/simplestaking/tezedge-debugger --branch ${branch} tezedge_debugger
+COPY . .
+RUN cargo install --bins --root . --path . && cp debugger_config.toml bin/debugger-config.toml
 
 FROM ubuntu:20.04
 WORKDIR /home/appuser/

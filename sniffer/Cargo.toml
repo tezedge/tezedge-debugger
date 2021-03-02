@@ -26,3 +26,4 @@ hex = { version = "0.4", optional = true }
 [features]
 facade = ["cargo-bpf/build", "redbpf/load", "futures", "hex"]
 probes = ["cargo-bpf/bindings", "redbpf-macros", "redbpf-probes", "cty", "typenum"]
+# default = ["probes"]
