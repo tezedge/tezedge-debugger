@@ -2,23 +2,23 @@ version: "3"
 
 services:
 
-  rust-debugger:
-    image: simplestakingcom/tezedge-debugger:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    privileged: true
-    init: true
-    environment:
-      - RUST_BACKTRACE=1
-      - P2P_PORT=9732
-    volumes:
-      - "rust-shared-data:/tmp/volume"
-      - "/sys/kernel/debug:/sys/kernel/debug:rw"
-    entrypoint: ./tezedge-debugger
-    ports:
-      - "17732:17732"      # debugger RPC port
-      - "10001:13131/udp"  # debugger syslog port
+  #rust-debugger:
+  #  image: simplestakingcom/tezedge-debugger:latest
+  #  build:
+  #    context: .
+  #    dockerfile: Dockerfile.dev
+  #  privileged: true
+  #  init: true
+  #  environment:
+  #    - RUST_BACKTRACE=1
+  #    - P2P_PORT=9732
+  #  volumes:
+  #    - "rust-shared-data:/tmp/volume"
+  #    - "/sys/kernel/debug:/sys/kernel/debug:rw"
+  #  entrypoint: ./tezedge-debugger
+  #  ports:
+  #    - "17732:17732"      # debugger RPC port
+  #    - "10001:13131/udp"  # debugger syslog port
 
   ocaml-debugger:
     image: simplestakingcom/tezedge-debugger:latest
@@ -38,25 +38,25 @@ services:
       - "17733:17732"      # debugger RPC port
       - "11001:13131/udp"  # debugger syslog port
 
-  rust-node:
-    image: simplestakingcom/tezedge:latest
-    command: ["--network", "delphi", "--actions-store-backend", "rocksdb", "file"]
-    init: true
-    logging:
-      # Produce syslogs instead of terminal logs
-      driver: "syslog"
-      options:
-        # Send the logs to syslog (UDP only) server (running on debugger)
-        syslog-address: "udp://0.0.0.0:10001"  # Port must match debugger syslog port in 'ports' section
-        # Always in same RFC 5424 format (with microseconds precision)
-        syslog-format: "rfc5424micro"
-    volumes:
-      - "rust-shared-data:/tmp/tezedge"
-    ports:
-      - "4927:4927"       # node WS port (required only for tezedge)
-      - "9732:9732"       # node P2P port
-      - "18732:18732"     # node RPC port
-      - "3030:3030"       # sandbox launcher port
+  #rust-node:
+  #  image: simplestakingcom/tezedge:latest
+  #  command: ["--network", "delphi", "--actions-store-backend", "rocksdb", "file"]
+  #  init: true
+  #  logging:
+  #    # Produce syslogs instead of terminal logs
+  #    driver: "syslog"
+  #    options:
+  #      # Send the logs to syslog (UDP only) server (running on debugger)
+  #      syslog-address: "udp://0.0.0.0:10001"  # Port must match debugger syslog port in 'ports' section
+  #      # Always in same RFC 5424 format (with microseconds precision)
+  #      syslog-format: "rfc5424micro"
+  #  volumes:
+  #    - "rust-shared-data:/tmp/tezedge"
+  #  ports:
+  #    - "4927:4927"       # node WS port (required only for tezedge)
+  #    - "9732:9732"       # node P2P port
+  #    - "18732:18732"     # node RPC port
+  #    - "3030:3030"       # sandbox launcher port
 
   ocaml-node:
     image: tezos/tezos:v8.1
@@ -83,13 +83,13 @@ services:
       - SANDBOX=https://carthage.tezedge.com:3030
       - API=[{"id":"rust","name":"rust","http":"http://localhost:18732","debugger":"http://localhost:17732","ws":"ws://localhost:4927"},{"id":"ocaml","name":"ocaml","http":"http://localhost:18733","debugger":"http://localhost:17733","ws":false}]
     depends_on:
-      - rust-node
+    #  - rust-node
       - ocaml-node
     ports:
       - "8080:80"
 
 volumes:
-  rust-shared-data:
-    external: false
+  #rust-shared-data:
+  #  external: false
   ocaml-shared-data:
     external: false

@@ -83,7 +83,7 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
             .map_err(|()| SnifferError::SliceTooShort(value.len()))?;
         let data = &value[mem::size_of::<DataDescriptor>()..];
         match descriptor.tag {
-            DataTag::Write | DataTag::SendTo => {
+            DataTag::Write => {
                 SnifferError::write(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
                     SnifferEvent::Write {
                         id,
@@ -91,7 +91,7 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
                     }
                 })
             },
-            DataTag::Read | DataTag::RecvFrom => {
+            DataTag::Read => {
                 SnifferError::read(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
                     SnifferEvent::Read {
                         id,
@@ -178,5 +178,19 @@ impl BpfModule {
 
     pub fn ignore(&self, id: SocketId) {
         self.connections_map().delete(id);
+    }
+
+    fn ports_to_watch_map(&self) -> HashMap<u16, u32> {
+        let map = self
+            .0
+            .maps
+            .iter()
+            .find(|m| m.name == "ports")
+            .unwrap();
+        HashMap::new(map).unwrap()
+    }
+
+    pub fn watch_port(&self, port: u16) {
+        self.ports_to_watch_map().set(port, 1)
     }
 }

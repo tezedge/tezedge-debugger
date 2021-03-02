@@ -16,7 +16,7 @@ mod bpf_code;
 #[cfg(feature = "probes")]
 mod syscall_context;
 #[cfg(feature = "probes")]
-pub use self::syscall_context::{SyscallContext, SyscallContextFull, SyscallContextKey};
+pub use self::syscall_context::{SyscallContext, SyscallContextFull};
 
 #[cfg(feature = "probes")]
 pub mod send;
@@ -27,3 +27,8 @@ pub use self::data_descriptor::{SocketId, EventId, DataDescriptor, DataTag};
 mod address;
 #[cfg(feature = "probes")]
 pub use self::address::Address;
+
+#[cfg(feature = "probes")]
+mod app;
+#[cfg(feature = "probes")]
+pub use self::app::*;

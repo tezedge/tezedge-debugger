@@ -19,6 +19,13 @@ pub enum Address {
 
 impl Address {
     pub const RAW_SIZE: usize = 28;
+
+    pub fn port(&self) -> u16 {
+        match self {
+            &Address::Inet { port, .. } => port,
+            &Address::Inet6 { port, .. } => port,
+        }
+    }
 }
 
 impl TryFrom<&[u8]> for Address {

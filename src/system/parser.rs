@@ -50,6 +50,7 @@ impl Parser {
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     ) {
         let db = processor::spawn_processor(self.settings.clone());
+        self.module.watch_port(self.settings.node_p2p_port);
         let rb = self.module.main_buffer();
         let mut s = self;
         // merge streams, let await either some data from the kernel,
