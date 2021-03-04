@@ -28,6 +28,7 @@ structopt = "0.3"
 async-trait = "0.1"
 strum = { version = "0.20", features = ["derive"] }
 chrono = "0.4"
+sudo = "0.6"
 
 serde_cbor = "0.11"
 syslog_loose = "0.7"

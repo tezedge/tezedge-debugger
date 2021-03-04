@@ -11,9 +11,9 @@ use tezedge_debugger::{
 };
 
 /// Create new message store, from well defined path
-fn open_database(db_path: &String) -> Result<MessageStore, failure::Error> {
-    let path = Path::new(db_path);
-    if path.exists() {
+fn open_database(config: &DebuggerConfig) -> Result<MessageStore, failure::Error> {
+    let path = Path::new(&config.db_path);
+    if path.exists() && !config.keep_db {
         fs::remove_dir_all(path).unwrap();
     }
     let schemas = cfs();
@@ -22,7 +22,7 @@ fn open_database(db_path: &String) -> Result<MessageStore, failure::Error> {
 }
 
 fn load_config() -> Result<DebuggerConfig, failure::Error> {
-    let mut settings_file = fs::File::open("debugger_config.toml")?;
+    let mut settings_file = fs::File::open("config.toml")?;
     let mut settings_toml = String::new();
     settings_file.read_to_string(&mut settings_toml)?;
     toml::from_str(&settings_toml).map_err(|e| failure::Error::from_boxed_compat(Box::new(e)))
@@ -45,7 +45,7 @@ async fn main() -> Result<(), failure::Error> {
     };
 
     // Initialize storage for messages
-    let storage = match open_database(&config.db_path) {
+    let storage = match open_database(&config) {
         Ok(storage) => storage,
         Err(err) => {
             error!(error = tracing::field::display(&err), "failed to open database");

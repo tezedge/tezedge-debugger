@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
+        "BACKTRACE",
         "Cryptobox",
         "EMSGSIZE",
         "Inet",
@@ -9,15 +10,21 @@
         "Syscall",
         "Tezedge",
         "Tezos",
+        "UNSPEC",
+        "appuser",
         "concat",
+        "entrypoint",
         "getsockname",
         "greylisted",
         "hashset",
+        "itertools",
+        "kmerge",
         "kprobe",
         "kprobes",
         "kretprobe",
         "ksys",
         "ktime",
+        "memtable",
         "nanos",
         "oneshot",
         "percpu",
@@ -39,7 +46,6 @@
         "tgid",
         "typenum",
         "unactivated",
-        "userspace",
-        "UNSPEC"
+        "userspace"
     ]
 }

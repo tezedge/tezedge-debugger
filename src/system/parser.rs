@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub struct Parser {
-    module: BpfModule,
+    module: Option<BpfModule>,
     config: DebuggerConfig,
     storage: MessageStore,
     pid_to_config: HashMap<u32, NodeConfig>,
@@ -24,7 +24,7 @@ enum Event {
 impl Parser {
     pub fn new(storage: &MessageStore, config: &DebuggerConfig) -> Self {
         Parser {
-            module: BpfModule::load(),
+            module: None,
             config: config.clone(),
             storage: storage.clone(),
             pid_to_config: HashMap::new(),
@@ -34,12 +34,24 @@ impl Parser {
 
     /// spawn a (green)thread which parse the data from the kernel,
     /// returns object which can report statistics
-    pub fn spawn(self) -> Arc<Mutex<Reporter>> {
+    pub fn spawn(mut self) -> Arc<Mutex<Reporter>> {
         let (tx_p2p_command, rx_p2p_command) = mpsc::channel(1);
         let (tx_p2p_report, rx_p2p_report) = mpsc::channel(1);
-        tokio::spawn(self.run(rx_p2p_command, tx_p2p_report));
+        if self.config.run_bpf {
+            sudo::escalate_if_needed().unwrap();
+            self.run_bpf();
+            tokio::spawn(self.run(rx_p2p_command, tx_p2p_report));
+        }
         let reporter = Reporter::new(tx_p2p_command, rx_p2p_report);
         Arc::new(Mutex::new(reporter))
+    }
+
+    pub fn run_bpf(&mut self) {
+        let module = BpfModule::load();
+        for node_config in &self.config.nodes {
+            module.watch_port(node_config.p2p_port);
+        }
+        self.module = Some(module);
     }
 
     async fn run(
@@ -48,10 +60,13 @@ impl Parser {
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     ) {
         let db = processor::spawn_processor(self.storage.clone(), self.config.clone());
-        for node_config in &self.config.nodes {
-            self.module.watch_port(node_config.p2p_port);
-        }
-        let rb = self.module.main_buffer();
+        let rb = match &self.module {
+            Some(module) => module.main_buffer(),
+            None => {
+                tracing::warn!("bpf module is not running");
+                return;
+            },
+        };
         let mut s = self;
         // merge streams, let await either some data from the kernel,
         // or some command from the overlying code
@@ -171,17 +186,25 @@ impl Parser {
         };
         let socket_id = id.socket_id.clone();
 
+        let module = match &self.module {
+            Some(module) => module,
+            None => {
+                tracing::warn!("bpf module is not running");
+                return;
+            },
+        };
+
         // the message is not belong to the node
         if self.should_ignore(&address) {
             tracing::info!(id = tracing::field::display(&id), msg = "ignore");
-            self.module.ignore(socket_id);
+            module.ignore(socket_id);
         } else {
             if let Some(config) = self.pid_to_config.get(&id.socket_id.pid) {
                 let r = parser.process_connect(&config, id, address, db, source_type).await;
                 if !r.have_identity {
                     tracing::warn!("ignore connection because no identity");
-                    self.module.ignore(socket_id);
-                }    
+                    module.ignore(socket_id);
+                }
             } else {
                 tracing::warn!(
                     id = tracing::field::display(&id),

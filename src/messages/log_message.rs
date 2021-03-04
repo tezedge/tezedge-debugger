@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use crate::storage::get_ts;
 use syslog_loose::Message;
 use storage::persistent::BincodeEncoded;
+use crate::storage::HasNodeName;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// Received logs saved in the database
@@ -145,6 +146,12 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                 }
             }
         }
+    }
+}
+
+impl HasNodeName for LogMessage {
+    fn node_name(&self) -> String {
+        self.name.clone()
     }
 }
 

@@ -33,6 +33,7 @@ pub struct P2pCursor {
     request_id: Option<u64>,
     incoming: Option<bool>,
     source_type: Option<SourceType>,
+    node_name: Option<String>,
 }
 
 impl P2pCursor {
@@ -68,6 +69,7 @@ impl TryInto<P2pFilters> for P2pCursor {
             types: self.get_types()?,
             request_id: self.request_id,
             incoming: self.incoming,
+            node_name: self.node_name,
         })
     }
 }

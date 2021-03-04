@@ -19,6 +19,7 @@ pub struct LogCursor {
     pub limit: Option<usize>,
     pub level: Option<String>,
     pub timestamp: Option<String>,
+    pub node_name: Option<String>,
 }
 
 impl LogCursor {
@@ -52,6 +53,7 @@ impl TryInto<LogFilters> for LogCursor {
         Ok(LogFilters {
             level: self.get_level()?,
             date: self.get_timestamp()?,
+            node_name: self.node_name,
         })
     }
 }

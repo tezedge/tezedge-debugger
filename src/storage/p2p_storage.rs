@@ -9,7 +9,7 @@ use std::{
         atomic::{Ordering, AtomicU64}, Arc,
     }, net::SocketAddr,
 };
-use crate::storage::{secondary_index::SecondaryIndex, dissect};
+use crate::storage::{secondary_index::SecondaryIndex, dissect, node_name_index::NodeNameIndex};
 use crate::storage::sorted_intersect::sorted_intersect;
 use secondary_indexes::*;
 use itertools::Itertools;
@@ -26,6 +26,7 @@ pub struct P2pFilters {
     pub request_id: Option<u64>,
     pub incoming: Option<bool>,
     pub source_type: Option<bool>,
+    pub node_name: Option<String>,
 }
 
 impl P2pFilters {
@@ -45,6 +46,7 @@ pub struct P2pStore {
     type_index: TypeIndex,
     incoming_index: IncomingIndex,
     source_type_index: SourceTypeIndex,
+    node_name_index: NodeNameIndex,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
 }
@@ -59,6 +61,7 @@ impl P2pStore {
             type_index: TypeIndex::new(kv.clone()),
             incoming_index: IncomingIndex::new(kv.clone()),
             source_type_index: SourceTypeIndex::new(kv.clone()),
+            node_name_index: NodeNameIndex::new(kv.clone()),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(0)),
         }
@@ -85,7 +88,8 @@ impl P2pStore {
         self.remote_addr_index.store_index(&primary_index, value)?;
         self.type_index.store_index(&primary_index, value)?;
         self.incoming_index.store_index(&primary_index, value)?;
-        self.source_type_index.store_index(&primary_index, value)
+        self.source_type_index.store_index(&primary_index, value)?;
+        Ok(())
     }
 
     /// Put messages onto specific index
@@ -93,7 +97,8 @@ impl P2pStore {
         self.remote_addr_index.delete_index(&primary_index, value)?;
         self.type_index.delete_index(&primary_index, value)?;
         self.incoming_index.delete_index(&primary_index, value)?;
-        self.source_type_index.delete_index(&primary_index, value)
+        self.source_type_index.delete_index(&primary_index, value)?;
+        Ok(())
     }
 
     /// Store message at the end of the store. Return ID of newly inserted value
@@ -154,6 +159,9 @@ impl P2pStore {
             if let Some(source_type) = filters.source_type {
                 iters.push(self.source_type_iterator(cursor_index, source_type)?);
             }
+            if let Some(node_name) = filters.node_name {
+                iters.push(self.node_name_iterator(cursor_index, node_name)?);
+            }
             ret.extend(self.load_indexes(sorted_intersect(iters, limit).into_iter()));
         }
         for (ordinal, message) in ret.iter_mut().enumerate() {
@@ -201,6 +209,13 @@ impl P2pStore {
 
     pub fn source_type_iterator<'a>(&'a self, cursor_index: Option<u64>, source_type: bool) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(self.source_type_index.get_concrete_prefix_iterator(&cursor_index.unwrap_or(std::u64::MAX), source_type)?
+            .filter_map(|(_, value)| {
+                value.ok()
+            })))
+    }
+
+    pub fn node_name_iterator<'a>(&'a self, cursor_index: Option<u64>, node_name: String) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(SecondaryIndex::<Self>::get_concrete_prefix_iterator(&self.node_name_index, &cursor_index.unwrap_or(std::u64::MAX), node_name)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))

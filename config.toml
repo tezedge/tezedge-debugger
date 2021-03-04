@@ -1,12 +1,14 @@
-db_path = "/tmp/volume/debugger_db"
+db_path = "./target/debugger_db"
 rpc_port = 17732
 p2p_message_limit = 10_000_000
 log_message_limit = 10_000_000
+run_bpf = false
+keep_db = true
 
 [[nodes]]
 name = "tezedge"
 # path to search identity at
-identity_path = "/tmp/volume/tezedge/identity.json"
+identity_path = "./target/tezedge/identity.json"
 # debugger expect the node will listen its p2p incoming connections on this port
 # which process earliest will bind a socket on this port, will be considered as the node
 # this is an inner port inside docker's virtual network of the node's container
@@ -18,5 +20,5 @@ syslog_port = 10000
 [[nodes]]
 name = "tezos"
 p2p_port = 9733
-identity_path = "/tmp/volume/tezos/data/identity.json"
+identity_path = "./target/tezos/data/identity.json"
 syslog_port = 10001

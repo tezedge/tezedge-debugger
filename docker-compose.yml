@@ -14,6 +14,7 @@ services:
     volumes:
       - "tezedge-shared-data:/tmp/volume/tezedge:ro"
       - "tezos-shared-data:/tmp/volume/tezos:ro"
+      - "./config-docker.toml:/home/appuser/config.toml:ro"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
     entrypoint: ./tezedge-debugger
     ports:
@@ -60,16 +61,16 @@ services:
       - "9733:9733"
       - "18733:18733"     # node RPC port
 
-  explorer:
-    image: simplestakingcom/tezedge-explorer:latest
-    environment:
-      - SANDBOX=https://carthage.tezedge.com:3030
-      - API=[{"id":"rust","name":"rust","http":"http://localhost:18732","debugger":"http://localhost:17732","ws":"ws://localhost:4927"},{"id":"ocaml","name":"ocaml","http":"http://localhost:18733","debugger":"http://localhost:17733","ws":false}]
-    depends_on:
-      - tezedge-node
-      - tezos-node
-    ports:
-      - "8080:80"
+  #explorer:
+  #  image: simplestakingcom/tezedge-explorer:latest
+  #  environment:
+  #    - SANDBOX=https://carthage.tezedge.com:3030
+  #    - API=[{"id":"rust","name":"rust","http":"http://localhost:18732","debugger":"http://localhost:17732","ws":"ws://localhost:4927"},{"id":"ocaml","name":"ocaml","http":"http://localhost:18733","debugger":"http://localhost:17733","ws":false}]
+  #  depends_on:
+  #    - tezedge-node
+  #    - tezos-node
+  #  ports:
+  #    - "8080:80"
 
 volumes:
   tezedge-shared-data:
