@@ -42,9 +42,9 @@ where
     Schema: KeyValueSchema<Key = Field::Key, Value = PrimarySchema::Key>,
     Field: FilterField<PrimarySchema>,
 {
-    pub fn new(kv: Arc<DB>) -> Self {
+    pub fn new(kv: &Arc<DB>) -> Self {
         SecondaryIndex {
-            kv,
+            kv: kv.clone(),
             phantom_data: PhantomData,
         }
     }
@@ -84,7 +84,7 @@ pub trait SecondaryIndices {
     type PrimarySchema: KeyValueSchema;
     type Filter;
 
-    fn new(kv: Arc<DB>) -> Self;
+    fn new(kv: &Arc<DB>) -> Self;
 
     fn store_indices(
         &self,

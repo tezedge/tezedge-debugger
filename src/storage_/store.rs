@@ -32,7 +32,7 @@ where
     Schema: KeyValueSchema<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema>,
 {
-    pub fn new(kv: Arc<DB>) -> Self {
+    pub fn new(kv: &Arc<DB>) -> Self {
         Store {
             kv: kv.clone(),
             count: Arc::new(AtomicU64::new(0)),
