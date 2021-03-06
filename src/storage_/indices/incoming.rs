@@ -1,16 +1,11 @@
 use storage::persistent::{KeyValueSchema, Decoder, SchemaError, Encoder};
-use super::{FilterField, Access};
+use super::FilterField;
 
 impl<Schema> FilterField<Schema> for bool
 where
     Schema: KeyValueSchema<Key = u64>,
-    Schema::Value: Access<bool>,
 {
     type Key = IncomingKey;
-
-    fn accessor(value: &<Schema as KeyValueSchema>::Value) -> Option<Self> {
-        Some(value.accessor())
-    }
 
     fn make_index(&self, primary_key: &<Schema as KeyValueSchema>::Key) -> Self::Key {
         IncomingKey {

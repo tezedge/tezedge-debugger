@@ -10,7 +10,4 @@ pub use self::incoming::IncomingKey;
 mod source_type;
 pub use self::source_type::{SourceTypeKey, SourceType};
 
-use super::{
-    secondary_index::FilterField,
-    db_message::Access,
-};
+use super::secondary_index::FilterField;

@@ -2,8 +2,6 @@ pub mod p2p;
 
 mod sorted_intersect;
 
-mod db_message;
-
 mod store;
 pub use self::store::Store;
 

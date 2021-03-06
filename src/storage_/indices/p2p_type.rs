@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use failure::Fail;
 use storage::persistent::{KeyValueSchema, Decoder, SchemaError, Encoder};
-use super::{FilterField, Access};
+use super::FilterField;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
@@ -79,13 +79,8 @@ impl FromStr for P2pType {
 impl<Schema> FilterField<Schema> for P2pType
 where
     Schema: KeyValueSchema<Key = u64>,
-    Schema::Value: Access<P2pType>,
 {
     type Key = P2pTypeKey;
-
-    fn accessor(value: &<Schema as KeyValueSchema>::Value) -> Option<Self> {
-        Some(value.accessor())
-    }
 
     fn make_index(&self, primary_key: &<Schema as KeyValueSchema>::Key) -> Self::Key {
         P2pTypeKey {

@@ -20,8 +20,11 @@ where
 {
     type Key: Codec;
 
-    fn accessor(value: &PrimarySchema::Value) -> Option<Self>;
     fn make_index(&self, primary_key: &PrimarySchema::Key) -> Self::Key;
+}
+
+pub trait Access<T> {
+    fn accessor(&self) -> T;
 }
 
 /// generic secondary index store
@@ -38,6 +41,7 @@ where
 impl<PrimarySchema, Schema, Field> Clone for SecondaryIndex<PrimarySchema, Schema, Field>
 where
     PrimarySchema: KeyValueSchema,
+    PrimarySchema::Value: Access<Field>,
     Schema: KeyValueSchema<Key = Field::Key, Value = PrimarySchema::Key>,
     Field: FilterField<PrimarySchema>,
 {
@@ -52,6 +56,7 @@ where
 impl<PrimarySchema, Schema, Field> SecondaryIndex<PrimarySchema, Schema, Field>
 where
     PrimarySchema: KeyValueSchema,
+    PrimarySchema::Value: Access<Field>,
     Schema: KeyValueSchema<Key = Field::Key, Value = PrimarySchema::Key>,
     Field: FilterField<PrimarySchema>,
 {
@@ -68,22 +73,16 @@ where
 
     /// Build new index for given value and store it.
     pub fn store_index(&self, primary_key: &PrimarySchema::Key, value: &PrimarySchema::Value) -> Result<(), StorageError> {
-        if let Some(field) = Field::accessor(value) {
-            let key = field.make_index(primary_key);
-            self.inner().put(&key, primary_key).map_err(Into::into)
-        } else {
-            Ok(())
-        }
+        let field = value.accessor();
+        let key = field.make_index(primary_key);
+        self.inner().put(&key, primary_key).map_err(Into::into)
     }
 
     /// Delete secondary index for primary key - value
     pub fn delete_index(&self, primary_key: &PrimarySchema::Key, value: &PrimarySchema::Value) -> Result<(), StorageError> {
-        if let Some(field) = Field::accessor(value) {
-            let key = field.make_index(primary_key);
-            self.inner().delete(&key).map_err(Into::into)
-        } else {
-            Ok(())
-        }
+        let field = value.accessor();
+        let key = field.make_index(primary_key);
+        self.inner().delete(&key).map_err(Into::into)
     }
 
     /// Get iterator starting from specific secondary index build from primary key and field value

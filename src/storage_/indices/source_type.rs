@@ -1,6 +1,6 @@
 use storage::persistent::{KeyValueSchema, Decoder, SchemaError, Encoder};
 use serde::{Serialize, Deserialize};
-use super::{FilterField, Access};
+use super::FilterField;
 
 /// Determines, if message belongs to communication originated
 /// from remote or local node
@@ -24,13 +24,8 @@ impl SourceType {
 impl<Schema> FilterField<Schema> for SourceType
 where
     Schema: KeyValueSchema<Key = u64>,
-    Schema::Value: Access<SourceType>,
 {
     type Key = SourceTypeKey;
-
-    fn accessor(value: &<Schema as KeyValueSchema>::Value) -> Option<Self> {
-        Some(value.accessor())
-    }
 
     fn make_index(&self, primary_key: &<Schema as KeyValueSchema>::Key) -> Self::Key {
         SourceTypeKey {
