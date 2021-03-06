@@ -53,7 +53,7 @@ impl KeyValueSchema for IncomingSchema {
 
     fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
         let mut cf_opts = Options::default();
-        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<bool>()));
+        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(mem::size_of::<bool>()));
         cf_opts.set_memtable_prefix_bloom_ratio(0.2);
         ColumnFamilyDescriptor::new(Self::name(), cf_opts)
     }
@@ -71,7 +71,7 @@ impl KeyValueSchema for SourceTypeSchema {
 
     fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
         let mut cf_opts = Options::default();
-        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<bool>()));
+        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(mem::size_of::<bool>()));
         cf_opts.set_memtable_prefix_bloom_ratio(0.2);
         ColumnFamilyDescriptor::new(Self::name(), cf_opts)
     }
@@ -89,7 +89,7 @@ impl KeyValueSchema for NodeNameSchema {
 
     fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
         let mut cf_opts = Options::default();
-        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<u16>()));
+        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(mem::size_of::<u16>()));
         cf_opts.set_memtable_prefix_bloom_ratio(0.2);
         ColumnFamilyDescriptor::new(Self::name(), cf_opts)
     }
@@ -180,10 +180,11 @@ impl SecondaryIndices for Indices {
             let it = self.remote_addr_index.get_concrete_prefix_iterator(primary_key, remote_addr)?;
             iters.push(it);
         }
-        for p2p_type in &filter.types {
-            let it = self.type_index.get_concrete_prefix_iterator(primary_key, p2p_type)?;
-            iters.push(it);
-        }
+        // TODO: fix using itertools
+        //for p2p_type in &filter.types {
+        //    let it = self.type_index.get_concrete_prefix_iterator(primary_key, p2p_type)?;
+        //    iters.push(it);
+        //}
         if let Some(sender) = &filter.sender {
             let it = self.incoming_index.get_concrete_prefix_iterator(primary_key, &sender)?;
             iters.push(it);

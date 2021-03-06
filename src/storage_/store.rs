@@ -105,7 +105,7 @@ where
     /// Create iterator ending on given index. If no value is provided
     /// start at the end
     pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filter: &Indices::Filter) -> Result<Vec<Message>, StorageError> {
-        let cursor_index = cursor_index.unwrap_or(std::u64::MAX);
+        let cursor_index = cursor_index.unwrap_or(u64::MAX);
         let ret = if let Some(keys) = self.indices.filter_iterator(&cursor_index, limit, &filter)? {
             keys.iter()
                 .filter_map(move |index| {
