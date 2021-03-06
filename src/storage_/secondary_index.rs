@@ -1,17 +1,6 @@
-use std::{
-    sync::Arc,
-    marker::PhantomData,
-};
-use rocksdb::{Cache, ColumnFamilyDescriptor, DB};
-use storage::{
-    StorageError,
-    persistent::{
-        codec::Codec,
-        KeyValueSchema,
-        KeyValueStoreWithSchema,
-        database::IteratorWithSchema,
-    },
-};
+use std::{marker::PhantomData, sync::Arc};
+use rocksdb::{Cache, ColumnFamilyDescriptor, DB, DBIterator};
+use storage::{StorageError, persistent::{DBError, KeyValueSchema, KeyValueStoreWithSchema, codec::Codec, Encoder, Decoder}};
 
 pub trait FilterField<PrimarySchema>
 where
@@ -25,6 +14,27 @@ where
 
 pub trait Access<T> {
     fn accessor(&self) -> T;
+}
+
+pub struct SecondaryIndexIterator<'a, PrimarySchema>
+where
+    PrimarySchema: KeyValueSchema,
+{
+    inner: DBIterator<'a>,
+    phantom_data: PhantomData<PrimarySchema>,
+}
+
+impl<'a, PrimarySchema> Iterator for SecondaryIndexIterator<'a, PrimarySchema>
+where
+    PrimarySchema: KeyValueSchema,
+{
+    type Item = PrimarySchema::Key;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (_k, v) = self.inner.next()?;
+        // safe to unwrap because iterator is statically typed
+        Some(<PrimarySchema::Key as Decoder>::decode(v.as_ref()).unwrap())
+    }
 }
 
 /// generic secondary index store
@@ -86,9 +96,25 @@ where
     }
 
     /// Get iterator starting from specific secondary index build from primary key and field value
-    pub fn get_concrete_prefix_iterator(&self, primary_key: &PrimarySchema::Key, field: Field) -> Result<IteratorWithSchema<Schema>, StorageError> {
-        let index = field.make_index(primary_key);
-        self.inner().prefix_iterator(&index).map_err(Into::into)
+    pub fn get_concrete_prefix_iterator<'a, 'b>(
+        &'a self,
+        primary_key: &PrimarySchema::Key,
+        field: &'a Field,
+    ) -> Result<SecondaryIndexIterator<'b, PrimarySchema>, StorageError>
+    where
+        'a: 'b,
+    {
+        let key = field.make_index(primary_key);
+        let key = key.encode()?;
+        let cf = self
+            .kv
+            .cf_handle(Schema::name())
+            .ok_or(DBError::MissingColumnFamily { name: Schema::name() })?;
+
+        Ok(SecondaryIndexIterator {
+            inner: self.kv.prefix_iterator_cf(cf, key),
+            phantom_data: PhantomData,
+        })
     }
 }
 
@@ -116,6 +142,6 @@ pub trait SecondaryIndices {
         &self,
         primary_key: &<Self::PrimarySchema as KeyValueSchema>::Key,
         limit: usize,
-        filter: Self::Filter,
+        filter: &Self::Filter,
     ) -> Result<Option<Vec<<Self::PrimarySchema as KeyValueSchema>::Key>>, StorageError>;
 }

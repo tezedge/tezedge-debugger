@@ -9,10 +9,9 @@
 /// Sorted intersect works on any sorted vectors.
 use std::cmp::Ordering;
 
-// TODO: turn to work with iterator if possible
 /// For given vector of *sorted* iterators, return new vector containing values
 /// present in *every* iterator
-pub fn sorted_intersect<I>(mut iters: Vec<I>, limit: usize) -> Vec<I::Item>
+pub fn sorted_intersect<I>(iters: &mut [I], limit: usize) -> Vec<I::Item>
 where
     I: Iterator,
     I::Item: Ord,

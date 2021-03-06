@@ -150,34 +150,31 @@ impl SecondaryIndices for Indices {
         &self,
         primary_key: &<Self::PrimarySchema as KeyValueSchema>::Key,
         limit: usize,
-        filter: Self::Filter,
+        filter: &Self::Filter,
     ) -> Result<Option<Vec<<Self::PrimarySchema as KeyValueSchema>::Key>>, StorageError> {
-        let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(30);
-        if let Some(remote_addr) = filter.remote_addr {
-            let it = self.remote_addr_index.get_concrete_prefix_iterator(primary_key, remote_addr)?
-                .filter_map(|(_, v)| v.ok());
-            iters.push(Box::new(it));
+        let mut iters = Vec::with_capacity(filter.types.len() + 3);
+
+        if let Some(remote_addr) = &filter.remote_addr {
+            let it = self.remote_addr_index.get_concrete_prefix_iterator(primary_key, remote_addr)?;
+            iters.push(it);
         }
-        for p2p_type in filter.types {
-            let it = self.type_index.get_concrete_prefix_iterator(primary_key, p2p_type)?
-                .filter_map(|(_, v)| v.ok());
-            iters.push(Box::new(it));
+        for p2p_type in &filter.types {
+            let it = self.type_index.get_concrete_prefix_iterator(primary_key, p2p_type)?;
+            iters.push(it);
         }
-        if let Some(incoming) = filter.incoming {
-            let it = self.incoming_index.get_concrete_prefix_iterator(primary_key, incoming)?
-                .filter_map(|(_, v)| v.ok());
-            iters.push(Box::new(it));
+        if let Some(incoming) = &filter.incoming {
+            let it = self.incoming_index.get_concrete_prefix_iterator(primary_key, incoming)?;
+            iters.push(it);
         }
-        if let Some(source_type) = filter.source_type {
-            let it = self.source_type_index.get_concrete_prefix_iterator(primary_key, source_type)?
-                .filter_map(|(_, v)| v.ok());
-            iters.push(Box::new(it));
+        if let Some(source_type) = &filter.source_type {
+            let it = self.source_type_index.get_concrete_prefix_iterator(primary_key, source_type)?;
+            iters.push(it);
         }
 
         if iters.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(sorted_intersect(iters, limit)))
+            Ok(Some(sorted_intersect(iters.as_mut_slice(), limit)))
         }
     }
 }

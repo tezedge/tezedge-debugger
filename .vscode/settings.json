@@ -18,6 +18,7 @@
         "getsockname",
         "greylisted",
         "hashset",
+        "heapify",
         "itertools",
         "kmerge",
         "kprobe",

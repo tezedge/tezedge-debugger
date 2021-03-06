@@ -1,4 +1,5 @@
 pub mod p2p;
+pub mod indices;
 
 mod sorted_intersect;
 
@@ -7,8 +8,6 @@ pub use self::store::Store;
 
 mod secondary_index;
 pub use self::secondary_index::SecondaryIndices;
-
-pub mod indices;
 
 pub type P2pStore = Store<p2p::Message, p2p::Schema, p2p::Indices>;
 
@@ -36,7 +35,7 @@ mod tests {
             Err("foo".to_string()),
         );
         storage_new.store_message(&mut message).unwrap();
-        let messages = storage_new.get_cursor(None, 1, p2p::Filters::default()).unwrap();
+        let messages = storage_new.get_cursor(None, 1, &p2p::Filters::default()).unwrap();
         println!("{}", serde_json::to_string(&messages[0]).unwrap());
         println!("{}", serde_json::to_string(&message).unwrap());
     }
