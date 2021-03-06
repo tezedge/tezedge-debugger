@@ -5,7 +5,7 @@ use super::{
     message::Schema,
     SecondaryIndex,
     SecondaryIndices,
-    indices::{RemoteAddrKey, P2pTypeKey, P2pType, IncomingKey, SourceTypeKey, SourceType},
+    indices::{RemoteAddrKey, P2pTypeKey, P2pType, SenderKey, Sender, InitiatorKey, Initiator, NodeNameKey, NodeName},
     sorted_intersect::sorted_intersect,
 };
 
@@ -48,7 +48,7 @@ impl KeyValueSchema for P2pTypeSchema {
 struct IncomingSchema;
 
 impl KeyValueSchema for IncomingSchema {
-    type Key = IncomingKey;
+    type Key = SenderKey;
     type Value = u64;
 
     fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
@@ -66,7 +66,7 @@ impl KeyValueSchema for IncomingSchema {
 struct SourceTypeSchema;
 
 impl KeyValueSchema for SourceTypeSchema {
-    type Key = SourceTypeKey;
+    type Key = InitiatorKey;
     type Value = u64;
 
     fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
@@ -81,23 +81,41 @@ impl KeyValueSchema for SourceTypeSchema {
     }
 }
 
+struct NodeNameSchema;
+
+impl KeyValueSchema for NodeNameSchema {
+    type Key = NodeNameKey;
+    type Value = u64;
+
+    fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
+        let mut cf_opts = Options::default();
+        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(std::mem::size_of::<u16>()));
+        cf_opts.set_memtable_prefix_bloom_ratio(0.2);
+        ColumnFamilyDescriptor::new(Self::name(), cf_opts)
+    }
+
+    fn name() -> &'static str {
+        "p2p_node_name_index"
+    }
+}
+
 /// Allowed filters for p2p message store
 #[derive(Debug, Default, Clone)]
 pub struct Filters {
     pub remote_addr: Option<SocketAddr>,
     pub types: Vec<P2pType>,
-    pub incoming: Option<bool>,
-    pub source_type: Option<SourceType>,
-    pub node_name: Option<String>,
+    pub sender: Option<Sender>,
+    pub initiator: Option<Initiator>,
+    pub node_name: Option<NodeName>,
 }
 
 #[derive(Clone)]
 pub struct Indices {
     remote_addr_index: SecondaryIndex<Schema, RemoteAddrSchema, SocketAddr>,
     type_index: SecondaryIndex<Schema, P2pTypeSchema, P2pType>,
-    incoming_index: SecondaryIndex<Schema, IncomingSchema, bool>,
-    source_type_index: SecondaryIndex<Schema, SourceTypeSchema, SourceType>,
-    //node_name_index: NodeNameIndex,
+    incoming_index: SecondaryIndex<Schema, IncomingSchema, Sender>,
+    source_type_index: SecondaryIndex<Schema, SourceTypeSchema, Initiator>,
+    node_name_index: SecondaryIndex<Schema, NodeNameSchema, NodeName>,
 }
 
 impl SecondaryIndices for Indices {
@@ -110,6 +128,7 @@ impl SecondaryIndices for Indices {
             type_index: SecondaryIndex::new(kv),
             incoming_index: SecondaryIndex::new(kv),
             source_type_index: SecondaryIndex::new(kv),
+            node_name_index: SecondaryIndex::new(kv),
         }
     }
 
@@ -119,6 +138,7 @@ impl SecondaryIndices for Indices {
             P2pTypeSchema::descriptor(cache),
             IncomingSchema::descriptor(cache),
             SourceTypeSchema::descriptor(cache),
+            NodeNameSchema::descriptor(cache),
         ]
     }
 
@@ -131,6 +151,7 @@ impl SecondaryIndices for Indices {
         self.type_index.store_index(primary_key, value)?;
         self.incoming_index.store_index(primary_key, value)?;
         self.source_type_index.store_index(primary_key, value)?;
+        self.node_name_index.store_index(primary_key, value)?;
         Ok(())
     }
 
@@ -143,6 +164,7 @@ impl SecondaryIndices for Indices {
         self.type_index.delete_index(primary_key, value)?;
         self.incoming_index.delete_index(primary_key, value)?;
         self.source_type_index.delete_index(primary_key, value)?;
+        self.node_name_index.delete_index(primary_key, value)?;
         Ok(())
     }
 
@@ -152,7 +174,7 @@ impl SecondaryIndices for Indices {
         limit: usize,
         filter: &Self::Filter,
     ) -> Result<Option<Vec<<Self::PrimarySchema as KeyValueSchema>::Key>>, StorageError> {
-        let mut iters = Vec::with_capacity(filter.types.len() + 3);
+        let mut iters = Vec::with_capacity(filter.types.len() + 4);
 
         if let Some(remote_addr) = &filter.remote_addr {
             let it = self.remote_addr_index.get_concrete_prefix_iterator(primary_key, remote_addr)?;
@@ -162,12 +184,16 @@ impl SecondaryIndices for Indices {
             let it = self.type_index.get_concrete_prefix_iterator(primary_key, p2p_type)?;
             iters.push(it);
         }
-        if let Some(incoming) = &filter.incoming {
-            let it = self.incoming_index.get_concrete_prefix_iterator(primary_key, incoming)?;
+        if let Some(sender) = &filter.sender {
+            let it = self.incoming_index.get_concrete_prefix_iterator(primary_key, &sender)?;
             iters.push(it);
         }
-        if let Some(source_type) = &filter.source_type {
-            let it = self.source_type_index.get_concrete_prefix_iterator(primary_key, source_type)?;
+        if let Some(initiator) = &filter.initiator {
+            let it = self.source_type_index.get_concrete_prefix_iterator(primary_key, initiator)?;
+            iters.push(it);
+        }
+        if let Some(node_name) = &filter.node_name {
+            let it = self.node_name_index.get_concrete_prefix_iterator(primary_key, node_name)?;
             iters.push(it);
         }
 

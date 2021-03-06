@@ -99,7 +99,7 @@ where
     pub fn get_concrete_prefix_iterator<'a, 'b>(
         &'a self,
         primary_key: &PrimarySchema::Key,
-        field: &'a Field,
+        field: &Field,
     ) -> Result<SecondaryIndexIterator<'b, PrimarySchema>, StorageError>
     where
         'a: 'b,

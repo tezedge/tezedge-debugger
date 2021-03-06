@@ -9,41 +9,35 @@ use tezos_messages::p2p::encoding::{
     prelude::*,
 };
 use tezos_encoding::encoding::{HasEncoding, Encoding};
-use super::{Access, indices::{P2pType, SourceType}};
+use super::{Access, indices::{P2pType, Initiator, Sender, NodeName}};
 
 /// P2PMessage as stored in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
-    pub node_name: String,
+    pub node_name: u16,
     pub timestamp: u128,
     pub remote_addr: SocketAddr,
     pub incoming: bool,
-    pub source_type: SourceType,
+    pub source_type: Initiator,
     pub original_bytes: Vec<u8>,
     // decrypted_bytes is the same as the original_bytes if it is ConnectionMessage
     // it is empty if decryption failed
     pub decrypted_bytes: Vec<u8>,
-    pub error: Vec<String>,
-    pub message: Vec<TezosPeerMessage>,
+    pub error: Option<String>,
+    pub message: Option<TezosPeerMessage>,
 }
 
 impl Message {
     /// Make new P2pMessage from parts
     pub fn new(
-        node_name: String,
+        node_name: u16,
         remote_addr: SocketAddr,
         incoming: bool,
-        source_type: SourceType,
+        source_type: Initiator,
         original_bytes: Vec<u8>,
         decrypted_bytes: Vec<u8>,
-        message_result: Result<TezosPeerMessage, String>,
+        error: Option<String>,
     ) -> Self {
-        let mut error = Vec::new();
-        let mut message = Vec::new();
-        match message_result {
-            Ok(m) => message.push(m),
-            Err(e) => error.push(e),
-        };
         Message {
             node_name,
             timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos(),
@@ -53,7 +47,7 @@ impl Message {
             original_bytes,
             decrypted_bytes,
             error,
-            message,
+            message: None,
         }
     }
 }
@@ -203,7 +197,7 @@ impl Clone for HandshakeMessage {
 
 impl Access<P2pType> for Message {
     fn accessor(&self) -> P2pType {
-        if let Some(msg) = self.message.first() {
+        if let Some(msg) = &self.message {
             match msg {
                 TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Disconnect) |
                 TezosPeerMessage::PeerMessage(FullPeerMessage::Disconnect) => P2pType::Disconnect,
@@ -255,21 +249,25 @@ impl Access<P2pType> for Message {
     }
 }
 
-impl Access<bool> for Message {
-    fn accessor(&self) -> bool {
-        self.incoming.clone()
+impl Access<Sender> for Message {
+    fn accessor(&self) -> Sender {
+        if self.incoming {
+            Sender::Remote
+        } else {
+            Sender::Local
+        }
     }
 }
 
-impl Access<SourceType> for Message {
-    fn accessor(&self) -> SourceType {
+impl Access<Initiator> for Message {
+    fn accessor(&self) -> Initiator {
         self.source_type.clone()
     }
 }
 
-impl Access<String> for Message {
-    fn accessor(&self) -> String {
-        self.node_name.clone()
+impl Access<NodeName> for Message {
+    fn accessor(&self) -> NodeName {
+        NodeName(self.node_name)
     }
 }
 

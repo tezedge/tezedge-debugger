@@ -5,52 +5,52 @@ use super::FilterField;
 /// Determines, if message belongs to communication originated
 /// from remote or local node
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
-pub enum SourceType {
+pub enum Sender {
     #[serde(rename = "local")]
     Local,
     #[serde(rename = "remote")]
     Remote,
 }
 
-impl SourceType {
-    pub fn is_local(&self) -> bool {
+impl Sender {
+    pub fn is_incoming(&self) -> bool {
         match self {
-            &SourceType::Local => true,
-            &SourceType::Remote => false,
+            &Sender::Local => false,
+            &Sender::Remote => true,
         }
     }
 }
 
-impl<Schema> FilterField<Schema> for SourceType
+impl<Schema> FilterField<Schema> for Sender
 where
     Schema: KeyValueSchema<Key = u64>,
 {
-    type Key = SourceTypeKey;
+    type Key = SenderKey;
 
     fn make_index(&self, primary_key: &<Schema as KeyValueSchema>::Key) -> Self::Key {
-        SourceTypeKey {
-            source_type: self.is_local(),
+        SenderKey {
+            is_incoming: self.is_incoming(),
             index: primary_key.clone(),
         }
     }
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct SourceTypeKey {
-    source_type: bool,
+#[derive(Debug, Clone)]
+pub struct SenderKey {
+    is_incoming: bool,
     index: u64,
 }
 
-/// * bytes layout: `[is_remote_requested(1)][padding(7)][index(8)]`
-impl Decoder for SourceTypeKey {
+/// * bytes layout: `[is_incoming(1)][padding(7)][index(8)]`
+impl Decoder for SenderKey {
     #[inline]
     fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
         if bytes.len() != 16 {
             return Err(SchemaError::DecodeError);
         }
 
-        Ok(SourceTypeKey {
-            source_type: match bytes[0] {
+        Ok(SenderKey {
+            is_incoming: match bytes[0] {
                 0 => false,
                 1 => true,
                 _ => return Err(SchemaError::DecodeError),
@@ -64,12 +64,12 @@ impl Decoder for SourceTypeKey {
     }
 }
 
-/// * bytes layout: `[is_remote_requested(1)][padding(7)][index(8)]`
-impl Encoder for SourceTypeKey {
+/// * bytes layout: `[is_incoming(1)][padding(7)][index(8)]`
+impl Encoder for SenderKey {
     #[inline]
     fn encode(&self) -> Result<Vec<u8>, SchemaError> {
         let mut buf = Vec::with_capacity(16);
-        buf.extend_from_slice(&[self.source_type as u8]); // is_remote_requested
+        buf.extend_from_slice(&[self.is_incoming as u8]); // is_incoming
         buf.extend_from_slice(&[0u8; 7]); // padding
         buf.extend_from_slice(&self.index.to_be_bytes()); // index
 

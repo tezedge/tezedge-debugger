@@ -26,13 +26,13 @@ mod tests {
         let rocksdb = Arc::new(open_kv("target/db_new", schemas, &DbConfiguration::default()).unwrap());
         let storage_new = P2pStore::new(&rocksdb);
         let mut message = p2p::Message::new(
-            "tezedge".to_string(),
+            3123,
             "127.0.0.1:12345".parse().unwrap(),
             false,
-            indices::SourceType::Local,
+            indices::Initiator::Local,
             vec![1, 2, 3],
             vec![1, 2, 3],
-            Err("foo".to_string()),
+            None,
         );
         storage_new.store_message(&mut message).unwrap();
         let messages = storage_new.get_cursor(None, 1, &p2p::Filters::default()).unwrap();

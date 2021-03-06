@@ -4,10 +4,13 @@ pub use self::remote_addr::RemoteAddrKey;
 mod p2p_type;
 pub use self::p2p_type::{P2pTypeKey, P2pType, ParseTypeError};
 
-mod incoming;
-pub use self::incoming::IncomingKey;
+mod sender;
+pub use self::sender::{SenderKey, Sender};
 
-mod source_type;
-pub use self::source_type::{SourceTypeKey, SourceType};
+mod initiator;
+pub use self::initiator::{InitiatorKey, Initiator};
+
+mod node_name;
+pub use self::node_name::{NodeNameKey, NodeName};
 
 use super::secondary_index::FilterField;
