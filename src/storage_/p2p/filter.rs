@@ -91,6 +91,7 @@ pub struct Filters {
     pub node_name: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct Indices {
     remote_addr_index: SecondaryIndex<Schema, RemoteAddrSchema, SocketAddr>,
     type_index: SecondaryIndex<Schema, P2pTypeSchema, P2pType>,
@@ -110,6 +111,15 @@ impl SecondaryIndices for Indices {
             incoming_index: SecondaryIndex::new(kv),
             source_type_index: SecondaryIndex::new(kv),
         }
+    }
+
+    fn schemas(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
+        vec![
+            RemoteAddrSchema::descriptor(cache),
+            P2pTypeSchema::descriptor(cache),
+            IncomingSchema::descriptor(cache),
+            SourceTypeSchema::descriptor(cache),
+        ]
     }
 
     fn store_indices(

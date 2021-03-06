@@ -2,20 +2,19 @@ use std::{
     sync::{Arc, atomic::{Ordering, AtomicU64}},
     marker::PhantomData,
 };
-use rocksdb::DB;
+use rocksdb::{Cache, ColumnFamilyDescriptor, DB};
 use storage::{
     Direction,
     IteratorMode,
     StorageError,
     persistent::{BincodeEncoded, KeyValueSchema, KeyValueStoreWithSchema},
 };
-use super::{db_message::DbMessage, secondary_index::SecondaryIndices};
+use super::secondary_index::SecondaryIndices;
 
 /// generic message store
-#[derive(Clone)]
 pub struct Store<Message, Schema, Indices>
 where
-    Message: DbMessage + BincodeEncoded,
+    Message: BincodeEncoded,
     Schema: KeyValueSchema<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema>,
 {
@@ -26,9 +25,26 @@ where
     phantom_data: PhantomData<(Message, Schema)>,
 }
 
+impl<Message, Schema, Indices> Clone for Store<Message, Schema, Indices>
+where
+    Message: BincodeEncoded,
+    Schema: KeyValueSchema<Key = u64, Value = Message>,
+    Indices: SecondaryIndices<PrimarySchema = Schema> + Clone,
+{
+    fn clone(&self) -> Self {
+        Store {
+            kv: self.kv.clone(),
+            count: self.count.clone(),
+            seq: self.seq.clone(),
+            indices: self.indices.clone(),
+            phantom_data: PhantomData,
+        }
+    }
+}
+
 impl<Message, Schema, Indices> Store<Message, Schema, Indices>
 where
-    Message: DbMessage + BincodeEncoded,
+    Message: BincodeEncoded,
     Schema: KeyValueSchema<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema>,
 {
@@ -40,6 +56,12 @@ where
             indices: Indices::new(kv),
             phantom_data: PhantomData,
         }
+    }
+
+    pub fn schemas(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
+        let mut r = Indices::schemas(cache);
+        r.push(Schema::descriptor(cache));
+        r
     }
 
     fn inner(&self) -> &impl KeyValueStoreWithSchema<Schema> {
@@ -57,36 +79,25 @@ where
         self.count.fetch_add(1, Ordering::SeqCst);
     }
 
-    // Create all indexes for given value
-    fn make_indices(&self, primary_index: &u64, value: &Message) -> Result<(), StorageError> {
-        self.indices.store_indices(primary_index, value)
-    }
-
-    // Put messages onto specific index
-    fn delete_indices(&self, primary_index: &u64, value: &Message) -> Result<(), StorageError> {
-        self.indices.delete_indices(primary_index, value)
-    }
-
     /// Create cursor into the database, allowing iteration over values matching given filters.
     /// Values are sorted by the index in descending order.
     /// * Arguments:
     /// - cursor_index: Index of start of the sequence (if no value provided, start at the end)
     /// - limit: Limit result to maximum of specified value
     /// - filters: Specified filters for values
-    pub fn store_message(&self, msg: &mut Message) -> Result<u64, StorageError> {
+    pub fn store_message(&self, msg: &Message) -> Result<u64, StorageError> {
         let index = self.reserve_index();
-        msg.set_id(index);
         self.inner().put(&index, msg)?;
-        self.make_indices(&index, msg)?;
+        self.indices.store_indices(&index, msg)?;
         self.inc_count();
         Ok(index)
     }
 
     /// Deletes the message and corresponding secondary indices.
-    pub fn delete_message(&self, id: u64) -> Result<(), StorageError> {
-        if let Some(value) = self.inner().get(&id)? {
-            self.delete_indices(&id, &value)?;
-            self.inner().delete(&id)?;
+    pub fn delete_message(&self, index: u64) -> Result<(), StorageError> {
+        if let Some(value) = self.inner().get(&index)? {
+            self.indices.delete_indices(&index, &value)?;
+            self.inner().delete(&index)?;
         }
         Ok(())
     }
@@ -96,8 +107,7 @@ where
     pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filter: Indices::Filter) -> Result<Vec<Message>, StorageError> {
         let cursor_index = cursor_index.unwrap_or(std::u64::MAX);
         let ret = if let Some(keys) = self.indices.filter_iterator(&cursor_index, limit, filter)? {
-            keys
-                .iter()
+            keys.iter()
                 .filter_map(move |index| {
                     match self.inner().get(&index) {
                         Ok(Some(value)) => {
@@ -113,22 +123,24 @@ where
                         },
                     }
                 })
-                .enumerate()
-                .map(|(id, mut item)| {
-                    item.set_ordinal_id(id as u64);
-                    item
-                })
                 .collect()
         } else {
             self.inner()
                 .iterator(IteratorMode::From(&cursor_index, Direction::Reverse))?
-                .filter_map(|(k, v)| { k.ok()?; v.ok() })
-                .take(limit)
-                .enumerate()
-                .map(|(id, mut item)| {
-                    item.set_ordinal_id(id as u64);
-                    item
+                .filter_map(|(k, v)| {
+                    match (k, v) {
+                        (Ok(_), Ok(v)) => Some(v),
+                        (Ok(index), Err(err)) => {
+                            tracing::warn!("Failed to load value at index {}: {}", index, err);
+                            None
+                        },
+                        (Err(err), _) => {
+                            tracing::warn!("Failed to load index: {}", err);
+                            None
+                        },
+                    }
                 })
+                .take(limit)
                 .collect()
         };
 

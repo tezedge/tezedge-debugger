@@ -2,7 +2,7 @@ mod remote_addr;
 pub use self::remote_addr::RemoteAddrKey;
 
 mod p2p_type;
-pub use self::p2p_type::{P2pTypeKey, P2pType};
+pub use self::p2p_type::{P2pTypeKey, P2pType, ParseTypeError};
 
 mod incoming;
 pub use self::incoming::IncomingKey;

@@ -2,7 +2,7 @@ use std::{
     sync::Arc,
     marker::PhantomData,
 };
-use rocksdb::DB;
+use rocksdb::{Cache, ColumnFamilyDescriptor, DB};
 use storage::{
     StorageError,
     persistent::{
@@ -25,7 +25,6 @@ where
 }
 
 /// generic secondary index store
-#[derive(Clone)]
 pub struct SecondaryIndex<PrimarySchema, Schema, Field>
 where
     PrimarySchema: KeyValueSchema,
@@ -34,6 +33,20 @@ where
 {
     kv: Arc<DB>,
     phantom_data: PhantomData<(PrimarySchema, Schema, Field)>,
+}
+
+impl<PrimarySchema, Schema, Field> Clone for SecondaryIndex<PrimarySchema, Schema, Field>
+where
+    PrimarySchema: KeyValueSchema,
+    Schema: KeyValueSchema<Key = Field::Key, Value = PrimarySchema::Key>,
+    Field: FilterField<PrimarySchema>,
+{
+    fn clone(&self) -> Self {
+        SecondaryIndex {
+            kv: self.kv.clone(),
+            phantom_data: PhantomData,
+        }
+    }
 }
 
 impl<PrimarySchema, Schema, Field> SecondaryIndex<PrimarySchema, Schema, Field>
@@ -85,6 +98,8 @@ pub trait SecondaryIndices {
     type Filter;
 
     fn new(kv: &Arc<DB>) -> Self;
+
+    fn schemas(cache: &Cache) -> Vec<ColumnFamilyDescriptor>;
 
     fn store_indices(
         &self,

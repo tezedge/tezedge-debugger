@@ -4,7 +4,7 @@ use super::{FilterField, Access};
 
 /// Determines, if message belongs to communication originated
 /// from remote or local node
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub enum SourceType {
     #[serde(rename = "local")]
     Local,
