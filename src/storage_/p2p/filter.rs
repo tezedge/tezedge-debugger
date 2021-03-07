@@ -102,11 +102,11 @@ impl KeyValueSchema for NodeNameSchema {
 /// Allowed filters for p2p message store
 #[derive(Debug, Default, Clone)]
 pub struct Filters {
-    pub remote_addr: Option<SocketAddr>,
-    pub types: Vec<P2pType>,
-    pub sender: Option<Sender>,
-    pub initiator: Option<Initiator>,
     pub node_name: Option<NodeName>,
+    pub remote_addr: Option<SocketAddr>,
+    pub initiator: Option<Initiator>,
+    pub sender: Option<Sender>,
+    pub types: Vec<P2pType>,
 }
 
 #[derive(Clone)]

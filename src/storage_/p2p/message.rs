@@ -17,8 +17,8 @@ pub struct Message {
     pub node_name: u16,
     pub timestamp: u128,
     pub remote_addr: SocketAddr,
-    pub incoming: bool,
     pub source_type: Initiator,
+    pub incoming: bool,
     pub original_bytes: Vec<u8>,
     // decrypted_bytes is the same as the original_bytes if it is ConnectionMessage
     // it is empty if decryption failed
@@ -32,8 +32,8 @@ impl Message {
     pub fn new(
         node_name: u16,
         remote_addr: SocketAddr,
-        incoming: bool,
         source_type: Initiator,
+        incoming: bool,
         original_bytes: Vec<u8>,
         decrypted_bytes: Vec<u8>,
         error: Option<String>,

@@ -1,5 +1,5 @@
 use std::{marker::PhantomData, sync::Arc};
-use rocksdb::{Cache, ColumnFamilyDescriptor, DB, DBIterator};
+use rocksdb::{Cache, ColumnFamilyDescriptor, DB, DBIterator, ReadOptions, IteratorMode, Direction};
 use storage::{StorageError, persistent::{DBError, KeyValueSchema, KeyValueStoreWithSchema, codec::Codec, Encoder, Decoder}};
 
 pub trait FilterField<PrimarySchema>
@@ -110,9 +110,11 @@ where
             .kv
             .cf_handle(Schema::name())
             .ok_or(DBError::MissingColumnFamily { name: Schema::name() })?;
+        let mut opts = ReadOptions::default();
+        opts.set_prefix_same_as_start(true);
 
         Ok(SecondaryIndexIterator {
-            inner: self.kv.prefix_iterator_cf(cf, key),
+            inner: self.kv.iterator_cf_opt(cf, opts, IteratorMode::From(&key, Direction::Reverse)),
             phantom_data: PhantomData,
         })
     }

@@ -16,6 +16,7 @@ path = "src/bin/debugger.rs"
 [dev-dependencies]
 ws = "0.9"
 url = "2.2"
+rand = "0.8"
 
 [dependencies]
 hex = "0.4"
