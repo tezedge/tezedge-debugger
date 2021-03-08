@@ -27,19 +27,21 @@ use super::{
 
 use crate::{
     system::NodeConfig,
-    messages::p2p_message::{
-        P2pMessage,
-        SourceType,
-        TezosPeerMessage,
-        PartialPeerMessage,
-        HandshakeMessage,
+    storage_::{
+        p2p::{
+            Message as P2pMessage,
+            TezosPeerMessage,
+            PartialPeerMessage,
+            HandshakeMessage,
+        },
+        indices::{Initiator, NodeName, Sender as InterceptedSender},
     },
 };
 
 pub struct Parser {
     pub identity: Identity,
     pub config: NodeConfig,
-    pub source_type: SourceType,
+    pub source_type: Initiator,
     pub remote_address: SocketAddr,
     pub id: SocketId,
     pub db: mpsc::UnboundedSender<P2pMessage>,
@@ -56,7 +58,7 @@ struct State {
 
 struct ErrorContext {
     is_incoming: bool,
-    source_type: SourceType,
+    source_type: Initiator,
     event_id: EventId,
     chunk_counter: usize,
 }
@@ -140,10 +142,10 @@ impl Parser {
             );
             let (result, sender, _) = state.conversation.add(Some(&self.identity), &packet);
             let ok = match (&sender, &self.source_type) {
-                (&Sender::Initiator, &SourceType::Local) => !incoming,
-                (&Sender::Initiator, &SourceType::Remote) => incoming,
-                (&Sender::Responder, &SourceType::Local) => incoming,
-                (&Sender::Responder, &SourceType::Remote) => !incoming,
+                (&Sender::Initiator, &Initiator::Local) => !incoming,
+                (&Sender::Initiator, &Initiator::Remote) => incoming,
+                (&Sender::Responder, &Initiator::Local) => incoming,
+                (&Sender::Responder, &Initiator::Remote) => !incoming,
             };
             if !ok {
                 tracing::debug!(
@@ -167,11 +169,11 @@ impl Parser {
                         })
                         .map(TezosPeerMessage::HandshakeMessage)
                         .map_err(|error| error.to_string());
-                    let p2p_msg = P2pMessage::new(
-                        self.config.p2p_port.clone(),
+                    let p2p_msg = P2pMessage::with_message(
+                        NodeName(self.config.p2p_port.clone()),
                         self.remote_address.clone(),
-                        incoming,
                         self.source_type,
+                        InterceptedSender::new(incoming),
                         chunk_info.data().to_vec(),
                         chunk_info.data().to_vec(),
                         message,
@@ -188,12 +190,12 @@ impl Parser {
                     for ChunkInfoPair { encrypted, decrypted } in regular {
                         let ec = self.error_context(&state, incoming, &event_id);
                         let message = state.process(decrypted.data(), ec, incoming);
-                        let p2p_msg = P2pMessage::new(
-                            self.config.p2p_port.clone(),
+                        let p2p_msg = P2pMessage::with_message(
+                            NodeName(self.config.p2p_port.clone()),
                             self.remote_address.clone(),
-                            incoming,
                             self.source_type,
-                            encrypted.data().to_vec(),
+                            InterceptedSender::new(incoming),
+                                encrypted.data().to_vec(),
                             decrypted.data().to_vec(),
                             message,
                         );
@@ -209,13 +211,13 @@ impl Parser {
                             tracing::error!(context = context, msg = "cannot decrypt");
                         }
                         let p2p_msg = P2pMessage::new(
-                            self.config.p2p_port.clone(),
+                            NodeName(self.config.p2p_port.clone()),
                             self.remote_address.clone(),
-                            incoming,
                             self.source_type,
-                            chunk.data().to_vec(),
+                            InterceptedSender::new(incoming),
+                                chunk.data().to_vec(),
                             vec![],
-                            Err("cannot decrypt".to_string()),
+                            Some("cannot decrypt".to_string()),
                         );
                         state.inc(incoming, false, chunk.data().len());
                         let error_context = self.error_context(&state, incoming, &event_id);

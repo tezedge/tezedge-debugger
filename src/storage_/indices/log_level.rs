@@ -24,7 +24,6 @@ pub enum ParseLogLevelError {
     InvalidValue(u8),
 }
 
-// TODO: produce Vec<LogLevel>
 impl TryFrom<u8> for LogLevel {
     type Error = ParseLogLevelError;
 

@@ -3,15 +3,12 @@ use tokio::{stream::StreamExt, sync::mpsc};
 use sniffer::{BpfModule, SnifferEvent, RingBufferData, EventId};
 
 use super::{p2p, reporter::Reporter, processor, DebuggerConfig, NodeConfig};
-use crate::{
-    messages::p2p_message::{P2pMessage, SourceType},
-    storage::MessageStore,
-};
+use crate::storage_::{P2pStore, p2p::Message as P2pMessage, indices::Initiator};
 
 pub struct Parser {
     module: Option<BpfModule>,
     config: DebuggerConfig,
-    storage: MessageStore,
+    storage: P2pStore,
     pid_to_config: HashMap<u32, NodeConfig>,
     counter: u64,
 }
@@ -22,7 +19,7 @@ enum Event {
 }
 
 impl Parser {
-    pub fn new(storage: &MessageStore, config: &DebuggerConfig) -> Self {
+    pub fn new(storage: &P2pStore, config: &DebuggerConfig) -> Self {
         Parser {
             module: None,
             config: config.clone(),
@@ -180,9 +177,9 @@ impl Parser {
         listened_on: Option<u32>,
     ) {
         let source_type = if listened_on.is_some() {
-            SourceType::Remote
+            Initiator::Remote
         } else {
-            SourceType::Local
+            Initiator::Local
         };
         let socket_id = id.socket_id.clone();
 

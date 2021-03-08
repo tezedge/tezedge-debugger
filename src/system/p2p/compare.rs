@@ -6,7 +6,7 @@
 use std::{fmt, string::ToString, ops::{Add, Sub, Range}};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize, ser, de};
-use crate::messages::p2p_message::FullPeerMessage;
+use crate::storage_::p2p::FullPeerMessage;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Peer {

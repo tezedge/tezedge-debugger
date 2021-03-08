@@ -1,33 +1,24 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-pub mod p2p;
-pub mod rpc;
-pub mod log;
-pub mod stat;
+mod p2p;
+mod log;
+#[allow(dead_code)]
+mod rpc;
+#[allow(dead_code)]
+mod stat;
 mod version;
 
-use warp::{
-    Filter, Reply,
-    reject::Rejection,
-    reply::with::header,
-};
-use crate::storage::MessageStore;
-use crate::system::Reporter;
-use crate::endpoints::p2p::{p2p, p2p_report};
-use crate::endpoints::rpc::rpc;
-use crate::endpoints::log::log;
-use crate::endpoints::stat::stat;
 use std::sync::{Arc, Mutex};
+use warp::{Filter, Reply, reject::Rejection, reply::with::header};
+use super::{storage_::{P2pStore, LogStore}, system::Reporter};
 
 /// Create router for consisting of all endpoint
-pub fn routes(storage: MessageStore, reporter: Arc<Mutex<Reporter>>) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone + Sync + Send + 'static {
+pub fn routes(p2p_db: P2pStore, log_db: LogStore, reporter: Arc<Mutex<Reporter>>) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone + Sync + Send + 'static {
     warp::get().and(
-        p2p(storage.clone())
-            .or(p2p_report(reporter))
-            .or(rpc(storage.clone()))
-            .or(log(storage.clone()))
-            .or(stat(storage.clone()))
+        self::p2p::p2p(p2p_db.clone())
+            .or(self::p2p::p2p_report(reporter))
+            .or(self::log::log(log_db.clone()))
             .or(self::version::api_call())
     )
         .with(header("Content-Type", "application/json"))

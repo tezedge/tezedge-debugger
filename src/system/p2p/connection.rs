@@ -6,13 +6,13 @@ use tokio::{
 use futures::future::Either;
 
 use super::{connection_parser::Parser, parser::{Command, Message}, report::ConnectionReport};
-use crate::messages::p2p_message::SourceType;
+use crate::storage_::indices::Initiator;
 
 pub struct Connection {
     state: ConnectionState,
     tx: mpsc::UnboundedSender<Either<Message, Command>>,
     handle: JoinHandle<ConnectionReport>,
-    source_type: SourceType,
+    source_type: Initiator,
     // it is possible we receive/send connection message in wrong order
     // do connect and receive the message and then send
     // or do accept and send the message and then receive

@@ -1,5 +1,5 @@
 mod message;
-pub use self::message::{Message, Schema};
+pub use self::message::{Message, Schema, TezosPeerMessage, PartialPeerMessage, FullPeerMessage, HandshakeMessage};
 
 mod filter;
 pub use self::filter::{Indices, Filters};

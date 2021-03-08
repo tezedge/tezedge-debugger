@@ -7,13 +7,12 @@ use tokio::{
     net::UdpSocket,
 };
 use crate::{
-    messages::log_message::LogMessage,
-    storage::MessageStore,
+    storage_::{LogStore, log, indices::NodeName},
     system::NodeConfig,
 };
 
 /// Spawn new Syslog UDP server, for processing syslogs.
-pub async fn syslog_producer(storage: &MessageStore, node: &NodeConfig) -> io::Result<()> {
+pub async fn syslog_producer(storage: &LogStore, node: &NodeConfig) -> io::Result<()> {
     // Create the server
     let syslog_port = node.syslog_port;
     let name = node.p2p_port.clone();
@@ -31,9 +30,9 @@ pub async fn syslog_producer(storage: &MessageStore, node: &NodeConfig) -> io::R
             // Syslog are textual format, all received datagrams must be valid strings.
             if let Ok(log) = std::str::from_utf8(&datagram) {
                 let msg = syslog_loose::parse_message(log);
-                let mut log_msg = LogMessage::from(msg);
-                log_msg.name = name.clone();
-                if let Err(err) = storage.log().store_message(&mut log_msg) {
+                let mut log_msg = log::Message::from(msg);
+                log_msg.node_name = NodeName(name.clone());
+                if let Err(err) = storage.store_message(&log_msg) {
                     error!(error = tracing::field::display(&err), "failed to store log");
                 }
             }

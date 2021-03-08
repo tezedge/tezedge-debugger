@@ -8,7 +8,7 @@ use tezos_conversation::Identity;
 use sniffer::{EventId, SocketId};
 
 use crate::{
-    messages::p2p_message::{SourceType, P2pMessage},
+    storage_::{p2p::Message as P2pMessage, indices::Initiator},
     system::NodeConfig,
 };
 use super::{
@@ -116,7 +116,7 @@ impl Parser {
         id: EventId,
         remote_address: SocketAddr,
         db: &mpsc::UnboundedSender<P2pMessage>,
-        source_type: SourceType,
+        source_type: Initiator,
     ) -> ProcessingConnectionResult {
         let have_identity = if let Some(identity) = self.try_load_identity(&config.identity_path) {
             let parser = connection_parser::Parser {

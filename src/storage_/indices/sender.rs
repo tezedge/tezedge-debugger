@@ -13,6 +13,14 @@ pub enum Sender {
 }
 
 impl Sender {
+    pub fn new(incoming: bool) -> Self {
+        if incoming {
+            Self::Remote
+        } else {
+            Self::Local
+        }
+    }
+    
     pub fn is_incoming(&self) -> bool {
         match self {
             &Sender::Local => false,

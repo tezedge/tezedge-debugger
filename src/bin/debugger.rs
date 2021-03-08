@@ -3,22 +3,24 @@
 
 use std::{fs, io::Read, path::Path, process::exit, sync::Arc};
 use tracing::{info, error, Level};
+use rocksdb::Cache;
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::{
     system::{DebuggerConfig, syslog_producer::syslog_producer, Parser},
     endpoints::routes,
-    storage::{MessageStore, cfs},
+    storage_::{P2pStore, LogStore},
 };
 
 /// Create new message store, from well defined path
-fn open_database(config: &DebuggerConfig) -> Result<MessageStore, failure::Error> {
+fn open_database(config: &DebuggerConfig) -> Result<(P2pStore, LogStore), failure::Error> {
     let path = Path::new(&config.db_path);
     if path.exists() && !config.keep_db {
         fs::remove_dir_all(path).unwrap();
     }
-    let schemas = cfs();
-    let rocksdb = Arc::new(open_kv(path, schemas, &DbConfiguration::default())?);
-    Ok(MessageStore::new(rocksdb))
+    let cache = Cache::new_lru_cache(1)?;
+    let schemas = P2pStore::schemas(&cache);
+    let rocksdb = Arc::new(open_kv(&path, schemas, &DbConfiguration::default())?);
+    Ok((P2pStore::new(&rocksdb), LogStore::new(&rocksdb)))
 }
 
 fn load_config() -> Result<DebuggerConfig, failure::Error> {
@@ -45,7 +47,7 @@ async fn main() -> Result<(), failure::Error> {
     };
 
     // Initialize storage for messages
-    let storage = match open_database(&config) {
+    let (p2p_db, log_db) = match open_database(&config) {
         Ok(storage) => storage,
         Err(err) => {
             error!(error = tracing::field::display(&err), "failed to open database");
@@ -55,17 +57,17 @@ async fn main() -> Result<(), failure::Error> {
 
     // Create syslog server for each node to capture logs from docker / syslogs
     for node_config in &config.nodes {
-        if let Err(err) = syslog_producer(&storage, node_config).await {
+        if let Err(err) = syslog_producer(&log_db, node_config).await {
             error!(error = tracing::field::display(&err), "failed to build syslog server");
             exit(1);
         }
     }
 
     // Create and spawn bpf sniffing system
-    let reporter = Parser::new(&storage, &config).spawn();
+    let reporter = Parser::new(&p2p_db, &config).spawn();
 
     // Spawn warp RPC server
-    tokio::spawn(warp::serve(routes(storage, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
+    tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
 
     // Wait for SIGTERM signal
     if let Err(err) = tokio::signal::ctrl_c().await {

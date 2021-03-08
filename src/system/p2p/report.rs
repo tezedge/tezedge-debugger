@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Serialize, Deserialize};
 use super::compare::PeerMetadata;
-use crate::messages::p2p_message::SourceType;
+use crate::storage_::indices::Initiator;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Report {
@@ -33,7 +33,7 @@ impl Report {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionReport {
     pub remote_address: String,
-    pub source_type: SourceType,
+    pub source_type: Initiator,
     pub peer_id: Option<String>,
     pub sent_bytes: u128,
     pub received_bytes: u128,

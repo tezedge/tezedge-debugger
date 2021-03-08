@@ -50,6 +50,32 @@ impl Message {
             message: None,
         }
     }
+
+    pub fn with_message(
+        node_name: NodeName,
+        remote_addr: SocketAddr,
+        source_type: Initiator,
+        sender: Sender,
+        original_bytes: Vec<u8>,
+        decrypted_bytes: Vec<u8>,
+        message: Result<TezosPeerMessage, String>,
+    ) -> Self {
+        let (message, error) = match message {
+            Ok(message) => (Some(message), None),
+            Err(error) => (None, Some(error)),
+        };
+        Message {
+            node_name,
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos(),
+            source_type,
+            remote_addr,
+            sender,
+            original_bytes,
+            decrypted_bytes,
+            error,
+            message,
+        }
+    }
 }
 
 /// Detailed representation of peer messages mapped from

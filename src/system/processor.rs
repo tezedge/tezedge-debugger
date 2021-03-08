@@ -7,8 +7,7 @@ use tokio::sync::mpsc::{
 };
 use async_trait::async_trait;
 use crate::system::DebuggerConfig;
-use crate::messages::p2p_message::P2pMessage;
-use crate::storage::MessageStore;
+use crate::storage_::{P2pStore, p2p::Message as P2pMessage};
 
 type ProcessorTrait = dyn Processor + Sync + Send + 'static;
 
@@ -20,7 +19,7 @@ pub trait Processor {
 }
 
 /// Spawn new primary processor, returning channel to send the messages
-pub fn spawn_processor(storage: MessageStore, config: DebuggerConfig) -> UnboundedSender<P2pMessage> {
+pub fn spawn_processor(storage: P2pStore, config: DebuggerConfig) -> UnboundedSender<P2pMessage> {
     let (sender, mut receiver) = unbounded_channel::<P2pMessage>();
 
     tokio::spawn(async move {
@@ -44,14 +43,14 @@ pub fn spawn_processor(storage: MessageStore, config: DebuggerConfig) -> Unbound
 
 /// Database processor, which stores all received messages
 struct DatabaseProcessor {
-    store: MessageStore,
+    store: P2pStore,
     sender: UnboundedSender<P2pMessage>,
     max_message_number: u64,
 }
 
 impl DatabaseProcessor {
     /// Create new processor on top of the given message store
-    pub fn new(store: MessageStore, max_message_number: u64) -> Self {
+    pub fn new(store: P2pStore, max_message_number: u64) -> Self {
         let ret = Self {
             sender: Self::start_database_task(store.clone(), max_message_number),
             store,
@@ -62,16 +61,16 @@ impl DatabaseProcessor {
     }
 
     /// Start the processing task
-    fn start_database_task(store: MessageStore, max_message_number: u64) -> UnboundedSender<P2pMessage> {
+    fn start_database_task(store: P2pStore, max_message_number: u64) -> UnboundedSender<P2pMessage> {
         let (sender, mut receiver) = unbounded_channel::<P2pMessage>();
         tokio::spawn(async move {
             loop {
                 if let Some(mut msg) = receiver.recv().await {
-                    match store.p2p().store_message(&mut msg) {
+                    match store.store_message(&mut msg) {
                         Ok(id) => {
                             trace!(id, "stored new message");
                             if id >= max_message_number {
-                                match store.p2p().delete_message(id - max_message_number) {
+                                match store.delete_message(id - max_message_number) {
                                     Ok(()) => trace!(id, "removed old message"),
                                     Err(err) => error!(error = tracing::field::display(&err), "failed to remove message"),
                                 }
