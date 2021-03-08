@@ -5,7 +5,7 @@ use crate::storage::secondary_index::SecondaryIndex;
 use serde::{Serialize, Deserialize};
 
 pub trait HasNodeName {
-    fn node_name(&self) -> String;
+    fn node_name(&self) -> u16;
 }
 
 type NodeNameIndexKV = dyn KeyValueStoreWithSchema<NodeNameIndex> + Sync + Send;
@@ -48,7 +48,7 @@ where
     PrimaryStoreSchema: KeyValueSchema<Key=<Self as KeyValueSchema>::Value>,
     PrimaryStoreSchema::Value: HasNodeName,
 {
-    type FieldType = String;
+    type FieldType = u16;
 
     fn accessor(value: &PrimaryStoreSchema::Value) -> Option<Self::FieldType> {
         Some(value.node_name())
@@ -65,33 +65,33 @@ where
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeNameKey {
-    node_name: String,
+    node_name: u16,
     index: u64,
 }
 
 impl NodeNameKey {
-    fn new(node_name: String, index: u64) -> Self {
+    fn new(node_name: u16, index: u64) -> Self {
         Self { node_name, index: std::u64::MAX.saturating_sub(index) }
     }
 
-    fn prefix(node_name: String) -> Self {
+    fn prefix(node_name: u16) -> Self {
         Self { node_name, index: 0 }
     }
 }
 
-/// * bytes layout: `[node_name(8)][index(8)]`
+/// * bytes layout: `[node_name(2)][padding(6)][index(8)]`
 impl Decoder for NodeNameKey {
     fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
         if bytes.len() != 16 {
             return Err(SchemaError::DecodeError);
         }
 
-        let node_name = String::from_utf8(bytes[0..8].to_vec())
-            .map_err(|_| SchemaError::DecodeError)?;
+        let mut node_name_bytes = [0; 2];
+        node_name_bytes.clone_from_slice(&bytes[0..2]);
         let mut index_bytes = [0; 8];
         index_bytes.clone_from_slice(&bytes[8..16]);
         Ok(NodeNameKey {
-            node_name,
+            node_name: u16::from_be_bytes(node_name_bytes),
             index: u64::from_be_bytes(index_bytes),
         })
     }
@@ -99,11 +99,8 @@ impl Decoder for NodeNameKey {
 
 impl Encoder for NodeNameKey {
     fn encode(&self) -> Result<Vec<u8>, SchemaError> {
-        let node_name_bytes = self.node_name.as_bytes();
-        let end = usize::min(node_name_bytes.len(), 8);
-
         let mut bytes = vec![0; 16];
-        bytes[0..end].clone_from_slice(&node_name_bytes[0..end]);
+        bytes[0..2].clone_from_slice(&self.node_name.to_be_bytes());
         bytes[8..16].clone_from_slice(&self.index.to_be_bytes());
         Ok(bytes)
     }

@@ -38,7 +38,7 @@ impl SourceType {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 /// P2PMessage as stored in the database
 pub struct P2pMessage {
-    pub node_name: String,
+    pub node_name: u16,
     pub id: Option<u64>,
     pub timestamp: u128,
     pub remote_addr: SocketAddr,
@@ -55,7 +55,7 @@ pub struct P2pMessage {
 }
 
 impl HasNodeName for P2pMessage {
-    fn node_name(&self) -> String {
+    fn node_name(&self) -> u16 {
         self.node_name.clone()
     }
 }
@@ -82,7 +82,7 @@ impl P2pMessage {
 
     /// Make new P2pMessage from parts
     pub fn new(
-        node_name: String,
+        node_name: u16,
         remote_addr: SocketAddr,
         incoming: bool,
         source_type: SourceType,

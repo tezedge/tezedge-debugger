@@ -13,10 +13,19 @@ edition = "2018"
 name = "tezedge-debugger"
 path = "src/bin/debugger.rs"
 
+[[bench]]
+name = "database"
+harness = false
+
+[[bench]]
+name = "database_old"
+harness = false
+
 [dev-dependencies]
 ws = "0.9"
 url = "2.2"
 rand = "0.8"
+criterion = "0.3"
 
 [dependencies]
 hex = "0.4"

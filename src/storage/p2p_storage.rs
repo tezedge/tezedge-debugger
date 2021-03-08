@@ -26,7 +26,7 @@ pub struct P2pFilters {
     pub request_id: Option<u64>,
     pub incoming: Option<bool>,
     pub source_type: Option<bool>,
-    pub node_name: Option<String>,
+    pub node_name: Option<u16>,
 }
 
 impl P2pFilters {
@@ -214,7 +214,7 @@ impl P2pStore {
             })))
     }
 
-    pub fn node_name_iterator<'a>(&'a self, cursor_index: Option<u64>, node_name: String) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+    pub fn node_name_iterator<'a>(&'a self, cursor_index: Option<u64>, node_name: u16) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(SecondaryIndex::<Self>::get_concrete_prefix_iterator(&self.node_name_index, &cursor_index.unwrap_or(std::u64::MAX), node_name)?
             .filter_map(|(_, value)| {
                 value.ok()

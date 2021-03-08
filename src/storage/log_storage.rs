@@ -22,7 +22,7 @@ pub type LogStorageKV = dyn KeyValueStoreWithSchema<LogStore> + Sync + Send;
 pub struct LogFilters {
     pub level: Vec<LogLevel>,
     pub date: Option<u128>,
-    pub node_name: Option<String>,
+    pub node_name: Option<u16>,
 }
 
 impl LogFilters {
@@ -168,7 +168,7 @@ impl LogStore {
             })))
     }
 
-    pub fn node_name_iterator<'a>(&'a self, cursor_index: Option<u64>, node_name: String) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+    pub fn node_name_iterator<'a>(&'a self, cursor_index: Option<u64>, node_name: u16) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         Ok(Box::new(SecondaryIndex::<Self>::get_concrete_prefix_iterator(&self.node_name_index, &cursor_index.unwrap_or(std::u64::MAX), node_name)?
             .filter_map(|(_, value)| {
                 value.ok()

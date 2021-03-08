@@ -16,7 +16,7 @@ use crate::{
 pub async fn syslog_producer(storage: &MessageStore, node: &NodeConfig) -> io::Result<()> {
     // Create the server
     let syslog_port = node.syslog_port;
-    let name = node.name.clone();
+    let name = node.p2p_port.clone();
     let storage = storage.clone();
     let mut socket = UdpSocket::bind(("0.0.0.0", syslog_port)).await?;
     info!(port = syslog_port, "started listening for syslog");

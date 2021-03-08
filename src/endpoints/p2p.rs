@@ -33,7 +33,7 @@ pub struct P2pCursor {
     request_id: Option<u64>,
     incoming: Option<bool>,
     source_type: Option<SourceType>,
-    node_name: Option<String>,
+    node_name: Option<u16>,
 }
 
 impl P2pCursor {

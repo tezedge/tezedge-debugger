@@ -10,7 +10,7 @@ use crate::storage::HasNodeName;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// Received logs saved in the database
 pub struct LogMessage {
-    pub name: String,
+    pub name: u16,
     pub level: String,
     #[serde(alias = "timestamp", alias = "time", rename(serialize = "timestamp"))]
     pub date: u128,
@@ -25,7 +25,7 @@ pub struct LogMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// Received logs saved in the database
 pub struct LogMessageWithId {
-    pub name: String,
+    pub name: u16,
     pub level: String,
     #[serde(alias = "timestamp", alias = "time", rename(serialize = "timestamp"))]
     pub date: u128,
@@ -40,7 +40,7 @@ pub struct LogMessageWithId {
 
 impl LogMessage {
     /// Create new log from undefined raw string
-    pub fn raw(line: String, name: String) -> Self {
+    pub fn raw(line: String, name: u16) -> Self {
         Self {
             name,
             level: "fatal".to_string(),
@@ -108,7 +108,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
         if pos == 15 {
             if let Some((level, message)) = Self::rust_log_line(line) {
                 Self {
-                    name: String::new(),
+                    name: 0,
                     date,
                     level: level.to_string(),
                     message: message.to_string(),
@@ -117,7 +117,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                 }
             } else {
                 Self {
-                    name: String::new(),
+                    name: 0,
                     date,
                     level: "fatal".to_string(),
                     section: "".to_string(),
@@ -128,7 +128,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
         } else {
             if let Some((level, message)) = Self::ocaml_log_line(line) {
                 Self {
-                    name: String::new(),
+                    name: 0,
                     date,
                     level: level.to_string(),
                     message: message.to_string(),
@@ -137,7 +137,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                 }
             } else {
                 Self {
-                    name: String::new(),
+                    name: 0,
                     date,
                     level: "fatal".to_string(),
                     section: "".to_string(),
@@ -150,7 +150,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
 }
 
 impl HasNodeName for LogMessage {
-    fn node_name(&self) -> String {
+    fn node_name(&self) -> u16 {
         self.name.clone()
     }
 }

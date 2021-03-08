@@ -19,7 +19,7 @@ pub struct LogCursor {
     pub limit: Option<usize>,
     pub level: Option<String>,
     pub timestamp: Option<String>,
-    pub node_name: Option<String>,
+    pub node_name: Option<u16>,
 }
 
 impl LogCursor {

@@ -168,7 +168,7 @@ impl Parser {
                         .map(TezosPeerMessage::HandshakeMessage)
                         .map_err(|error| error.to_string());
                     let p2p_msg = P2pMessage::new(
-                        self.config.name.clone(),
+                        self.config.p2p_port.clone(),
                         self.remote_address.clone(),
                         incoming,
                         self.source_type,
@@ -189,7 +189,7 @@ impl Parser {
                         let ec = self.error_context(&state, incoming, &event_id);
                         let message = state.process(decrypted.data(), ec, incoming);
                         let p2p_msg = P2pMessage::new(
-                            self.config.name.clone(),
+                            self.config.p2p_port.clone(),
                             self.remote_address.clone(),
                             incoming,
                             self.source_type,
@@ -209,7 +209,7 @@ impl Parser {
                             tracing::error!(context = context, msg = "cannot decrypt");
                         }
                         let p2p_msg = P2pMessage::new(
-                            self.config.name.clone(),
+                            self.config.p2p_port.clone(),
                             self.remote_address.clone(),
                             incoming,
                             self.source_type,
