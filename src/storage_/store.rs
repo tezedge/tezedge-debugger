@@ -58,10 +58,10 @@ where
         }
     }
 
-    pub fn schemas(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
-        let mut r = Indices::schemas(cache);
-        r.push(Schema::descriptor(cache));
-        r
+    pub fn schemas(cache: &Cache) -> impl Iterator<Item = ColumnFamilyDescriptor> {
+        use std::iter;
+
+        Indices::schemas(cache).into_iter().chain(iter::once(Schema::descriptor(cache)))
     }
 
     fn inner(&self) -> &impl KeyValueStoreWithSchema<Schema> {

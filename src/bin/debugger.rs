@@ -15,10 +15,10 @@ use tezedge_debugger::{
 fn open_database(config: &DebuggerConfig) -> Result<(P2pStore, LogStore), failure::Error> {
     let path = Path::new(&config.db_path);
     if path.exists() && !config.keep_db {
-        fs::remove_dir_all(path).unwrap();
+        let _ = fs::remove_dir_all(path);
     }
     let cache = Cache::new_lru_cache(1)?;
-    let schemas = P2pStore::schemas(&cache);
+    let schemas = P2pStore::schemas(&cache).chain(LogStore::schemas(&cache));
     let rocksdb = Arc::new(open_kv(&path, schemas, &DbConfiguration::default())?);
     Ok((P2pStore::new(&rocksdb), LogStore::new(&rocksdb)))
 }
