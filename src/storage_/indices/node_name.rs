@@ -1,7 +1,8 @@
 use storage::persistent::{KeyValueSchema, Decoder, SchemaError, Encoder};
+use serde::{Serialize, Deserialize};
 use super::FilterField;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeName(pub u16);
 
 impl<Schema> FilterField<Schema> for NodeName

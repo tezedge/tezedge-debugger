@@ -5,7 +5,7 @@ use super::{
     message::Schema,
     SecondaryIndex,
     SecondaryIndices,
-    indices::{NodeNameKey, NodeName},
+    indices::{NodeNameKey, NodeName, LogLevelKey, LogLevel, TimestampKey},
     sorted_intersect::sorted_intersect,
 };
 
@@ -27,15 +27,55 @@ impl KeyValueSchema for NodeNameSchema {
     }
 }
 
+struct LogLevelSchema;
+
+impl KeyValueSchema for LogLevelSchema {
+    type Key = LogLevelKey;
+    type Value = u64;
+
+    fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
+        let mut cf_opts = Options::default();
+        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(mem::size_of::<u8>()));
+        cf_opts.set_memtable_prefix_bloom_ratio(0.2);
+        ColumnFamilyDescriptor::new(Self::name(), cf_opts)
+    }
+
+    fn name() -> &'static str {
+        "log_level_index"
+    }
+}
+
+struct LogTimestampSchema;
+
+impl KeyValueSchema for LogTimestampSchema {
+    type Key = TimestampKey;
+    type Value = u64;
+
+    fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
+        let mut cf_opts = Options::default();
+        cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(mem::size_of::<u128>()));
+        cf_opts.set_memtable_prefix_bloom_ratio(0.2);
+        ColumnFamilyDescriptor::new(Self::name(), cf_opts)
+    }
+
+    fn name() -> &'static str {
+        "log_timestamp_index"
+    }
+}
+
 /// Allowed filters for log message store
 #[derive(Debug, Default, Clone)]
 pub struct Filters {
     pub node_name: Option<NodeName>,
+    pub log_level: Vec<LogLevel>,
+    pub date: Option<u128>,
 }
 
 #[derive(Clone)]
 pub struct Indices {
     node_name_index: SecondaryIndex<Schema, NodeNameSchema, NodeName>,
+    log_level_index: SecondaryIndex<Schema, LogLevelSchema, LogLevel>,
+    timestamp_index: SecondaryIndex<Schema, LogTimestampSchema, u128>,
 }
 
 impl SecondaryIndices for Indices {
@@ -45,12 +85,16 @@ impl SecondaryIndices for Indices {
     fn new(kv: &Arc<DB>) -> Self {
         Indices {
             node_name_index: SecondaryIndex::new(kv),
+            log_level_index: SecondaryIndex::new(kv),
+            timestamp_index: SecondaryIndex::new(kv),
         }
     }
 
     fn schemas(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
         vec![
             NodeNameSchema::descriptor(cache),
+            LogLevelSchema::descriptor(cache),
+            LogTimestampSchema::descriptor(cache),
         ]
     }
 
@@ -60,6 +104,8 @@ impl SecondaryIndices for Indices {
         value: &<Self::PrimarySchema as KeyValueSchema>::Value,
     ) -> Result<(), StorageError> {
         self.node_name_index.store_index(primary_key, value)?;
+        self.log_level_index.store_index(primary_key, value)?;
+        self.timestamp_index.store_index(primary_key, value)?;
         Ok(())
     }
 
@@ -69,6 +115,8 @@ impl SecondaryIndices for Indices {
         value: &<Self::PrimarySchema as KeyValueSchema>::Value,
     ) -> Result<(), StorageError> {
         self.node_name_index.delete_index(primary_key, value)?;
+        self.log_level_index.delete_index(primary_key, value)?;
+        self.timestamp_index.delete_index(primary_key, value)?;
         Ok(())
     }
 
@@ -78,11 +126,36 @@ impl SecondaryIndices for Indices {
         limit: usize,
         filter: &Self::Filter,
     ) -> Result<Option<Vec<<Self::PrimarySchema as KeyValueSchema>::Key>>, StorageError> {
-        let mut iters = Vec::with_capacity(1);
+        use itertools::Itertools;
+
+        let mut iters: Vec<Box<dyn Iterator<Item = <Self::PrimarySchema as KeyValueSchema>::Key>>> = Vec::with_capacity(3);
 
         if let Some(node_name) = &filter.node_name {
             let it = self.node_name_index.get_concrete_prefix_iterator(primary_key, node_name)?;
-            iters.push(it);
+            iters.push(Box::new(it));
+        }
+        if !filter.log_level.is_empty() {
+            let mut error = None::<StorageError>;
+            let level_iters = filter.log_level
+                .iter()
+                .filter_map(|p2p_type| {
+                    match self.log_level_index.get_concrete_prefix_iterator(primary_key, p2p_type) {
+                        Ok(i) => Some(i),
+                        Err(err) => {
+                            error = Some(err);
+                            None
+                        },
+                    }
+                });
+            iters.push(Box::new(level_iters.kmerge_by(|x, y| x > y)));
+            if error.is_some() {
+                drop(iters);
+                return Err(error.unwrap());
+            }
+        }
+        if let Some(timestamp) = &filter.date {
+            let it = self.timestamp_index.get_iterator(primary_key, timestamp)?;
+            iters.push(Box::new(it));
         }
 
         if iters.is_empty() {

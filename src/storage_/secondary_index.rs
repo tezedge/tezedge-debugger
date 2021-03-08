@@ -118,6 +118,27 @@ where
             phantom_data: PhantomData,
         })
     }
+
+    pub fn get_iterator<'a, 'b>(
+        &'a self,
+        primary_key: &PrimarySchema::Key,
+        field: &Field,
+    ) -> Result<SecondaryIndexIterator<'b, PrimarySchema>, StorageError>
+    where
+        'a: 'b,
+    {
+        let key = field.make_index(primary_key);
+        let key = key.encode()?;
+        let cf = self
+            .kv
+            .cf_handle(Schema::name())
+            .ok_or(DBError::MissingColumnFamily { name: Schema::name() })?;
+
+        Ok(SecondaryIndexIterator {
+            inner: self.kv.iterator_cf(cf, IteratorMode::From(&key, Direction::Reverse)),
+            phantom_data: PhantomData,
+        })
+    }
 }
 
 pub trait SecondaryIndices {

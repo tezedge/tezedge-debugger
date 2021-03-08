@@ -14,11 +14,11 @@ use super::{Access, indices::{P2pType, Initiator, Sender, NodeName}};
 /// P2PMessage as stored in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
-    pub node_name: u16,
+    pub node_name: NodeName,
     pub timestamp: u128,
     pub remote_addr: SocketAddr,
     pub source_type: Initiator,
-    pub incoming: bool,
+    pub sender: Sender,
     pub original_bytes: Vec<u8>,
     // decrypted_bytes is the same as the original_bytes if it is ConnectionMessage
     // it is empty if decryption failed
@@ -30,10 +30,10 @@ pub struct Message {
 impl Message {
     /// Make new P2pMessage from parts
     pub fn new(
-        node_name: u16,
+        node_name: NodeName,
         remote_addr: SocketAddr,
         source_type: Initiator,
-        incoming: bool,
+        sender: Sender,
         original_bytes: Vec<u8>,
         decrypted_bytes: Vec<u8>,
         error: Option<String>,
@@ -43,7 +43,7 @@ impl Message {
             timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos(),
             source_type,
             remote_addr,
-            incoming,
+            sender,
             original_bytes,
             decrypted_bytes,
             error,
@@ -251,11 +251,7 @@ impl Access<P2pType> for Message {
 
 impl Access<Sender> for Message {
     fn accessor(&self) -> Sender {
-        if self.incoming {
-            Sender::Remote
-        } else {
-            Sender::Local
-        }
+        self.sender.clone()
     }
 }
 
@@ -267,7 +263,7 @@ impl Access<Initiator> for Message {
 
 impl Access<NodeName> for Message {
     fn accessor(&self) -> NodeName {
-        NodeName(self.node_name)
+        self.node_name.clone()
     }
 }
 

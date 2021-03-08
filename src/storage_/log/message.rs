@@ -1,13 +1,13 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{time::{SystemTime, UNIX_EPOCH}, str::FromStr};
 use serde::{Serialize, Deserialize};
 use storage::persistent::{KeyValueSchema, BincodeEncoded};
-use super::{Access, indices::NodeName};
+use super::{Access, indices::{NodeName, LogLevel}};
 
 /// Received logs saved in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
-    pub node_name: u16,
-    pub level: String,
+    pub node_name: NodeName,
+    pub level: LogLevel,
     #[serde(alias = "timestamp", alias = "time", rename(serialize = "timestamp"))]
     pub date: u128,
     #[serde(alias = "module")]
@@ -22,10 +22,10 @@ fn get_ts() -> u128 {
 
 impl Message {
     /// Create new log from undefined raw string
-    pub fn raw(line: String, node_name: u16) -> Self {
+    pub fn raw(line: String, node_name: NodeName) -> Self {
         Message {
             node_name,
-            level: "fatal".to_string(),
+            level: LogLevel::Fatal,
             date: get_ts(),
             section: "".to_string(),
             message: line,
@@ -64,6 +64,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
     /// Create LogMessage from received syslog message
     /// Syslog messages are of format:
     /// <27>1 2020-06-24T10:32:37.026683+02:00 Ubuntu-1910-eoan-64-minimal 451e91e7df18 1482 451e91e7df18 - Jun 24 08:32:37.026 INFO Blacklisting IP because peer failed at bootstrap process, ip: 104.248.136.94
+    // TODO: handle error
     fn from(msg: syslog_loose::Message<S>) -> Self {
         let date = msg.timestamp
             .map(|dt| dt.timestamp_nanos() as u128)
@@ -74,17 +75,17 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
         if pos == 15 {
             if let Some((level, message)) = Self::rust_log_line(line) {
                 Message {
-                    node_name: 0,
+                    node_name: NodeName(0),
                     date,
-                    level: level.to_string(),
+                    level: LogLevel::from_str(level).unwrap_or(LogLevel::Fatal),
                     message: message.to_string(),
                     section: "".to_string(),
                 }
             } else {
                 Message {
-                    node_name: 0,
+                    node_name: NodeName(0),
                     date,
-                    level: "fatal".to_string(),
+                    level: LogLevel::Fatal,
                     section: "".to_string(),
                     message: line.to_string(),
                 }
@@ -92,17 +93,17 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
         } else {
             if let Some((level, message)) = Self::ocaml_log_line(line) {
                 Message {
-                    node_name: 0,
+                    node_name: NodeName(0),
                     date,
-                    level: level.to_string(),
+                    level: LogLevel::from_str(level).unwrap_or(LogLevel::Fatal),
                     message: message.to_string(),
                     section: "".to_string(),
                 }
             } else {
                 Message {
-                    node_name: 0,
+                    node_name: NodeName(0),
                     date,
-                    level: "fatal".to_string(),
+                    level: LogLevel::Fatal,
                     section: "".to_string(),
                     message: line.to_string(),
                 }
@@ -113,7 +114,19 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
 
 impl Access<NodeName> for Message {
     fn accessor(&self) -> NodeName {
-        NodeName(self.node_name)
+        self.node_name.clone()
+    }
+}
+
+impl Access<LogLevel> for Message {
+    fn accessor(&self) -> LogLevel {
+        self.level.clone()
+    }
+}
+
+impl Access<u128> for Message {
+    fn accessor(&self) -> u128 {
+        self.date
     }
 }
 

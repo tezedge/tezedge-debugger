@@ -22,6 +22,7 @@ fn prepare_p2p(db: &P2pStore) {
     for node_name in names {
         for port in ports.clone() {
             let initiator_local = ((node_name % 13) + (port % 17)) % 11 != 0;
+            let node_name = indices::NodeName(node_name);
             let source_type = if initiator_local {
                 indices::Initiator::Local
             } else {
@@ -33,10 +34,10 @@ fn prepare_p2p(db: &P2pStore) {
             for i in 0..128 {
                 let bytes = iter::repeat(0).map(|_| rand::random()).take(128).collect::<Vec<u8>>();
                 let message = p2p::Message::new(
-                    node_name,
+                    node_name.clone(),
                     remote_addr.clone(),
                     source_type.clone(),
-                    i % 2 == 0,
+                    if i % 2 == 0 { indices::Sender::Remote } else { indices::Sender::Local },
                     bytes.clone(),
                     bytes,
                     None,

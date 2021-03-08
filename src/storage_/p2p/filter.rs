@@ -174,28 +174,44 @@ impl SecondaryIndices for Indices {
         limit: usize,
         filter: &Self::Filter,
     ) -> Result<Option<Vec<<Self::PrimarySchema as KeyValueSchema>::Key>>, StorageError> {
-        let mut iters = Vec::with_capacity(filter.types.len() + 4);
+        use itertools::Itertools;
+
+        let mut iters: Vec<Box<dyn Iterator<Item = <Self::PrimarySchema as KeyValueSchema>::Key>>> = Vec::with_capacity(5);
 
         if let Some(remote_addr) = &filter.remote_addr {
             let it = self.remote_addr_index.get_concrete_prefix_iterator(primary_key, remote_addr)?;
-            iters.push(it);
+            iters.push(Box::new(it));
         }
-        // TODO: fix using itertools
-        //for p2p_type in &filter.types {
-        //    let it = self.type_index.get_concrete_prefix_iterator(primary_key, p2p_type)?;
-        //    iters.push(it);
-        //}
+        if !filter.types.is_empty() {
+            let mut error = None::<StorageError>;
+            let type_iters = filter.types
+                .iter()
+                .filter_map(|p2p_type| {
+                    match self.type_index.get_concrete_prefix_iterator(primary_key, p2p_type) {
+                        Ok(i) => Some(i),
+                        Err(err) => {
+                            error = Some(err);
+                            None
+                        },
+                    }
+                });
+            iters.push(Box::new(type_iters.kmerge_by(|x, y| x > y)));
+            if error.is_some() {
+                drop(iters);
+                return Err(error.unwrap());
+            }
+        }
         if let Some(sender) = &filter.sender {
             let it = self.incoming_index.get_concrete_prefix_iterator(primary_key, &sender)?;
-            iters.push(it);
+            iters.push(Box::new(it));
         }
         if let Some(initiator) = &filter.initiator {
             let it = self.source_type_index.get_concrete_prefix_iterator(primary_key, initiator)?;
-            iters.push(it);
+            iters.push(Box::new(it));
         }
         if let Some(node_name) = &filter.node_name {
             let it = self.node_name_index.get_concrete_prefix_iterator(primary_key, node_name)?;
-            iters.push(it);
+            iters.push(Box::new(it));
         }
 
         if iters.is_empty() {
