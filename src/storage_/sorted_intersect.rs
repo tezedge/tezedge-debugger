@@ -9,6 +9,48 @@
 /// Sorted intersect works on any sorted vectors.
 use std::cmp::Ordering;
 
+// TODO: try it
+/*use generic_array::{GenericArray, ArrayLength};
+
+pub struct SortedIntersect<S>
+where
+    S: SortedIntersectSource,
+{
+    inner: S,
+}
+
+pub trait SortedIntersectSource {
+    type Item;
+    type Width: ArrayLength<Option<Self::Item>>;
+
+    fn len(&self) -> usize;
+    fn next_all(&mut self) -> &mut GenericArray<Option<Self::Item>, Self::Width>;
+    fn next_at(&mut self, index: usize) -> Option<Self::Item>;
+}
+
+impl<S> SortedIntersect<S>
+where
+    S: SortedIntersectSource,
+{
+    pub fn new(source: S) -> Self {
+        SortedIntersect {
+            inner: source,
+        }    
+    }
+}
+
+impl<S> Iterator for SortedIntersect<S>
+where
+    S: SortedIntersectSource,
+{
+    type Item = S::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let _ = &mut self.inner;
+        None
+    }
+}*/
+
 /// For given vector of *sorted* iterators, return new vector containing values
 /// present in *every* iterator
 pub fn sorted_intersect<I>(iters: &mut [I], limit: usize) -> Vec<I::Item>
