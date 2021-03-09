@@ -1,6 +1,8 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+mod utils;
+
 pub mod syslog_producer;
 //pub mod rpc_parser;
 //pub mod replayer;

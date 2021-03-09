@@ -65,21 +65,27 @@ impl Parser {
     }
 
     async fn execute_inner(&mut self, command: Command) -> Report {
-        self.working_connections.iter_mut().for_each(|(_, c)| c.send_command(command));
+        //self.working_connections.iter_mut().for_each(|(_, c)| c.send_command(command));
 
         match command {
             Command::GetReport => {
                 let mut working_connections = Vec::new();
-                while let Ok(report) = self.rx_connection_report.try_recv() {
-                    working_connections.push(report);
+                for (_, connection) in &mut self.working_connections {
+                    connection.send_command(Command::GetReport);
+                    if let Some(report) = self.rx_connection_report.recv().await {
+                        working_connections.push(report);
+                    }
                 }
+                //while let Some(report) = self.rx_connection_report.recv().await {
+                //    working_connections.push(report);
+                //}
                 let mut closed_connections = self.closed_connections.clone();
                 closed_connections.iter_mut().for_each(|report| report.metadata = None);
         
                 Report::prepare(closed_connections, working_connections)        
             },
             Command::Terminate => {
-                debug_assert!(self.rx_connection_report.try_recv().is_err(), "should not have reports to receive");
+                // debug_assert!(self.rx_connection_report.try_recv().is_err(), "should not have reports to receive");
                 // TODO: this is the final report, compare it with ocaml report
                 Report::prepare(self.closed_connections.clone(), Vec::new())        
             }

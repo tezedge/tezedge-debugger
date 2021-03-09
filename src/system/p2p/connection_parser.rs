@@ -3,7 +3,8 @@
 
 use std::{fmt, net::SocketAddr};
 use futures::future::Either;
-use tokio::{stream::StreamExt, sync::mpsc};
+use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
 use tracing::field::DisplayValue;
 use tezos_messages::p2p::{
     encoding::{
@@ -15,7 +16,7 @@ use tezos_messages::p2p::{
     binary_message::BinaryMessage,
 };
 use crypto::{hash::HashType, blake2b};
-use tezos_encoding::binary_reader::BinaryReaderError;
+use tezos_encoding::binary_reader::BinaryReaderErrorKind;
 use tezos_conversation::{Identity, Conversation, Packet, ConsumeResult, ChunkMetadata, ChunkInfoPair, Sender};
 use sniffer::{SocketId, EventId};
 
@@ -90,7 +91,7 @@ impl Parser {
     }
 
     // TODO: split
-    async fn run_inner<S>(self, mut events: S, mut tx_report: mpsc::Sender<ConnectionReport>) -> Result<ConnectionReport, ConnectionReport>
+    async fn run_inner<S>(self, mut events: S, tx_report: mpsc::Sender<ConnectionReport>) -> Result<ConnectionReport, ConnectionReport>
     where
         S: Unpin + StreamExt<Item = Either<Message, Command>>,
     {
@@ -161,9 +162,11 @@ impl Parser {
                     let message = ConnectionMessage::from_bytes(&chunk_info.data()[2..])
                         .map(|cm: ConnectionMessage| {
                             if incoming {
-                                let hash = blake2b::digest_128(&chunk_info.data()[4..36]);
-                                state.statistics.peer_id =
-                                    Some(HashType::CryptoboxPublicKeyHash.hash_to_b58check(&hash));
+                                let id = || {
+                                    let hash = blake2b::digest_128(&chunk_info.data()[4..36]).ok()?;
+                                    HashType::CryptoboxPublicKeyHash.hash_to_b58check(&hash).ok()
+                                };
+                                state.statistics.peer_id = id();
                             }
                             HandshakeMessage::ConnectionMessage(cm)
                         })
@@ -362,20 +365,16 @@ impl State {
                 self.statistics.incomplete_dropped_messages += 1;
                 self.buffer.clear();
             }
-            return r.messages()
-                .first()
-                .ok_or("empty".to_string())
-                .map(|m| {
-                    let m = m.clone().into();
-                    self.metadata.count_message(&m, incoming);
-                    TezosPeerMessage::PeerMessage(m)
-                })
+            let m = r.message();
+            let m = m.clone().into();
+            self.metadata.count_message(&m, incoming);
+            return Ok(TezosPeerMessage::PeerMessage(m));
         }
 
         self.buffer.extend_from_slice(content);
         match PeerMessageResponse::from_bytes(self.buffer.as_slice()) {
-            Err(e) => match &e {
-                &BinaryReaderError::Underflow { .. } => {
+            Err(e) => match &e.kind() {
+                &BinaryReaderErrorKind::Underflow { .. } => {
                     match PartialPeerMessage::from_bytes(self.buffer.as_slice()) {
                         Some(p) => Ok(TezosPeerMessage::PartialPeerMessage(p)),
                         None => {
@@ -391,14 +390,10 @@ impl State {
             },
             Ok(r) => {
                 self.buffer.clear();
-                r.messages()
-                    .first()
-                    .ok_or("empty".to_string())
-                    .map(|m| {
-                        let m = m.clone().into();
-                        self.metadata.count_message(&m, incoming);
-                        TezosPeerMessage::PeerMessage(m)
-                    })
+                let m = r.message();
+                let m = m.clone().into();
+                self.metadata.count_message(&m, incoming);
+                return Ok(TezosPeerMessage::PeerMessage(m));
             },
         }
     }

@@ -17,7 +17,7 @@ pub async fn syslog_producer(storage: &LogStore, node: &NodeConfig) -> io::Resul
     let syslog_port = node.syslog_port;
     let name = node.p2p_port.clone();
     let storage = storage.clone();
-    let mut socket = UdpSocket::bind(("0.0.0.0", syslog_port)).await?;
+    let socket = UdpSocket::bind(("0.0.0.0", syslog_port)).await?;
     info!(port = syslog_port, "started listening for syslog");
     tokio::spawn(async move {
         // Local packet buffer

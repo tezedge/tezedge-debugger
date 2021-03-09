@@ -1,9 +1,11 @@
 use std::{collections::HashMap, convert::TryFrom, net::{SocketAddr, IpAddr}, sync::{Arc, Mutex}};
-use tokio::{stream::StreamExt, sync::mpsc};
+use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
 use sniffer::{BpfModule, SnifferEvent, RingBufferData, EventId};
 
 use super::{p2p, reporter::Reporter, processor, DebuggerConfig, NodeConfig};
 use crate::storage_::{P2pStore, p2p::Message as P2pMessage, indices::Initiator};
+use crate::system::utils::ReceiverStream;
 
 pub struct Parser {
     module: Option<BpfModule>,
@@ -67,6 +69,7 @@ impl Parser {
         let mut s = self;
         // merge streams, let await either some data from the kernel,
         // or some command from the overlying code
+        let rx_p2p_command = ReceiverStream::new(rx_p2p_command);
         let mut stream =
             rb.map(Event::RbData).merge(rx_p2p_command.map(Event::P2pCommand));
         let mut p2p_parser = p2p::Parser::new(tx_p2p_report);

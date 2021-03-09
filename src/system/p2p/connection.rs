@@ -6,7 +6,7 @@ use tokio::{
 use futures::future::Either;
 
 use super::{connection_parser::Parser, parser::{Command, Message}, report::ConnectionReport};
-use crate::storage_::indices::Initiator;
+use crate::{storage_::indices::Initiator, system::utils::UnboundedReceiverStream};
 
 pub struct Connection {
     state: ConnectionState,
@@ -36,7 +36,7 @@ impl Connection {
         let (tx, rx) = mpsc::unbounded_channel();
         let source_type = parser.source_type.clone();
         let remote_address = parser.remote_address.clone();
-        let handle = tokio::spawn(parser.run(rx, tx_report));
+        let handle = tokio::spawn(parser.run(UnboundedReceiverStream::new(rx), tx_report));
         Connection {
             state: ConnectionState::Initial,
             tx,
