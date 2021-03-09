@@ -82,7 +82,7 @@ impl Message {
 /// tezedge encoding, with difference, that most of
 /// binary data are cast to hex values
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(untagged)]
+//#[serde(untagged)]
 pub enum TezosPeerMessage {
     HandshakeMessage(HandshakeMessage),
     PeerMessage(FullPeerMessage),
@@ -90,7 +90,7 @@ pub enum TezosPeerMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+//#[serde(tag = "type", rename_all = "snake_case")]
 pub enum HandshakeMessage {
     ConnectionMessage(ConnectionMessage),
     MetadataMessage(MetadataMessage),
@@ -98,7 +98,7 @@ pub enum HandshakeMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "type", rename_all = "snake_case")]
+//#[serde(tag = "type", rename_all = "snake_case")]
 pub enum FullPeerMessage {
     Disconnect,
     Advertise(AdvertiseMessage),
@@ -150,7 +150,7 @@ impl From<PeerMessage> for FullPeerMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize, strum::EnumString, Clone)]
-#[serde(tag = "type", rename_all = "snake_case")]
+//#[serde(tag = "type", rename_all = "snake_case")]
 pub enum PartialPeerMessage {
     Disconnect,
     Advertise,

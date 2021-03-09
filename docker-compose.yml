@@ -14,6 +14,7 @@ services:
     volumes:
       - "tezedge-shared-data:/tmp/volume/tezedge:ro"
       - "tezos-shared-data:/tmp/volume/tezos:ro"
+      - "./target/debugger_db:/tmp/volume/debugger_db:rw"
       - "./config-docker.toml:/home/appuser/config.toml:ro"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
     entrypoint: ./tezedge-debugger
