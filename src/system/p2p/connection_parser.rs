@@ -18,7 +18,7 @@ use tezos_messages::p2p::{
 use crypto::{hash::HashType, blake2b};
 use tezos_encoding::binary_reader::BinaryReaderErrorKind;
 use tezos_conversation::{Identity, Conversation, Packet, ConsumeResult, ChunkMetadata, ChunkInfoPair, Sender};
-use sniffer::{SocketId, EventId};
+use bpf_sniffer_lib::{SocketId, EventId};
 
 use super::{
     report::{ConnectionReport, ParserError, ParserErrorReport},

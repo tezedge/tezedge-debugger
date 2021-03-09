@@ -37,7 +37,7 @@ mod settings {
         pub rpc_port: u16,
         pub p2p_message_limit: u64,
         pub log_message_limit: u64,
-        pub run_bpf: bool,
+        pub bpf_sniffer: String,
         pub keep_db: bool,
         pub nodes: Vec<NodeConfig>,
     }

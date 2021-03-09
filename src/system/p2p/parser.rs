@@ -5,7 +5,7 @@ use std::{
 };
 use tokio::sync::mpsc;
 use tezos_conversation::Identity;
-use sniffer::{EventId, SocketId};
+use bpf_sniffer_lib::{EventId, SocketId};
 
 use crate::{
     storage_::{p2p::Message as P2pMessage, indices::Initiator},

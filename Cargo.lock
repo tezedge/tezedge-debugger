@@ -238,9 +238,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "bpf-sniffer"
+version = "0.1.0"
+dependencies = [
+ "bpf-sniffer-lib",
+ "ctrlc",
+ "passfd",
+ "structopt",
+ "sudo",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "bpf-sniffer-lib"
+version = "0.1.0"
+dependencies = [
+ "cargo-bpf",
+ "cty",
+ "futures",
+ "hex",
+ "redbpf",
+ "redbpf-macros",
+ "redbpf-probes",
+ "typenum",
+]
+
+[[package]]
 name = "bpf-sys"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#5d0d557342f887f5730e42399220a76c314ca014"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#d656a4fcac4e69da0f1214ebdf44c6b6f1d592e9"
 dependencies = [
  "bindgen",
  "cc",
@@ -314,7 +341,7 @@ checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
 [[package]]
 name = "cargo-bpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#5d0d557342f887f5730e42399220a76c314ca014"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#d656a4fcac4e69da0f1214ebdf44c6b6f1d592e9"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -686,6 +713,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b2466559f260f48ad25fe6317b3c8dac77b5bdb5763ac7d9d6103530663bc90"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "ctrlc"
+version = "3.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c15b8ec3b5755a188c141c1f6a98e76de31b936209bf066b647979e2a84764a9"
+dependencies = [
+ "nix",
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -1703,6 +1740,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa9b4819da1bc61c0ea48b63b7bc8604064dd43013e7cc325df098d49cd7c18a"
+dependencies = [
+ "bitflags",
+ "cc",
+ "cfg-if 1.0.0",
+ "libc",
+]
+
+[[package]]
 name = "nom"
 version = "5.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1901,6 +1950,15 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "passfd"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4033dfb289fd985235dce214f0df3c2aaa83d978da03161197aca260459dc20f"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -2210,7 +2268,7 @@ dependencies = [
 [[package]]
 name = "redbpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#5d0d557342f887f5730e42399220a76c314ca014"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#d656a4fcac4e69da0f1214ebdf44c6b6f1d592e9"
 dependencies = [
  "bindgen",
  "bpf-sys",
@@ -2228,7 +2286,7 @@ dependencies = [
 [[package]]
 name = "redbpf-macros"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#5d0d557342f887f5730e42399220a76c314ca014"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#d656a4fcac4e69da0f1214ebdf44c6b6f1d592e9"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
@@ -2239,7 +2297,7 @@ dependencies = [
 [[package]]
 name = "redbpf-probes"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#5d0d557342f887f5730e42399220a76c314ca014"
+source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#d656a4fcac4e69da0f1214ebdf44c6b6f1d592e9"
 dependencies = [
  "cargo-bpf",
  "cty",
@@ -2729,20 +2787,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc725476a1398f0480d56cd0ad381f6f32acf2642704456f8f59a35df464b59a"
 
 [[package]]
-name = "sniffer"
-version = "0.1.0"
-dependencies = [
- "cargo-bpf",
- "cty",
- "futures",
- "hex",
- "redbpf",
- "redbpf-macros",
- "redbpf-probes",
- "typenum",
-]
-
-[[package]]
 name = "socket2"
 version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2969,6 +3013,7 @@ name = "tezedge_debugger"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bpf-sniffer-lib",
  "bytes 1.0.1",
  "chrono",
  "criterion",
@@ -2979,13 +3024,13 @@ dependencies = [
  "hex",
  "itertools 0.10.0",
  "networking",
+ "passfd",
  "pin-project-lite 0.2.6",
  "rand 0.8.3",
  "rocksdb",
  "serde 1.0.124",
  "serde_cbor",
  "serde_json",
- "sniffer",
  "storage",
  "structopt",
  "strum",

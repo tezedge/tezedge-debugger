@@ -11,3 +11,6 @@ else
     cp $CARGO_TARGET_DIR/x86_64-unknown-linux-gnu/debug/tezedge-debugger bin/tezedge-debugger
     cp config.toml bin/config.toml
 fi
+
+cargo build --package bpf-sniffer
+cp $CARGO_TARGET_DIR/debug/bpf-sniffer bin/bpf-sniffer

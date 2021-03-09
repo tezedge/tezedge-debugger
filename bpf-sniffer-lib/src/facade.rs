@@ -1,11 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{
-    convert::TryFrom,
-    mem,
-    net::{SocketAddr, IpAddr},
-};
+use std::{convert::TryFrom, fmt, mem, net::{SocketAddr, IpAddr}, str::FromStr};
 use redbpf::{load::Loader, Module, ringbuf::RingBuffer, ringbuf_sync::RingBufferSync, HashMap, Map};
 use super::{SocketId, EventId, DataDescriptor, DataTag, address::Address, bpf_code::CODE};
 
@@ -132,6 +128,55 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
     }
 }
 
+pub enum Command {
+    WatchPort {
+        port: u16,
+    },
+    IgnoreConnection {
+        pid: u32,
+        fd: u32,
+    },
+}
+
+impl FromStr for Command {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut words = s.split(' ');
+        match words.next() {
+            Some("watch_port") => {
+                let port = words.next()
+                    .ok_or("bad port".to_string())?
+                    .parse()
+                    .map_err(|e| format!("failed to parse port: {}", e))?;
+                Ok(Command::WatchPort { port })
+            },
+            Some("ignore_connection") => {
+                let pid = words.next()
+                    .ok_or("bad pid".to_string())?
+                    .parse()
+                    .map_err(|e| format!("failed to parse pid: {}", e))?;
+                let fd = words.next()
+                    .ok_or("bad fd".to_string())?
+                    .parse()
+                    .map_err(|e| format!("failed to parse fd: {}", e))?;
+                Ok(Command::IgnoreConnection { pid, fd })
+
+            },
+            _ => Err("unexpected command".to_string()),
+        }
+    }
+}
+
+impl fmt::Display for Command {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            &Command::WatchPort { port } => write!(f, "watch_port {}", port),
+            &Command::IgnoreConnection { pid, fd } => write!(f, "ignore_connection {} {}", pid, fd),
+        }
+    }
+}
+
 impl BpfModule {
     // TODO: handle error
     pub fn load() -> Self {
@@ -147,7 +192,7 @@ impl BpfModule {
         BpfModule(loaded.module)
     }
 
-    fn main_buffer_map(&self) -> &Map {
+    pub fn main_buffer_map(&self) -> &Map {
         self
             .0
             .maps
