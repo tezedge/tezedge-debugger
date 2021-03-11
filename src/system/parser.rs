@@ -71,7 +71,7 @@ impl Parser {
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     ) {
-        let db = StoreClient::spawn(self.storage.clone(), self.config.p2p_message_limit);
+        let db = StoreClient::spawn(self.storage.clone());
         let mut s = self;
 
         for node_config in &s.config.nodes.clone() {

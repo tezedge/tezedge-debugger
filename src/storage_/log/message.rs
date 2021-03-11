@@ -1,7 +1,7 @@
 use std::{time::{SystemTime, UNIX_EPOCH}, str::FromStr};
 use serde::{Serialize, Deserialize};
 use storage::persistent::{KeyValueSchema, BincodeEncoded};
-use super::{Access, indices::{NodeName, LogLevel}};
+use super::{Access, indices::{NodeName, LogLevel}, MessageHasId};
 
 /// Received logs saved in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,6 +133,12 @@ impl Access<LogLevel> for Message {
 impl Access<u128> for Message {
     fn accessor(&self) -> u128 {
         self.date
+    }
+}
+
+impl MessageHasId for Message {
+    fn set_id(&mut self, id: u64) {
+        self.id = id;
     }
 }
 

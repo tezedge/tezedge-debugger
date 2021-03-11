@@ -6,7 +6,7 @@ pub use self::filter::{Indices, Filters};
 
 use super::{
     secondary_index::{SecondaryIndex, Access, SecondaryIndices},
-    store_mpsc::MessageId,
+    store::MessageHasId,
     sorted_intersect,
     indices,
 };

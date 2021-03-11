@@ -11,31 +11,37 @@ use storage::{
 };
 use super::secondary_index::SecondaryIndices;
 
-pub trait StoreCollector {
-    type Message;
+pub trait MessageHasId {
+    fn set_id(&mut self, id: u64);
+}
 
-    fn reserve_index(&self) -> u64;
-    fn store_message(&self, msg: &Self::Message, index: u64) -> Result<u64, StorageError>;
+pub trait StoreCollector {
+    type Message: MessageHasId;
+
+    fn store_message(&self, msg: Self::Message) -> Result<u64, StorageError>;
+
+    /// Deletes the message and corresponding secondary indices.
     fn delete_message(&self, index: u64) -> Result<(), StorageError>;
 }
 
 /// generic message store
 pub struct Store<Message, Schema, Indices>
 where
-    Message: BincodeEncoded,
+    Message: BincodeEncoded + MessageHasId,
     Schema: KeyValueSchema<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema>,
 {
     kv: Arc<DB>,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
+    limit: u64,
     indices: Indices,
     phantom_data: PhantomData<(Message, Schema)>,
 }
 
 impl<Message, Schema, Indices> Clone for Store<Message, Schema, Indices>
 where
-    Message: BincodeEncoded,
+    Message: BincodeEncoded + MessageHasId,
     Schema: KeyValueSchema<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema> + Clone,
 {
@@ -44,6 +50,7 @@ where
             kv: self.kv.clone(),
             count: self.count.clone(),
             seq: self.seq.clone(),
+            limit: self.limit,
             indices: self.indices.clone(),
             phantom_data: PhantomData,
         }
@@ -52,15 +59,16 @@ where
 
 impl<Message, Schema, Indices> Store<Message, Schema, Indices>
 where
-    Message: BincodeEncoded,
+    Message: BincodeEncoded + MessageHasId,
     Schema: KeyValueSchema<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema>,
 {
-    pub fn new(kv: &Arc<DB>) -> Self {
+    pub fn new(kv: &Arc<DB>, limit: u64) -> Self {
         Store {
             kv: kv.clone(),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(0)),
+            limit,
             indices: Indices::new(kv),
             phantom_data: PhantomData,
         }
@@ -79,6 +87,11 @@ where
     // Increment count of messages in the store
     fn inc_count(&self) {
         self.count.fetch_add(1, Ordering::SeqCst);
+    }
+
+    // Reserve new index for later use.
+    fn reserve_index(&self) -> u64 {
+        self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
     /// Create iterator ending on given index. If no value is provided
@@ -129,32 +142,25 @@ where
 
 impl<Message, Schema, Indices> StoreCollector for Store<Message, Schema, Indices>
 where
-    Message: BincodeEncoded,
+    Message: BincodeEncoded + MessageHasId,
     Schema: KeyValueSchema<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema> + Clone,
 {
     type Message = Message;
 
-    // Reserve new index for later use.
-    // The index must be manually inserted with [Store::put_message]
-    fn reserve_index(&self) -> u64 {
-        self.seq.fetch_add(1, Ordering::SeqCst)
-    }
-
-    /// Create cursor into the database, allowing iteration over values matching given filters.
-    /// Values are sorted by the index in descending order.
-    /// * Arguments:
-    /// - cursor_index: Index of start of the sequence (if no value provided, start at the end)
-    /// - limit: Limit result to maximum of specified value
-    /// - filters: Specified filters for values
-    fn store_message(&self, msg: &Self::Message, index: u64) -> Result<u64, StorageError> {
-        self.inner().put(&index, msg)?;
-        self.indices.store_indices(&index, msg)?;
+    fn store_message(&self, msg: Self::Message) -> Result<u64, StorageError> {
+        let mut msg = msg;
+        let index = self.reserve_index();
+        if index >= self.limit {
+            self.delete_message(index - self.limit)?;
+        }
+        msg.set_id(index);
+        self.inner().put(&index, &msg)?;
+        self.indices.store_indices(&index, &msg)?;
         self.inc_count();
         Ok(index)
     }
 
-    /// Deletes the message and corresponding secondary indices.
     fn delete_message(&self, index: u64) -> Result<(), StorageError> {
         if let Some(value) = self.inner().get(&index)? {
             self.indices.delete_indices(&index, &value)?;

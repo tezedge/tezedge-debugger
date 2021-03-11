@@ -1,38 +1,26 @@
 use tokio::sync::mpsc;
-use super::store::StoreCollector;
-
-pub trait MessageId {
-    fn set_id(&mut self, id: u64);
-}
+use super::store::{StoreCollector, MessageHasId};
 
 pub struct StoreClient<Message>
 where
-    Message: MessageId + Send + Sync + 'static,
+    Message: MessageHasId + Send + Sync + 'static,
 {
     tx: mpsc::UnboundedSender<Message>,
 }
 
 impl<Message> StoreClient<Message>
 where
-    Message: MessageId + Send + Sync + 'static,
+    Message: MessageHasId + Send + Sync + 'static,
 {
-    pub fn spawn<StoreServer>(collector: StoreServer, limit: u64) -> Self
+    pub fn spawn<StoreServer>(collector: StoreServer) -> Self
     where
         StoreServer: StoreCollector<Message = Message> + Send + Sync + 'static,
     {
         let (tx, rx) = mpsc::unbounded_channel::<Message>();
         tokio::spawn(async move {
             let mut rx = rx;
-            while let Some(mut msg) = rx.recv().await {
-                let index = collector.reserve_index();
-                if index >= limit {
-                    match collector.delete_message(index - limit) {
-                        Ok(_) => (),
-                        Err(err) => tracing::error!(error = tracing::field::display(&err), "failed to remove message"),
-                    }
-                }
-                msg.set_id(index);
-                match collector.store_message(&msg, index) {
+            while let Some(msg) = rx.recv().await {
+                match collector.store_message(msg) {
                     Ok(_) => (),
                     Err(err) => tracing::error!(error = tracing::field::display(&err), "failed to store message"),
                 }
@@ -48,7 +36,7 @@ where
 
 impl<Message> Clone for StoreClient<Message>
 where
-    Message: MessageId + Send + Sync + 'static,
+    Message: MessageHasId + Send + Sync + 'static,
 {
     fn clone(&self) -> Self {
         StoreClient {

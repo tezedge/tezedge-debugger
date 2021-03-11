@@ -8,13 +8,13 @@ fn p2p<P: AsRef<Path>>(path: P) -> P2pStore {
     let cache = Cache::new_lru_cache(1).unwrap();
     let schemas = P2pStore::schemas(&cache);
     let rocksdb = Arc::new(open_kv(&path, schemas, &DbConfiguration::default()).unwrap());
-    P2pStore::new(&rocksdb)
+    P2pStore::new(&rocksdb, u64::MAX)
 }
 
 #[test]
 fn basic_store_fetch() {
     let db = p2p("target/db_test_simple");
-    let mut messages_original = vec![
+    let messages_original = vec![
         p2p::Message::new(
             indices::NodeName(3123),
             "127.0.0.1:12345".parse().unwrap(),
@@ -25,10 +25,8 @@ fn basic_store_fetch() {
             None,
         ),
     ];
-    for message in &mut messages_original {
-        let index = db.reserve_index();
-        message.id = index;
-        db.store_message(message, index).unwrap();
+    for message in &messages_original {
+        db.store_message(message.clone()).unwrap();
     }
     let messages = db.get_cursor(None, 1024, &p2p::Filters::default()).unwrap();
     println!("{}", serde_json::to_string(&messages_original).unwrap());
@@ -54,7 +52,7 @@ fn prepare_p2p(db: &P2pStore) {
 
             for i in 0..128 {
                 let bytes = iter::repeat(0).map(|_| rand::random()).take(128).collect::<Vec<u8>>();
-                let mut message = p2p::Message::new(
+                let message = p2p::Message::new(
                     node_name.clone(),
                     remote_addr.clone(),
                     source_type.clone(),
@@ -63,9 +61,7 @@ fn prepare_p2p(db: &P2pStore) {
                     bytes,
                     None,
                 );
-                let index = db.reserve_index();
-                message.id = index;
-                db.store_message(&message, index).unwrap();
+                db.store_message(message).unwrap();
             }
         }
     }

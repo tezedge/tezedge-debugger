@@ -26,7 +26,7 @@ fn open_database(config: &DebuggerConfig) -> Result<(P2pStore, LogStore), failur
     let cache = Cache::new_lru_cache(1)?;
     let schemas = P2pStore::schemas(&cache).chain(LogStore::schemas(&cache));
     let rocksdb = Arc::new(open_kv(&path, schemas, &DbConfiguration::default())?);
-    Ok((P2pStore::new(&rocksdb), LogStore::new(&rocksdb)))
+    Ok((P2pStore::new(&rocksdb, config.p2p_message_limit), LogStore::new(&rocksdb, config.log_message_limit)))
 }
 
 fn load_config() -> Result<DebuggerConfig, failure::Error> {

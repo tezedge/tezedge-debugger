@@ -9,7 +9,7 @@ use tezos_messages::p2p::encoding::{
     prelude::*,
 };
 use tezos_encoding::encoding::{HasEncoding, Encoding};
-use super::{Access, indices::{P2pType, Initiator, Sender, NodeName}, MessageId};
+use super::{Access, indices::{P2pType, Initiator, Sender, NodeName}, MessageHasId};
 
 /// P2PMessage as stored in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -302,7 +302,7 @@ impl Access<SocketAddr> for Message {
     }
 }
 
-impl MessageId for Message {
+impl MessageHasId for Message {
     fn set_id(&mut self, id: u64) {
         self.id = id;
     }
