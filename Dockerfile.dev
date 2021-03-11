@@ -1,8 +1,0 @@
-# do manually 
-# ./san.sh none
-# or 
-# ./san.sh none|memory|address|leak|thread
-# before build
-FROM ubuntu:20.10
-WORKDIR /home/appuser/
-COPY bin ./
