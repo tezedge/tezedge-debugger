@@ -68,6 +68,9 @@ tezos-conversation = { branch = "develop", git = "https://github.com/simplestaki
 bpf-sniffer-lib = { path = "bpf-sniffer-lib", features = ["facade"] }
 passfd = "0.1"
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+jemallocator = { version = "0.3.2", optional = true }
+
 [patch.crates-io]
 
 rocksdb = { git = "https://github.com/rust-rocksdb/rust-rocksdb", rev = "29802a4b71b8e96a3095b84aadbbea3e39e0d074" }

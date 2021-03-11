@@ -12,7 +12,9 @@
             "program": "${workspaceFolder}/target/none/debug/tezedge-debugger",
             "args": [],
             "env": {
-                "KERNEL_VERSION": "5.10.18"
+                "KERNEL_VERSION": "5.10.18",
+                "MALLOC_CONF": "prof_leak:true,lg_prof_sample:0,prof_final:true",
+                "LD_PRELOAD": "/usr/local/lib/libjemalloc.so.2"
             }
         }
     ]

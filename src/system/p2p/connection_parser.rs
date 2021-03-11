@@ -62,17 +62,19 @@ struct ErrorContext {
     source_type: Initiator,
     event_id: EventId,
     chunk_counter: usize,
+    node_port: u16,
 }
 
 impl fmt::Display for ErrorContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{{ source {:?}, chunk {} {}, id {} }}",
+            "{{ source {:?}, chunk {} {}, id {}, node {} }}",
             self.source_type,
             self.chunk_counter,
             if self.is_incoming { "incoming" } else { "outgoing" },
             self.event_id,
+            self.node_port,
         )
     }
 }
@@ -241,11 +243,20 @@ impl Parser {
                 },
                 ConsumeResult::PowInvalid => {
                     let context = self.error_context(&state, incoming, &event_id);
-                    let payload = tracing::field::display(hex::encode(packet.payload.as_slice()));
-                    if state.statistics.error_report.is_some() {
-                        tracing::debug!(context = context, payload = payload, msg = "wrong pow");
+                    if packet.payload.len() < 0x10000 {
+                        let payload = tracing::field::display(hex::encode(packet.payload.as_slice()));
+                        if state.statistics.error_report.is_some() {
+                            tracing::debug!(context = context, payload = payload, msg = "wrong pow");
+                        } else {
+                            tracing::error!(context = context, payload = payload, msg = "wrong pow");
+                        }
                     } else {
-                        tracing::error!(context = context, payload = payload, msg = "wrong pow");
+                        tracing::error!(
+                            context = context,
+                            remote_address = tracing::field::display(self.remote_address),
+                            payload_len = packet.payload.len(),
+                            msg = "wrong pow, payload is huge",
+                        );
                     }
                     state.report_error(ParserError::WrongProofOfWork);
                 },
@@ -270,6 +281,7 @@ impl Parser {
             source_type: self.source_type,
             event_id: event_id.clone(),
             chunk_counter: state.chunk(is_incoming),
+            node_port: self.config.p2p_port,
         };
         tracing::field::display(ctx)
     }

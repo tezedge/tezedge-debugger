@@ -1,6 +1,10 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+#[cfg(all(not(target_env = "msvc"), feature = "jemallocator"))]
+#[global_allocator]
+static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 use std::{fs, io::Read, path::Path, process::exit, sync::Arc};
 use tracing::{info, error, Level};
 use rocksdb::Cache;
