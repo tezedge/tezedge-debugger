@@ -3,62 +3,19 @@ use std::{
     convert::TryFrom,
     net::{SocketAddr, IpAddr},
     sync::{Arc, Mutex},
-    os::unix::net::UnixStream,
-    io::Write,
 };
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
-use bpf_sniffer_lib::{Command, EventId, RingBuffer, RingBufferData, SnifferEvent};
-use passfd::FdPassingExt;
+use bpf_sniffer_lib::{Command, EventId, RingBuffer, RingBufferData, SnifferEvent, BpfModuleClient};
 
 use super::{p2p, reporter::Reporter, processor, DebuggerConfig, NodeConfig};
 use crate::storage_::{P2pStore, p2p::Message as P2pMessage, indices::Initiator};
 use crate::system::utils::ReceiverStream;
 
-struct Sniffer {
-    stream: UnixStream,
-}
-
-impl Sniffer {
-    fn ring_buffer(&self) -> Option<RingBuffer> {
-        let fd = match self.stream.recv_fd() {
-            Ok(fd) => fd,
-            Err(error) => {
-                tracing::error!(
-                    error = tracing::field::display(&error),
-                    "failed to receive ring buffer fd",
-                );
-                return None;
-            }
-        };
-        match RingBuffer::new(fd, 0x40000000) {
-            Ok(rb) => Some(rb),
-            Err(error) => {
-                tracing::error!(
-                    error = tracing::field::display(&error),
-                    "failed to create ring buffer",
-                );
-                None
-            },
-        }
-    }
-
-    fn send_command(&mut self, cmd: Command) {
-        match self.stream.write_fmt(format_args!("{}\n", cmd)) {
-            Ok(()) => (),
-            Err(error) => {
-                tracing::error!(
-                    error = tracing::field::display(&error),
-                    "failed to send command to sniffer",
-                );
-            }
-        }
-    }
-}
-
 pub struct Parser {
     config: DebuggerConfig,
     storage: P2pStore,
+    sniffer: BpfModuleClient,
     pid_to_config: HashMap<u32, NodeConfig>,
     counter: u64,
 }
@@ -69,63 +26,68 @@ enum Event {
 }
 
 impl Parser {
-    pub fn new(storage: &P2pStore, config: &DebuggerConfig) -> Self {
-        Parser {
-            config: config.clone(),
-            storage: storage.clone(),
-            pid_to_config: HashMap::new(),
-            counter: 0,
-        }
-    }
-
     /// spawn a (green)thread which parse the data from the kernel,
     /// returns object which can report statistics
-    pub fn spawn(self) -> Arc<Mutex<Reporter>> {
-        let (tx_p2p_command, rx_p2p_command) = mpsc::channel(1);
-        let (tx_p2p_report, rx_p2p_report) = mpsc::channel(1);
+    pub fn try_spawn(storage: &P2pStore, config: &DebuggerConfig) -> Arc<Mutex<Reporter>> {
+        let (tx_p2p_command, rx_p2p_command) = mpsc::channel(8);
+        let (tx_p2p_report, rx_p2p_report) = mpsc::channel(8);
 
-        match UnixStream::connect(&self.config.bpf_sniffer) {
-            Ok(stream) => {
-                let sniffer = Sniffer { stream };
-                tokio::spawn(self.run(sniffer, rx_p2p_command, tx_p2p_report));
+        match BpfModuleClient::new(&config.bpf_sniffer) {
+            Ok((sniffer, ring_buffer)) => {
+                let s = Parser {
+                    config: config.clone(),
+                    storage: storage.clone(),
+                    sniffer,
+                    pid_to_config: HashMap::new(),
+                    counter: 0,
+                };
+                tokio::spawn(s.run(ring_buffer, rx_p2p_command, tx_p2p_report));
             },
             Err(error) => tracing::error!(
                 error = tracing::field::display(&error),
                 "failed to connect to bpf sniffer",
             ),
         }
+
         let reporter = Reporter::new(tx_p2p_command, rx_p2p_report);
         Arc::new(Mutex::new(reporter))
     }
 
+    fn send_command(&mut self, cmd: Command) {
+        match self.sniffer.send_command(cmd) {
+            Ok(()) => (),
+            Err(error) => {
+                tracing::error!(
+                    error = tracing::field::display(&error),
+                    "failed to send command to sniffer",
+                );
+            }
+        }
+    }
+
     async fn run(
         self,
-        mut sniffer: Sniffer,
+        ring_buffer: RingBuffer,
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     ) {
         let db = processor::spawn_processor(self.storage.clone(), self.config.clone());
+        let mut s = self;
 
-        let rb = match sniffer.ring_buffer() {
-            Some(rb) => rb,
-            None => return,
-        };
-
-        for node_config in &self.config.nodes {
+        for node_config in &s.config.nodes.clone() {
             let cmd = Command::WatchPort { port: node_config.p2p_port };
-            sniffer.send_command(cmd);
+            s.send_command(cmd);
         }
 
-        let mut s = self;
         // merge streams, let await either some data from the kernel,
         // or some command from the overlying code
         let rx_p2p_command = ReceiverStream::new(rx_p2p_command);
         let mut stream =
-            rb.map(Event::RbData).merge(rx_p2p_command.map(Event::P2pCommand));
+            ring_buffer.map(Event::RbData).merge(rx_p2p_command.map(Event::P2pCommand));
         let mut p2p_parser = p2p::Parser::new(tx_p2p_report);
         while let Some(event) = stream.next().await {
             match event {
-                Event::RbData(slice) => s.process(&mut p2p_parser, &mut sniffer, slice, &db).await,
+                Event::RbData(slice) => s.process(&mut p2p_parser, slice, &db).await,
                 // while executing this command new slices from the kernel will not be processed
                 // so it is impossible to have data race
                 Event::P2pCommand(command) => p2p_parser.execute(command).await,
@@ -136,7 +98,6 @@ impl Parser {
     async fn process(
         &mut self,
         parser: &mut p2p::Parser,
-        sniffer: &mut Sniffer,
         slice: RingBufferData,
         db: &mpsc::UnboundedSender<P2pMessage>,
     ) {
@@ -171,7 +132,7 @@ impl Parser {
                     address = tracing::field::display(&address),
                     msg = "Syscall Connect",
                 );
-                self.process_connect(parser, sniffer, id, address, &db, None).await;
+                self.process_connect(parser, id, address, &db, None).await;
             },
             Ok(SnifferEvent::Accept { id, listen_on_fd, address }) => {
                 tracing::info!(
@@ -180,7 +141,7 @@ impl Parser {
                     address = tracing::field::display(&address),
                     msg = "Syscall Accept",
                 );
-                self.process_connect(parser, sniffer, id, address, &db, Some(listen_on_fd)).await;
+                self.process_connect(parser, id, address, &db, Some(listen_on_fd)).await;
             },
             Ok(SnifferEvent::Close { id }) => {
                 tracing::info!(
@@ -230,7 +191,6 @@ impl Parser {
     async fn process_connect(
         &mut self,
         parser: &mut p2p::Parser,
-        sniffer: &mut Sniffer,
         id: EventId,
         address: SocketAddr,
         db: &mpsc::UnboundedSender<P2pMessage>,
@@ -250,8 +210,7 @@ impl Parser {
                 pid: id.socket_id.pid,
                 fd: id.socket_id.fd,
             };
-            sniffer.send_command(cmd);
-
+            self.send_command(cmd);
         } else {
             if let Some(config) = self.pid_to_config.get(&id.socket_id.pid) {
                 let r = parser.process_connect(&config, id, address, db, source_type).await;
@@ -261,7 +220,7 @@ impl Parser {
                         pid: socket_id.pid,
                         fd: socket_id.fd,
                     };
-                    sniffer.send_command(cmd);
+                    self.send_command(cmd);
                 }
             } else {
                 tracing::warn!(

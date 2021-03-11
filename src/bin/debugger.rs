@@ -10,10 +10,12 @@ use tracing::{info, error, Level};
 use rocksdb::Cache;
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::{
-    system::{DebuggerConfig, syslog_producer::syslog_producer, Parser},
+    system::{DebuggerConfig, syslog_producer::syslog_producer},
     endpoints::routes,
     storage_::{P2pStore, LogStore},
 };
+#[cfg(target_os = "linux")]
+use tezedge_debugger::system::Parser;
 
 /// Create new message store, from well defined path
 fn open_database(config: &DebuggerConfig) -> Result<(P2pStore, LogStore), failure::Error> {
@@ -68,10 +70,15 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     // Create and spawn bpf sniffing system
-    let reporter = Parser::new(&p2p_db, &config).spawn();
+    #[cfg(target_os = "linux")] {
+        let reporter = Parser::try_spawn(&p2p_db, &config);
+        tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
+    }
 
-    // Spawn warp RPC server
-    tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
+    #[cfg(not(target_os = "linux"))] {
+        // Spawn warp RPC server
+        tokio::spawn(warp::serve(routes(p2p_db, log_db)).run(([0, 0, 0, 0], config.rpc_port)));
+    }
 
     // Wait for SIGTERM signal
     if let Err(err) = tokio::signal::ctrl_c().await {

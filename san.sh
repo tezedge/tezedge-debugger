@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
 if [ $1 == "none" ]; then
-    export CARGO_TARGET_DIR="target/none"
-    export RUSTFLAGS=""
+    export CARGO_TARGET_DIR="target/none" RUSTFLAGS=""
     cargo build --bin=tezedge-debugger
     cp $CARGO_TARGET_DIR/debug/tezedge-debugger bin/tezedge-debugger
     cp config.toml bin/config.toml
@@ -13,7 +12,6 @@ else
     cp config.toml bin/config.toml
 fi
 
-#export CARGO_TARGET_DIR="target/none"
-#export RUSTFLAGS=""
+#export CARGO_TARGET_DIR="target/none" RUSTFLAGS=""
 #cargo build --package bpf-sniffer
 #cp $CARGO_TARGET_DIR/debug/bpf-sniffer bin/bpf-sniffer

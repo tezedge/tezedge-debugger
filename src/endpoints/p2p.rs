@@ -1,13 +1,10 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, convert::TryInto, sync::{Arc, Mutex}};
+use std::{net::SocketAddr, convert::TryInto};
 use warp::{Filter, Rejection, reply::{with_status, json, WithStatus, Json}, http::StatusCode};
 use serde::{Serialize, Deserialize};
-use crate::{
-    storage_::{P2pStore, p2p::Filters, indices::{P2pType, ParseTypeError, Initiator, Sender, NodeName}},
-    system::Reporter,
-};
+use crate::storage_::{P2pStore, p2p::Filters, indices::{P2pType, ParseTypeError, Initiator, Sender, NodeName}};
 
 /// Cursor structure mapped from the endpoint URI
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -62,17 +59,6 @@ pub fn p2p(storage: P2pStore) -> impl Filter<Extract=(WithStatus<Json>, ), Error
                 },
                 Err(type_err) => with_status(json(&format!("invalid type-name: {}", type_err)), StatusCode::BAD_REQUEST),
             }
-        })
-}
-
-/// Basic handler for p2p message endpoint with cursor
-pub fn p2p_report(reporter: Arc<Mutex<Reporter>>) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
-    warp::path!("v2" / "p2p_summary")
-        .and(warp::query::query())
-        .map(move |()| -> WithStatus<Json> {
-            let report = tokio::task::block_in_place(|| futures::executor::block_on(reporter.lock().unwrap().get_p2p_report()));
-
-            with_status(json(&report), StatusCode::OK)
         })
 }
 

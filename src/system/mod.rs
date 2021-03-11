@@ -1,24 +1,30 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-mod utils;
 
 pub mod syslog_producer;
 //pub mod rpc_parser;
 //pub mod replayer;
 
-// new socket capturing system
+#[cfg(target_os = "linux")]
+mod utils;
+// new capturing system
+#[cfg(target_os = "linux")]
 mod parser;
+#[cfg(target_os = "linux")]
 mod reporter;
+#[cfg(target_os = "linux")]
 mod p2p;
 
+#[cfg(target_os = "linux")]
+mod processor;
+
+#[cfg(target_os = "linux")]
 pub use self::{
     parser::Parser,
     reporter::Reporter,
     p2p::Report as P2pReport,
 };
-
-mod processor;
 
 mod settings {
     use serde::Deserialize;
