@@ -17,9 +17,6 @@ mod reporter;
 mod p2p;
 
 #[cfg(target_os = "linux")]
-mod processor;
-
-#[cfg(target_os = "linux")]
 pub use self::{
     parser::Parser,
     reporter::Reporter,

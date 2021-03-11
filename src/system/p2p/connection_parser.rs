@@ -29,6 +29,7 @@ use super::{
 use crate::{
     system::NodeConfig,
     storage_::{
+        StoreClient,
         p2p::{
             Message as P2pMessage,
             TezosPeerMessage,
@@ -45,7 +46,7 @@ pub struct Parser {
     pub source_type: Initiator,
     pub remote_address: SocketAddr,
     pub id: SocketId,
-    pub db: mpsc::UnboundedSender<P2pMessage>,
+    pub db: StoreClient<P2pMessage>,
 }
 
 struct State {
@@ -288,10 +289,9 @@ impl Parser {
 
     fn store_db(&self, state: &mut State, message: P2pMessage, error_context: DisplayValue<ErrorContext>) -> Result<(), ConnectionReport> {
         self.db.send(message)
-            .map_err(|err| {
+            .map_err(|_| {
                 tracing::error!(
                     context = error_context,
-                    error = tracing::field::display(&err),
                     msg = "db channel closed abruptly",
                 );
                 state.report_error(ParserError::FailedToWriteInDatabase);

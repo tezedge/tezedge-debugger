@@ -11,6 +11,14 @@ use storage::{
 };
 use super::secondary_index::SecondaryIndices;
 
+pub trait StoreCollector {
+    type Message;
+
+    fn reserve_index(&self) -> u64;
+    fn store_message(&self, msg: &Self::Message, index: u64) -> Result<u64, StorageError>;
+    fn delete_message(&self, index: u64) -> Result<(), StorageError>;
+}
+
 /// generic message store
 pub struct Store<Message, Schema, Indices>
 where
@@ -68,38 +76,9 @@ where
         self.kv.as_ref()
     }
 
-    // Reserve new index for later use.
-    // The index must be manually inserted with [Store::put_message]
-    fn reserve_index(&self) -> u64 {
-        self.seq.fetch_add(1, Ordering::SeqCst)
-    }
-
     // Increment count of messages in the store
     fn inc_count(&self) {
         self.count.fetch_add(1, Ordering::SeqCst);
-    }
-
-    /// Create cursor into the database, allowing iteration over values matching given filters.
-    /// Values are sorted by the index in descending order.
-    /// * Arguments:
-    /// - cursor_index: Index of start of the sequence (if no value provided, start at the end)
-    /// - limit: Limit result to maximum of specified value
-    /// - filters: Specified filters for values
-    pub fn store_message(&self, msg: &Message) -> Result<u64, StorageError> {
-        let index = self.reserve_index();
-        self.inner().put(&index, msg)?;
-        self.indices.store_indices(&index, msg)?;
-        self.inc_count();
-        Ok(index)
-    }
-
-    /// Deletes the message and corresponding secondary indices.
-    pub fn delete_message(&self, index: u64) -> Result<(), StorageError> {
-        if let Some(value) = self.inner().get(&index)? {
-            self.indices.delete_indices(&index, &value)?;
-            self.inner().delete(&index)?;
-        }
-        Ok(())
     }
 
     /// Create iterator ending on given index. If no value is provided
@@ -145,5 +124,42 @@ where
         };
 
         Ok(ret)
+    }
+}
+
+impl<Message, Schema, Indices> StoreCollector for Store<Message, Schema, Indices>
+where
+    Message: BincodeEncoded,
+    Schema: KeyValueSchema<Key = u64, Value = Message>,
+    Indices: SecondaryIndices<PrimarySchema = Schema> + Clone,
+{
+    type Message = Message;
+
+    // Reserve new index for later use.
+    // The index must be manually inserted with [Store::put_message]
+    fn reserve_index(&self) -> u64 {
+        self.seq.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// Create cursor into the database, allowing iteration over values matching given filters.
+    /// Values are sorted by the index in descending order.
+    /// * Arguments:
+    /// - cursor_index: Index of start of the sequence (if no value provided, start at the end)
+    /// - limit: Limit result to maximum of specified value
+    /// - filters: Specified filters for values
+    fn store_message(&self, msg: &Self::Message, index: u64) -> Result<u64, StorageError> {
+        self.inner().put(&index, msg)?;
+        self.indices.store_indices(&index, msg)?;
+        self.inc_count();
+        Ok(index)
+    }
+
+    /// Deletes the message and corresponding secondary indices.
+    fn delete_message(&self, index: u64) -> Result<(), StorageError> {
+        if let Some(value) = self.inner().get(&index)? {
+            self.indices.delete_indices(&index, &value)?;
+            self.inner().delete(&index)?;
+        }
+        Ok(())
     }
 }

@@ -6,7 +6,7 @@ services:
     image: simplestakingcom/tezedge-debugger:latest
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: dev-dir/Dockerfile
     privileged: true
     init: true
     environment:
@@ -14,7 +14,7 @@ services:
     volumes:
       - "tezedge-shared-data:/tmp/volume/tezedge:ro"
       - "tezos-shared-data:/tmp/volume/tezos:ro"
-      - "./target/debugger_db:/tmp/volume/debugger_db:rw"
+      # - "./target/debugger_db:/tmp/volume/debugger_db:rw"
       - "./config-docker.toml:/home/appuser/config.toml:ro"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
     entrypoint: sh -c "./bpf-sniffer & sleep 0.5 && ./tezedge-debugger"
@@ -25,7 +25,7 @@ services:
 
   tezedge-node:
     image: simplestakingcom/tezedge:latest
-    command: ["--network", "delphi", "--actions-store-backend", "rocksdb", "file"]
+    command: ["--network", "mainnet", "--actions-store-backend", "rocksdb", "file"]
     init: true
     logging:
       # Produce syslogs instead of terminal logs
@@ -62,16 +62,16 @@ services:
       - "9733:9733"
       - "18733:18733"     # node RPC port
 
-  #explorer:
-  #  image: simplestakingcom/tezedge-explorer:latest
-  #  environment:
-  #    - SANDBOX=https://carthage.tezedge.com:3030
-  #    - API=[{"id":"rust","name":"rust","http":"http://localhost:18732","debugger":"http://localhost:17732","ws":"ws://localhost:4927"},{"id":"ocaml","name":"ocaml","http":"http://localhost:18733","debugger":"http://localhost:17733","ws":false}]
-  #  depends_on:
-  #    - tezedge-node
-  #    - tezos-node
-  #  ports:
-  #    - "8080:80"
+  explorer:
+    image: simplestakingcom/tezedge-explorer:latest
+    environment:
+      - SANDBOX=https://carthage.tezedge.com:3030
+      - API=[{"id":"rust","name":"rust","http":"http://localhost:18732","debugger":"http://localhost:17732","ws":"ws://localhost:4927"},{"id":"ocaml","name":"ocaml","http":"http://localhost:18733","debugger":"http://localhost:17733","ws":false}]
+    depends_on:
+      - tezedge-node
+      - tezos-node
+    ports:
+      - "8080:80"
 
 volumes:
   tezedge-shared-data:

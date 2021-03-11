@@ -1,7 +1,7 @@
 use std::{sync::Arc, net::SocketAddr, iter, path::Path, fs};
 use rocksdb::Cache;
 use storage::persistent::{open_kv, DbConfiguration};
-use super::{P2pStore, p2p, indices};
+use super::{P2pStore, p2p, indices, StoreCollector};
 
 fn p2p<P: AsRef<Path>>(path: P) -> P2pStore {
     let _ = fs::remove_dir_all(&path);
@@ -14,7 +14,7 @@ fn p2p<P: AsRef<Path>>(path: P) -> P2pStore {
 #[test]
 fn basic_store_fetch() {
     let db = p2p("target/db_test_simple");
-    let messages_original = vec![
+    let mut messages_original = vec![
         p2p::Message::new(
             indices::NodeName(3123),
             "127.0.0.1:12345".parse().unwrap(),
@@ -25,8 +25,10 @@ fn basic_store_fetch() {
             None,
         ),
     ];
-    for message in &messages_original {
-        db.store_message(message).unwrap();
+    for message in &mut messages_original {
+        let index = db.reserve_index();
+        message.id = index;
+        db.store_message(message, index).unwrap();
     }
     let messages = db.get_cursor(None, 1024, &p2p::Filters::default()).unwrap();
     println!("{}", serde_json::to_string(&messages_original).unwrap());
@@ -52,7 +54,7 @@ fn prepare_p2p(db: &P2pStore) {
 
             for i in 0..128 {
                 let bytes = iter::repeat(0).map(|_| rand::random()).take(128).collect::<Vec<u8>>();
-                let message = p2p::Message::new(
+                let mut message = p2p::Message::new(
                     node_name.clone(),
                     remote_addr.clone(),
                     source_type.clone(),
@@ -61,7 +63,9 @@ fn prepare_p2p(db: &P2pStore) {
                     bytes,
                     None,
                 );
-                db.store_message(&message).unwrap();
+                let index = db.reserve_index();
+                message.id = index;
+                db.store_message(&message, index).unwrap();
             }
         }
     }

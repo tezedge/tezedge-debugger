@@ -8,8 +8,8 @@ use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use bpf_sniffer_lib::{Command, EventId, RingBuffer, RingBufferData, SnifferEvent, BpfModuleClient};
 
-use super::{p2p, reporter::Reporter, processor, DebuggerConfig, NodeConfig};
-use crate::storage_::{P2pStore, p2p::Message as P2pMessage, indices::Initiator};
+use super::{p2p, reporter::Reporter, DebuggerConfig, NodeConfig};
+use crate::storage_::{P2pStore, StoreClient, p2p::Message as P2pMessage, indices::Initiator};
 use crate::system::utils::ReceiverStream;
 
 pub struct Parser {
@@ -71,7 +71,7 @@ impl Parser {
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     ) {
-        let db = processor::spawn_processor(self.storage.clone(), self.config.clone());
+        let db = StoreClient::spawn(self.storage.clone(), self.config.p2p_message_limit);
         let mut s = self;
 
         for node_config in &s.config.nodes.clone() {
@@ -99,7 +99,7 @@ impl Parser {
         &mut self,
         parser: &mut p2p::Parser,
         slice: RingBufferData,
-        db: &mpsc::UnboundedSender<P2pMessage>,
+        db: &StoreClient<P2pMessage>,
     ) {
         match SnifferEvent::try_from(slice.as_ref()) {
             Err(error) => tracing::error!("{:?}", error),
@@ -193,7 +193,7 @@ impl Parser {
         parser: &mut p2p::Parser,
         id: EventId,
         address: SocketAddr,
-        db: &mpsc::UnboundedSender<P2pMessage>,
+        db: &StoreClient<P2pMessage>,
         listened_on: Option<u32>,
     ) {
         let source_type = if listened_on.is_some() {

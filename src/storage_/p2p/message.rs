@@ -9,11 +9,12 @@ use tezos_messages::p2p::encoding::{
     prelude::*,
 };
 use tezos_encoding::encoding::{HasEncoding, Encoding};
-use super::{Access, indices::{P2pType, Initiator, Sender, NodeName}};
+use super::{Access, indices::{P2pType, Initiator, Sender, NodeName}, MessageId};
 
 /// P2PMessage as stored in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
+    pub id: u64,
     pub node_name: NodeName,
     pub timestamp: u128,
     pub remote_addr: SocketAddr,
@@ -39,6 +40,7 @@ impl Message {
         error: Option<String>,
     ) -> Self {
         Message {
+            id: 0,
             node_name,
             timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos(),
             source_type,
@@ -65,6 +67,7 @@ impl Message {
             Err(error) => (None, Some(error)),
         };
         Message {
+            id: 0,
             node_name,
             timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos(),
             source_type,
@@ -296,6 +299,12 @@ impl Access<NodeName> for Message {
 impl Access<SocketAddr> for Message {
     fn accessor(&self) -> SocketAddr {
         self.remote_addr.clone()
+    }
+}
+
+impl MessageId for Message {
+    fn set_id(&mut self, id: u64) {
+        self.id = id;
     }
 }
 

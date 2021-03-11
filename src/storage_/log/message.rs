@@ -6,6 +6,7 @@ use super::{Access, indices::{NodeName, LogLevel}};
 /// Received logs saved in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
+    pub id: u64,
     pub node_name: NodeName,
     pub level: LogLevel,
     #[serde(alias = "timestamp", alias = "time", rename(serialize = "timestamp"))]
@@ -24,6 +25,7 @@ impl Message {
     /// Create new log from undefined raw string
     pub fn raw(line: String, node_name: NodeName) -> Self {
         Message {
+            id: 0,
             node_name,
             level: LogLevel::Fatal,
             date: get_ts(),
@@ -75,6 +77,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
         if pos == 15 {
             if let Some((level, message)) = Self::rust_log_line(line) {
                 Message {
+                    id: 0,
                     node_name: NodeName(0),
                     date,
                     level: LogLevel::from_str(level).unwrap_or(LogLevel::Fatal),
@@ -83,6 +86,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                 }
             } else {
                 Message {
+                    id: 0,
                     node_name: NodeName(0),
                     date,
                     level: LogLevel::Fatal,
@@ -93,6 +97,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
         } else {
             if let Some((level, message)) = Self::ocaml_log_line(line) {
                 Message {
+                    id: 0,
                     node_name: NodeName(0),
                     date,
                     level: LogLevel::from_str(level).unwrap_or(LogLevel::Fatal),
@@ -101,6 +106,7 @@ impl<S: AsRef<str> + Ord + PartialEq + Clone> From<syslog_loose::Message<S>> for
                 }
             } else {
                 Message {
+                    id: 0,
                     node_name: NodeName(0),
                     date,
                     level: LogLevel::Fatal,
