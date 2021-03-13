@@ -23,4 +23,8 @@ impl Reporter {
             Err(_) => None,
         }
     }
+
+    pub async fn terminate(&self) -> Result<(), ()> {
+        self.tx_p2p_command.send(p2p::Command::Terminate).await.map_err(|_| ())
+    }
 }

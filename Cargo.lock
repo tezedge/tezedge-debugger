@@ -83,7 +83,7 @@ checksum = "36ea56748e10732c49404c153638a15ec3d6211ec5ff35d9bb20e13b93576adf"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -313,9 +313,9 @@ checksum = "e3b5ca7a04898ad4bcd41c90c5285445ff5b791899bb1b0abdd2a2aa791211d7"
 
 [[package]]
 name = "byteorder"
-version = "1.4.2"
+version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae44d1a3d5a19df61dd0c8beb138458ac2a53a7ac09eba97d55592540004306b"
+checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "bytes"
@@ -353,7 +353,7 @@ dependencies = [
  "llvm-sys",
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
  "tempfile",
  "toml_edit",
 ]
@@ -753,7 +753,7 @@ dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
  "strsim 0.9.3",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -764,7 +764,7 @@ checksum = "d9b5a2f4ac4969822c62224815d069952656cadc7084fdca9751e6d959189b72"
 dependencies = [
  "darling_core",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -788,7 +788,7 @@ dependencies = [
  "derive_builder_core",
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -800,7 +800,7 @@ dependencies = [
  "darling",
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -867,7 +867,7 @@ checksum = "aa4da3c766cd7a0db8242e326e9e4e081edd567072893ed320008189715366a4"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
  "synstructure",
 ]
 
@@ -1004,7 +1004,7 @@ dependencies = [
  "proc-macro-hack",
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -1098,7 +1098,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -1138,7 +1138,7 @@ dependencies = [
  "http",
  "indexmap",
  "slab",
- "tokio 1.2.0",
+ "tokio 1.3.0",
  "tokio-util",
  "tracing",
 ]
@@ -1264,7 +1264,7 @@ dependencies = [
  "itoa",
  "pin-project",
  "socket2",
- "tokio 1.2.0",
+ "tokio 1.3.0",
  "tower-service",
  "tracing",
  "want",
@@ -1279,7 +1279,7 @@ dependencies = [
  "bytes 1.0.1",
  "hyper",
  "native-tls",
- "tokio 1.2.0",
+ "tokio 1.3.0",
  "tokio-native-tls",
 ]
 
@@ -1764,7 +1764,7 @@ dependencies = [
  "tezos_encoding 1.1.2",
  "tezos_identity",
  "tezos_messages 1.1.2",
- "tokio 1.2.0",
+ "tokio 1.3.0",
 ]
 
 [[package]]
@@ -2027,7 +2027,7 @@ checksum = "758669ae3558c6f74bd2a18b41f7ac0b5a195aea6639d6a9b5e5d1ad5ba24c0b"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -2103,7 +2103,7 @@ dependencies = [
  "proc-macro-error-attr",
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
  "version_check",
 ]
 
@@ -2307,7 +2307,7 @@ dependencies = [
  "libc",
  "log",
  "regex",
- "tokio 1.2.0",
+ "tokio 1.3.0",
  "zero",
 ]
 
@@ -2319,7 +2319,7 @@ dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
  "rustc_version 0.3.3",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -2332,7 +2332,7 @@ dependencies = [
  "glob",
  "quote 1.0.9",
  "redbpf-macros",
- "syn 1.0.62",
+ "syn 1.0.63",
  "ufmt",
 ]
 
@@ -2347,14 +2347,13 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.4.3"
+version = "1.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9251239e129e16308e70d853559389de218ac275b515068abc96829d05b948a"
+checksum = "54fd1046a3107eb58f42de31d656fee6853e5d276c455fd943742dce89fc3dd3"
 dependencies = [
  "aho-corasick",
  "memchr",
  "regex-syntax",
- "thread_local",
 ]
 
 [[package]]
@@ -2369,9 +2368,9 @@ dependencies = [
 
 [[package]]
 name = "regex-syntax"
-version = "0.6.22"
+version = "0.6.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5eb417147ba9860a96cfe72a0b93bf88fee1744b5636ec99ab20c1aa9376581"
+checksum = "24d5f089152e60f62d28b835fbff2cd2e8dc0baf1ac13343bef92ab7eed84548"
 
 [[package]]
 name = "remove_dir_all"
@@ -2384,9 +2383,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.1"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0460542b551950620a3648c6aa23318ac6b3cd779114bd873209e6e8b5eb1c34"
+checksum = "bf12057f289428dbf5c591c74bf10392e4a8003f993405a902f20117019022d4"
 dependencies = [
  "base64",
  "bytes 1.0.1",
@@ -2407,7 +2406,7 @@ dependencies = [
  "pin-project-lite 0.2.6",
  "serde 1.0.124",
  "serde_urlencoded",
- "tokio 1.2.0",
+ "tokio 1.3.0",
  "tokio-native-tls",
  "url",
  "wasm-bindgen",
@@ -2553,7 +2552,7 @@ checksum = "aaaae8f38bb311444cfb7f1979af0bc9240d95795f75f9ceddf6a59b79ceffa0"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -2658,7 +2657,7 @@ checksum = "1800f7693e94e186f5e25a28291ae1570da908aff7d97a095dec1e56ff99069b"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -2905,7 +2904,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -2926,7 +2925,7 @@ dependencies = [
  "heck",
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -2958,9 +2957,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.62"
+version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "123a78a3596b24fee53a6464ce52d8ecbf62241e6294c7e7fe12086cd161f512"
+checksum = "8fd9bc7ccc2688b3344c2f48b9b546648b25ce0b20fc717ee7fa7981a8ca9717"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
@@ -2975,7 +2974,7 @@ checksum = "b834f2d66f734cb897113e34aaff2f1ab4719ca946f9a7358dba8f8064148701"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
  "unicode-xid 0.2.1",
 ]
 
@@ -3067,7 +3066,7 @@ dependencies = [
  "tezos-conversation",
  "tezos_encoding 1.1.2",
  "tezos_messages 1.1.2",
- "tokio 1.2.0",
+ "tokio 1.3.0",
  "tokio-stream",
  "toml",
  "tracing",
@@ -3294,9 +3293,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8190d04c665ea9e6b6a0dc45523ade572c088d2e6566244c1122671dbf4ae3a"
+checksum = "8d56477f6ed99e10225f38f9f75f872f29b8b8bd8c0b946f63345bb144e9eeda"
 dependencies = [
  "autocfg",
  "bytes 1.0.1",
@@ -3320,7 +3319,7 @@ checksum = "e44da00bfc73a25f814cd8d7e57a68a5c31b74b3152a0a1d1f590c97ed06265a"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -3331,7 +3330,7 @@ checksum = "caf7b11a536f46a809a8a9f0bb4237020f70ecbf115b842360afb127ea2fda57"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -3341,18 +3340,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7d995660bd2b7f8c1568414c1126076c13fbb725c40112dc0120b78eb9b717b"
 dependencies = [
  "native-tls",
- "tokio 1.2.0",
+ "tokio 1.3.0",
 ]
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1981ad97df782ab506a1f43bf82c967326960d278acf3bf8279809648c3ff3ea"
+checksum = "c535f53c0cfa1acace62995a8994fc9cc1f12d202420da96ff306ee24d576469"
 dependencies = [
  "futures-core",
  "pin-project-lite 0.2.6",
- "tokio 1.2.0",
+ "tokio 1.3.0",
 ]
 
 [[package]]
@@ -3364,22 +3363,22 @@ dependencies = [
  "futures-util",
  "log",
  "pin-project",
- "tokio 1.2.0",
+ "tokio 1.3.0",
  "tungstenite",
 ]
 
 [[package]]
 name = "tokio-util"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebb7cb2f00c5ae8df755b252306272cd1790d39728363936e01827e11f0b017b"
+checksum = "ec31e5cc6b46e653cf57762f36f71d5e6386391d88a72fd6db4508f8f676fb29"
 dependencies = [
  "bytes 1.0.1",
  "futures-core",
  "futures-sink",
  "log",
  "pin-project-lite 0.2.6",
- "tokio 1.2.0",
+ "tokio 1.3.0",
 ]
 
 [[package]]
@@ -3423,13 +3422,13 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8a9bd1db7706f2373a190b0d067146caa39350c486f3d455b0e33b431f94c07"
+checksum = "41768be5b9f3489491825f56f01f25290aa1d3e7cc97e182d4d34360493ba6fa"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -3560,7 +3559,7 @@ dependencies = [
  "proc-macro-hack",
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
 ]
 
 [[package]]
@@ -3722,7 +3721,7 @@ dependencies = [
  "serde 1.0.124",
  "serde_json",
  "serde_urlencoded",
- "tokio 1.2.0",
+ "tokio 1.3.0",
  "tokio-stream",
  "tokio-tungstenite",
  "tokio-util",
@@ -3766,7 +3765,7 @@ dependencies = [
  "log",
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
  "wasm-bindgen-shared",
 ]
 
@@ -3800,7 +3799,7 @@ checksum = "cc053ec74d454df287b9374ee8abb36ffd5acb95ba87da3ba5b7d3fe20eb401e"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.9",
- "syn 1.0.62",
+ "syn 1.0.63",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]

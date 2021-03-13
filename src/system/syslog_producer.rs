@@ -1,10 +1,10 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use tracing::{error, info};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use tokio::{
-    io,
     net::UdpSocket,
+    task::JoinHandle,
 };
 use crate::{
     storage_::{LogStore, StoreCollector, log, indices::NodeName},
@@ -12,17 +12,24 @@ use crate::{
 };
 
 /// Spawn new Syslog UDP server, for processing syslogs.
-pub async fn syslog_producer(storage: &LogStore, node: &NodeConfig) -> io::Result<()> {
+pub fn spawn(storage: &LogStore, node: &NodeConfig, running: Arc<AtomicBool>) -> JoinHandle<()> {
     // Create the server
     let syslog_port = node.syslog_port;
     let name = node.p2p_port.clone();
     let storage = storage.clone();
-    let socket = UdpSocket::bind(("0.0.0.0", syslog_port)).await?;
-    info!(port = syslog_port, "started listening for syslog");
     tokio::spawn(async move {
+        let socket = match UdpSocket::bind(("0.0.0.0", syslog_port)).await {
+            Ok(socket) => socket,
+            Err(err) => {
+                tracing::error!(error = tracing::field::display(&err), "failed to bin syslog socket");
+                return;
+            },
+        };
+        tracing::info!(port = syslog_port, "started listening for syslog");
+
         // Local packet buffer
         let mut buffer = [0u8; 64 * 1024];
-        loop {
+        while running.load(Ordering::Relaxed) {
             // Read data from UDP server
             let read = socket.recv(&mut buffer)
                 .await.unwrap(); // This unwrap is safe, as socket was bound before reading
@@ -33,10 +40,9 @@ pub async fn syslog_producer(storage: &LogStore, node: &NodeConfig) -> io::Resul
                 let mut log_msg = log::Message::from(msg);
                 log_msg.node_name = NodeName(name.clone());
                 if let Err(err) = storage.store_message(log_msg) {
-                    error!(error = tracing::field::display(&err), "failed to store log");
+                    tracing::error!(error = tracing::field::display(&err), "failed to store log");
                 }
             }
         }
-    });
-    Ok(())
+    })
 }

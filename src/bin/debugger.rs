@@ -5,12 +5,11 @@
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-use std::{fs, io::Read, path::Path, process::exit, sync::Arc};
-use tracing::{info, error, Level};
+use std::{fs, io::Read, path::Path, sync::{Arc, atomic::{AtomicBool, Ordering}}};
 use rocksdb::Cache;
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::{
-    system::{DebuggerConfig, syslog_producer::syslog_producer},
+    system::{DebuggerConfig, syslog_producer},
     endpoints::routes,
     storage_::{P2pStore, LogStore},
 };
@@ -40,33 +39,20 @@ fn load_config() -> Result<DebuggerConfig, failure::Error> {
 async fn main() -> Result<(), failure::Error> {
     // Initialize tracing default tracing console subscriber
     tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
+        .with_max_level(tracing::Level::INFO)
         .init();
 
     // Load system config to drive the rest of the system
-    let config = match load_config() {
-        Ok(config) => config,
-        Err(err) => {
-            error!(error = tracing::field::display(&err), "failed to load config");
-            exit(1);
-        }
-    };
+    let config = load_config()?;
 
     // Initialize storage for messages
-    let (p2p_db, log_db) = match open_database(&config) {
-        Ok(storage) => storage,
-        Err(err) => {
-            error!(error = tracing::field::display(&err), "failed to open database");
-            exit(1);
-        }
-    };
+    let (p2p_db, log_db) = open_database(&config)?;
+
+    let running = Arc::new(AtomicBool::new(true));
 
     // Create syslog server for each node to capture logs from docker / syslogs
     for node_config in &config.nodes {
-        if let Err(err) = syslog_producer(&log_db, node_config).await {
-            error!(error = tracing::field::display(&err), "failed to build syslog server");
-            exit(1);
-        }
+        syslog_producer::spawn(&log_db, node_config, running.clone());
     }
 
     // Create and spawn bpf sniffing system
@@ -81,12 +67,11 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     // Wait for SIGTERM signal
-    if let Err(err) = tokio::signal::ctrl_c().await {
-        error!(error = tracing::field::display(&err), "failed while listening for signal");
-        exit(1);
-    }
+    tokio::signal::ctrl_c().await?;
 
-    info!("ctrl-c received");
+    tracing::info!("ctrl-c received");
+    running.store(false, Ordering::Relaxed);
+    // TODO: stop bpf sniffer and p2p parsers
 
     Ok(())
 }
