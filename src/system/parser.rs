@@ -2,13 +2,12 @@ use std::{
     collections::HashMap,
     convert::TryFrom,
     net::{SocketAddr, IpAddr},
-    sync::{Arc, Mutex},
 };
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use bpf_sniffer_lib::{Command, EventId, RingBuffer, RingBufferData, SnifferEvent, BpfModuleClient};
 
-use super::{p2p, reporter::Reporter, DebuggerConfig, NodeConfig};
+use super::{p2p, DebuggerConfig, NodeConfig};
 use crate::storage_::{P2pStore, StoreClient, p2p::Message as P2pMessage, indices::Initiator};
 use crate::system::utils::ReceiverStream;
 
@@ -28,10 +27,12 @@ enum Event {
 impl Parser {
     /// spawn a (green)thread which parse the data from the kernel,
     /// returns object which can report statistics
-    pub fn try_spawn(storage: &P2pStore, config: &DebuggerConfig) -> Arc<Mutex<Reporter>> {
-        let (tx_p2p_command, rx_p2p_command) = mpsc::channel(8);
-        let (tx_p2p_report, rx_p2p_report) = mpsc::channel(8);
-
+    pub fn try_spawn(
+        storage: &P2pStore,
+        config: &DebuggerConfig,
+        rx_p2p_command: mpsc::Receiver<p2p::Command>,
+        tx_p2p_report: mpsc::Sender<p2p::Report>,
+    ) {
         match BpfModuleClient::new(&config.bpf_sniffer) {
             Ok((sniffer, ring_buffer)) => {
                 let s = Parser {
@@ -48,9 +49,6 @@ impl Parser {
                 "failed to connect to bpf sniffer",
             ),
         }
-
-        let reporter = Reporter::new(tx_p2p_command, rx_p2p_report);
-        Arc::new(Mutex::new(reporter))
     }
 
     fn send_command(&mut self, cmd: Command) {

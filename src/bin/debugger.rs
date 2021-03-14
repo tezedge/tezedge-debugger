@@ -5,7 +5,7 @@
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-use std::{fs, io::Read, path::Path, sync::{Arc, atomic::{AtomicBool, Ordering}}};
+use std::{fs, io::Read, path::Path, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}};
 use rocksdb::Cache;
 use storage::persistent::{open_kv, DbConfiguration};
 use tezedge_debugger::{
@@ -13,8 +13,7 @@ use tezedge_debugger::{
     endpoints::routes,
     storage_::{P2pStore, LogStore},
 };
-#[cfg(target_os = "linux")]
-use tezedge_debugger::system::Parser;
+use tezedge_debugger::system::Reporter;
 
 /// Create new message store, from well defined path
 fn open_database(config: &DebuggerConfig) -> Result<(P2pStore, LogStore), failure::Error> {
@@ -56,15 +55,12 @@ async fn main() -> Result<(), failure::Error> {
     }
 
     // Create and spawn bpf sniffing system
-    #[cfg(target_os = "linux")] {
-        let reporter = Parser::try_spawn(&p2p_db, &config);
-        tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
-    }
-
-    #[cfg(not(target_os = "linux"))] {
-        // Spawn warp RPC server
-        tokio::spawn(warp::serve(routes(p2p_db, log_db)).run(([0, 0, 0, 0], config.rpc_port)));
-    }
+    let reporter = {
+        let mut reporter = Reporter::new();
+        reporter.spawn_parser(&p2p_db, &config);
+        Arc::new(Mutex::new(reporter))
+    };
+    tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
 
     // Wait for SIGTERM signal
     tokio::signal::ctrl_c().await?;
