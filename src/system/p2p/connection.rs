@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, mem};
 use tokio::{
     sync::mpsc::{self, error::SendError},
-    task::{JoinHandle, JoinError},
+    task::JoinHandle,
 };
 use futures::future::Either;
 
@@ -121,8 +121,17 @@ impl Connection {
         self.send(Either::Right(command))
     }
 
-    pub async fn join(mut self) -> Result<ConnectionReport, JoinError> {
+    pub async fn join(mut self) -> Option<ConnectionReport> {
         self.send_command(Command::Terminate);
-        self.handle.await
+        match self.handle.await {
+            Ok(report) => Some(report),
+            Err(error) => {
+                tracing::error!(
+                    error = tracing::field::display(&error),
+                    msg = "P2P failed to join task which was processing the connection",
+                );
+                None
+            },
+        }
     }
 }

@@ -51,23 +51,21 @@ async fn main() -> Result<(), failure::Error> {
 
     // Create syslog server for each node to capture logs from docker / syslogs
     for node_config in &config.nodes {
+        // TODO: spawn a single server for all nodes
         syslog_producer::spawn(&log_db, node_config, running.clone());
     }
 
     // Create and spawn bpf sniffing system
-    let reporter = {
-        let mut reporter = Reporter::new();
-        reporter.spawn_parser(&p2p_db, &config);
-        Arc::new(Mutex::new(reporter))
-    };
-    tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
+    let reporter = Arc::new(Mutex::new(Reporter::new()));
+    reporter.lock().unwrap().spawn_parser(&p2p_db, &config);
+    tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter.clone())).run(([0, 0, 0, 0], config.rpc_port)));
 
     // Wait for SIGTERM signal
     tokio::signal::ctrl_c().await?;
 
     tracing::info!("ctrl-c received");
     running.store(false, Ordering::Relaxed);
-    // TODO: stop bpf sniffer and p2p parsers
+    reporter.lock().unwrap().terminate().await;
 
     Ok(())
 }

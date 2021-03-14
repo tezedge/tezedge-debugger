@@ -1,4 +1,5 @@
 use tokio::sync::mpsc;
+use warp::reply::{Json, json};
 use super::{DebuggerConfig, p2p};
 use crate::storage_::P2pStore;
 
@@ -38,27 +39,24 @@ impl Reporter {
         }
     }
 
-    pub async fn get_p2p_report(&mut self) -> serde_json::Value {
+    pub async fn get_p2p_report(&mut self) -> Json {
         match self.tx_p2p_command.send(p2p::Command::GetReport).await {
             Ok(()) => {
                 #[cfg(target_os = "linux")] {
                     let report = self.rx_p2p_report.recv().await;
-                    serde_json::to_value(report).unwrap()
+                    json(&report)
                 }
                 #[cfg(not(target_os = "linux"))] {
-                    serde_json::Value::Null
+                    json::<Option<()>>(&None)
                 }
             },
-            Err(_) => serde_json::Value::Null,
+            Err(_) => json::<Option<()>>(&None),
         }
     }
 
-    pub async fn terminate(&self) -> Result<(), ()> {
+    pub async fn terminate(&self) {
         #[cfg(target_os = "linux")] {
-            self.tx_p2p_command.send(p2p::Command::Terminate).await.map_err(|_| ())
-        }
-        #[cfg(not(target_os = "linux"))] {
-            Ok(())
+            let _ = self.tx_p2p_command.send(p2p::Command::Terminate).await;
         }
     }
 }

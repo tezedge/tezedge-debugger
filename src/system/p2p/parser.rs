@@ -2,8 +2,9 @@ use std::{
     path::Path,
     net::SocketAddr,
     collections::HashMap,
+    time::Duration,
 };
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, time};
 use tezos_conversation::Identity;
 use bpf_sniffer_lib::{EventId, SocketId};
 
@@ -45,7 +46,7 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(tx_report: mpsc::Sender<Report>) -> Self {
-        let (tx_connection_report, rx_connection_report) = mpsc::channel(0x100);
+        let (tx_connection_report, rx_connection_report) = mpsc::channel(0x1000);
         Parser {
             identity_cache: None,
             tx_report,
@@ -57,38 +58,53 @@ impl Parser {
     }
 
     pub async fn execute(&mut self, command: Command) {
-        let report = self.execute_inner(command).await;
-        match self.tx_report.send(report).await {
-            Ok(()) => (),
-            Err(_) => (),
+        let mut num = 0;
+        for (_, c) in &mut self.working_connections {
+            c.send_command(command);
+            num += 1;
         }
-    }
-
-    async fn execute_inner(&mut self, command: Command) -> Report {
-        //self.working_connections.iter_mut().for_each(|(_, c)| c.send_command(command));
 
         match command {
             Command::GetReport => {
-                let mut working_connections = Vec::new();
-                for (_, connection) in &mut self.working_connections {
-                    connection.send_command(Command::GetReport);
-                    if let Some(report) = self.rx_connection_report.recv().await {
-                        working_connections.push(report);
+                let mut working_connections = Vec::with_capacity(num);
+                let get_reports = async {
+                    for _ in 0..num {
+                        if let Some(report) = self.rx_connection_report.recv().await {
+                            working_connections.push(report);
+                        } else {
+                            tracing::error!("failed to receive reports from all parsers");
+                            break;
+                        }
                     }
+                };
+                match time::timeout(Duration::from_millis(1_000), get_reports).await {
+                    Ok(()) => (),
+                    Err(_) => tracing::error!("failed to receive reports from all parsers, timeout"),
                 }
-                //while let Some(report) = self.rx_connection_report.recv().await {
-                //    working_connections.push(report);
-                //}
                 let mut closed_connections = self.closed_connections.clone();
                 closed_connections.iter_mut().for_each(|report| report.metadata = None);
         
-                Report::prepare(closed_connections, working_connections)        
+                let report = Report::prepare(closed_connections, working_connections);
+                match self.tx_report.send(report).await {
+                    Ok(()) => (),
+                    Err(_) => (),
+                }
             },
-            Command::Terminate => {
-                // debug_assert!(self.rx_connection_report.try_recv().is_err(), "should not have reports to receive");
-                // TODO: this is the final report, compare it with ocaml report
-                Report::prepare(self.closed_connections.clone(), Vec::new())        
+            Command::Terminate => (),
+        }
+    }
+
+    pub async fn terminate(mut self) {
+        // TODO: this is the final report, compare it with ocaml report
+        for (_, c) in self.working_connections {
+            if let Some(report) = c.join().await {
+                self.closed_connections.push(report)
             }
+        }
+        let report = Report::prepare(self.closed_connections, Vec::new());
+        match self.tx_report.send(report).await {
+            Ok(()) => (),
+            Err(_) => (),
         }
     }
 
@@ -135,12 +151,8 @@ impl Parser {
             };
             let connection = Connection::spawn(self.tx_connection_report.clone(), parser);
             if let Some(old) = self.working_connections.insert(id.socket_id, connection) {
-                match old.join().await {
-                    Ok(report) => self.closed_connections.push(report),
-                    Err(error) => tracing::error!(
-                        error = tracing::field::display(&error),
-                        msg = "P2P failed to join task which was processing the connection",
-                    ),
+                if let Some(report) = old.join().await {
+                    self.closed_connections.push(report)
                 }
             }
             true
@@ -153,12 +165,8 @@ impl Parser {
     pub async fn process_close(&mut self, event_id: EventId) {
         // can safely drop the old connection
         if let Some(old) = self.working_connections.remove(&event_id.socket_id) {
-            match old.join().await {
-                Ok(report) => self.closed_connections.push(report),
-                Err(error) => tracing::error!(
-                    error = tracing::field::display(&error),
-                    msg = "P2P failed to join task which was processing the connection",
-                ),
+            if let Some(report) = old.join().await {
+                self.closed_connections.push(report)
             }
         }
     }

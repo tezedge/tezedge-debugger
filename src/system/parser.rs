@@ -88,7 +88,14 @@ impl Parser {
                 Event::RbData(slice) => s.process(&mut p2p_parser, slice, &db).await,
                 // while executing this command new slices from the kernel will not be processed
                 // so it is impossible to have data race
-                Event::P2pCommand(command) => p2p_parser.execute(command).await,
+                Event::P2pCommand(command) => {
+                    p2p_parser.execute(command).await;
+                    if let p2p::Command::Terminate = command {
+                        // TODO: timeout
+                        p2p_parser.terminate().await;
+                        break;
+                    }
+                },
             }
         }
     }

@@ -1,4 +1,4 @@
-use warp::{Filter, Rejection, reply::{with_status, json, WithStatus, Json}, http::StatusCode};
+use warp::{Filter, Rejection, reply::{with_status, WithStatus, Json}, http::StatusCode};
 
 use std::sync::{Arc, Mutex};
 use crate::system::Reporter;
@@ -9,6 +9,6 @@ pub fn p2p_report(reporter: Arc<Mutex<Reporter>>) -> impl Filter<Extract=(WithSt
         .and(warp::query::query())
         .map(move |()| -> WithStatus<Json> {
             let report = tokio::task::block_in_place(|| futures::executor::block_on(reporter.lock().unwrap().get_p2p_report()));
-            with_status(json(&report), StatusCode::OK)
+            with_status(report, StatusCode::OK)
         })
 }
