@@ -13,6 +13,9 @@ pub use self::store_mpsc::StoreClient;
 mod secondary_index;
 pub use self::secondary_index::SecondaryIndices;
 
+#[cfg(unix)]
+pub mod remote;
+
 pub type P2pStore = Store<p2p::Message, p2p::Schema, p2p::Indices>;
 pub type LogStore = Store<log::Message, log::Schema, log::Indices>;
 
