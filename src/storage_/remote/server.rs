@@ -1,14 +1,18 @@
 use std::{
-    os::unix::net::UnixListener,
-    io::{self, BufRead, BufReader},
+    future::Future,
+    io,
     path::Path,
     fs,
     fmt,
     sync::Arc,
-    thread::{self, JoinHandle},
 };
+use tokio::{net::UnixListener, io::AsyncReadExt, task::JoinHandle};
 use generic_array::{ArrayLength, GenericArray, typenum};
 use rocksdb::{DB, WriteOptions};
+use futures::{
+    future::{self, FutureExt, Either},
+    pin_mut,
+};
 use super::common::{DbRemoteOperation, KEY_SIZE_LIMIT, VALUE_SIZE_LIMIT};
 
 pub enum DbServerError {
@@ -78,7 +82,7 @@ pub struct DbServer {
 }
 
 impl DbServer {
-    const READER_CAPACITY: usize = 0x1000000;  // 16 MiB
+    //const READER_CAPACITY: usize = 0x1000000;  // 16 MiB
 
     pub fn bind<P>(path: P, inner: &Arc<DB>, cf_dictionary: Vec<&'static str>) -> io::Result<Self>
     where
@@ -100,27 +104,46 @@ impl DbServer {
         write_opts
     }
 
-    pub fn spawn(self) -> JoinHandle<Result<(), DbServerError>> {
-        thread::spawn(move || {
-            // let's serve single client
-            let (stream, _) = self.listener.accept()?;
-            let mut buf_stream = BufReader::with_capacity(Self::READER_CAPACITY, stream);
-            handle_connection(&mut buf_stream, self.inner.clone(), self.cf_dictionary, &Self::default_write_opts())
-        })    
+    pub fn spawn(self, terminate: impl Future<Output = ()> + Send + 'static) -> JoinHandle<()> {
+        tokio::spawn(async move {
+            let terminate = terminate.fuse();
+            pin_mut!(terminate);
+            loop {
+                let accept_future = self.listener.accept();
+                pin_mut!(accept_future);
+
+                terminate = match future::select(accept_future, terminate).await {
+                    Either::Left((Ok((stream, _)), terminate)) => {
+                        match handle_connection(stream, self.inner.clone(), self.cf_dictionary.clone(), &Self::default_write_opts()).await {
+                            Ok(()) => terminate,
+                            Err(error) => {
+                                tracing::error!(error = tracing::field::display(&error), "error handling connection");
+                                terminate
+                            },
+                        }
+                    },
+                    Either::Left((Err(error), terminate)) => {
+                        tracing::error!(error = tracing::field::display(&error), "error accepting connection");
+                        terminate
+                    },
+                    Either::Right(((), _)) => break,
+                }
+            }
+        })
     }
 }
 
-fn handle_connection<S>(
-    buf_stream: &mut S,
+async fn handle_connection<S>(
+    mut stream: S,
     inner: Arc<DB>,
     cf_dictionary: Vec<&'static str>,
     write_opts: &WriteOptions,
 ) -> Result<(), DbServerError>
 where
-    S: BufRead,
+    S: AsyncReadExt + Unpin,
 {
     loop {
-        match handle_connection_inner(buf_stream, inner.clone(), &cf_dictionary, write_opts) {
+        match handle_connection_inner(&mut stream, inner.clone(), &cf_dictionary, write_opts).await {
             Ok(()) => (),
             Err(e) => {
                 if e.eof() {
@@ -133,32 +156,40 @@ where
     }
 }
 
-fn handle_connection_inner<S>(
-    buf_stream: &mut S,
+async fn handle_connection_inner<S>(
+    stream: &mut S,
     inner: Arc<DB>,
     cf_dictionary: &Vec<&'static str>,
     write_opts: &WriteOptions,
 ) -> Result<(), DbServerError>
 where
-    S: BufRead,
+    S: AsyncReadExt + Unpin,
 {
-    let index = buf_stream.read_u16()? as usize;
+    let index = read_u16(stream).await? as usize;
     let name = *cf_dictionary.get(index)
         .ok_or(DbServerError::ColumnIndex { allowed: cf_dictionary.len(), index })?;
-    let cf = inner.cf_handle(name).ok_or(DbServerError::ColumnNotFound { name })?;
 
-    let op = buf_stream.read_u16()?;
+    let op = read_u16(stream).await?;
     if DbRemoteOperation::Put as u16 == op {
-        let key_size = buf_stream.read_u32()? as usize;
+        let key_size = read_u32(stream).await? as usize;
         if key_size > KEY_SIZE_LIMIT {
             Err(DbServerError::KeySize(key_size))?;
         }
-        let value_size = buf_stream.read_u32()? as usize;
+        let value_size = read_u32(stream).await? as usize;
         if value_size > KEY_SIZE_LIMIT {
             Err(DbServerError::ValueSize(value_size))?;
         }
 
-        let buf = buf_stream.fill_buf()?;
+        let mut big_buf = vec![0; key_size + value_size];
+        stream.read_exact(&mut big_buf).await?;
+        let key = &big_buf[0..key_size];
+        let value = &big_buf[key_size..(key_size + value_size)];
+
+        let cf = inner.cf_handle(name).ok_or(DbServerError::ColumnNotFound { name })?;
+        inner.put_cf_opt(cf, key, value, &write_opts)?;
+
+        // TODO: buf read
+        /*let buf = future::poll_fn(|cx| buf_stream.poll_fill_buf(cx)).await?;
         if buf.is_empty() {
             Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))?;
         }
@@ -181,7 +212,7 @@ where
                     let local_target = buf.len();
                     big_buf.extend_from_slice(buf);
                     buf_stream.consume(local_target);
-                    buf = buf_stream.fill_buf()?;
+                    buf = future::poll_fn(|cx| buf_stream.poll_fill_buf(cx)).await?;
                     if buf.is_empty() {
                         Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))?;
                     }
@@ -190,7 +221,7 @@ where
             let key = &big_buf[0..key_size];
             let value = &big_buf[key_size..(key_size + value_size)];
             inner.put_cf_opt(cf, key, value, &write_opts)?;
-        }
+        }*/
     } else { // add operations here
         tracing::error!(op = op, "unsupported operation");
         Err(DbServerError::UnsupportedOperation(op))?;
@@ -199,48 +230,28 @@ where
     Ok(())
 }
 
-trait BufReadArray {
-    fn read_array<L>(&mut self) -> io::Result<GenericArray<u8, L>>
-    where
-        L: ArrayLength<u8>;
-}
-
-impl<T> BufReadArray for T
+async fn read_array<S, L>(s: &mut S) -> io::Result<GenericArray<u8, L>>
 where
-    T: BufRead,
+    S: AsyncReadExt + Unpin,
+    L: ArrayLength<u8>,
 {
-    fn read_array<L>(&mut self) -> io::Result<GenericArray<u8, L>>
-    where
-        L: ArrayLength<u8>,
-    {
-        let buf = self.fill_buf()?;
-        if buf.len() < L::USIZE {
-            Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
-        } else {
-            let mut a = GenericArray::default();
-            a.clone_from_slice(&buf[0..L::USIZE]);
-            self.consume(L::USIZE);
-            Ok(a)
-        }
-    }
+    let mut a = GenericArray::default();
+    let _ = s.read_exact(a.as_mut()).await?;
+    Ok(a)
 }
 
-trait BufReadArrayExt {
-    fn read_u16(&mut self) -> io::Result<u16>;
-    fn read_u32(&mut self) -> io::Result<u32>;
-}
-
-impl<T> BufReadArrayExt for T
+async fn read_u16<S>(s: &mut S) -> io::Result<u16>
 where
-    T: BufReadArray,
+    S: AsyncReadExt + Unpin,
 {
-    fn read_u16(&mut self) -> io::Result<u16> {
-        let a = self.read_array::<typenum::U2>()?;
-        Ok(u16::from_ne_bytes(a.into()))
-    }
+    let a = read_array::<S, typenum::U2>(s).await?;
+    Ok(u16::from_ne_bytes(a.into()))
+}
 
-    fn read_u32(&mut self) -> io::Result<u32> {
-        let a = self.read_array::<typenum::U4>()?;
-        Ok(u32::from_ne_bytes(a.into()))
-    }
+async fn read_u32<S>(s: &mut S) -> io::Result<u32>
+where
+    S: AsyncReadExt + Unpin,
+{
+    let a = read_array::<S, typenum::U4>(s).await?;
+    Ok(u32::from_ne_bytes(a.into()))
 }
