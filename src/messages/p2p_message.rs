@@ -14,6 +14,7 @@ use std::net::SocketAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::persistent::{Decoder, SchemaError, Encoder};
 use std::str::FromStr;
+use crate::storage::HasNodeName;
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
 /// Determines, if message belongs to communication originated
@@ -37,7 +38,7 @@ impl SourceType {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 /// P2PMessage as stored in the database
 pub struct P2pMessage {
-    pub node_name: String,
+    pub node_name: u16,
     pub id: Option<u64>,
     pub timestamp: u128,
     pub remote_addr: SocketAddr,
@@ -51,6 +52,12 @@ pub struct P2pMessage {
     pub message: Vec<TezosPeerMessage>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub ordinal_id: Option<u64>,
+}
+
+impl HasNodeName for P2pMessage {
+    fn node_name(&self) -> u16 {
+        self.node_name.clone()
+    }
 }
 
 impl Decoder for P2pMessage {
@@ -75,7 +82,7 @@ impl P2pMessage {
 
     /// Make new P2pMessage from parts
     pub fn new(
-        node_name: String,
+        node_name: u16,
         remote_addr: SocketAddr,
         incoming: bool,
         source_type: SourceType,

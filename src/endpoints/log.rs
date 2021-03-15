@@ -1,24 +1,24 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use crate::storage::{MessageStore, log_indexes::{LogLevel, ParseLogLevel}, LogFilters};
-use crate::messages::log_message::LogMessage;
+use std::convert::TryInto;
+use serde::{Serialize, Deserialize};
 use failure::Error;
 use warp::{
     Filter, Reply, Rejection,
     reply::{with_status, json, WithStatus, Json},
     http::StatusCode,
 };
-use std::convert::TryInto;
-use serde::{Serialize, Deserialize};
+use crate::storage_::{LogStore, log::Filters, indices::{LogLevel, ParseLogLevelError, NodeName}};
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 /// Cursor structure mapped from the endpoint URI
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct LogCursor {
     pub cursor_id: Option<u64>,
     pub limit: Option<usize>,
     pub level: Option<String>,
     pub timestamp: Option<String>,
+    pub node_name: Option<u16>,
 }
 
 impl LogCursor {
@@ -32,7 +32,7 @@ impl LogCursor {
     }
 
     /// Parse given log level as an database-understandable value
-    fn get_level(&self) -> Result<Vec<LogLevel>, ParseLogLevel> {
+    fn get_level(&self) -> Result<Vec<LogLevel>, ParseLogLevelError> {
         if let Some(ref level) = self.level {
             let mut ret = vec![];
             for l in level.split(',') {
@@ -45,28 +45,28 @@ impl LogCursor {
     }
 }
 
-impl TryInto<LogFilters> for LogCursor {
+impl TryInto<Filters> for LogCursor {
     type Error = Error;
 
-    fn try_into(self) -> Result<LogFilters, Self::Error> {
-        Ok(LogFilters {
-            level: self.get_level()?,
+    fn try_into(self) -> Result<Filters, Self::Error> {
+        Ok(Filters {
+            log_level: self.get_level()?,
             date: self.get_timestamp()?,
+            node_name: self.node_name.map(NodeName),
         })
     }
 }
 
 /// Basic handler for log endpoint with cursor
-pub fn log(storage: MessageStore) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone + Sync + Send + 'static {
+pub fn log(storage: LogStore) -> impl Filter<Extract=impl Reply, Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "log")
         .and(warp::query::query())
         .map(move |cursor: LogCursor| -> WithStatus<Json> {
             let limit = cursor.limit.unwrap_or(100);
             let cursor_id = cursor.cursor_id.clone();
             match cursor.try_into() {
-                Ok(filters) => match storage.log().get_cursor(cursor_id, limit, filters) {
+                Ok(filters) => match storage.get_cursor(cursor_id, limit, &filters) {
                     Ok(msgs) => {
-                        let msgs = LogMessage::enumerate(msgs);
                         with_status(json(&msgs), StatusCode::OK)
                     },
                     Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),

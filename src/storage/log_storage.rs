@@ -11,6 +11,7 @@ use storage::{StorageError, IteratorMode, Direction};
 use crate::storage::log_storage::secondary_indexes::{LevelIndex, LogLevel, TimestampIndex};
 use crate::storage::secondary_index::SecondaryIndex;
 use crate::storage::sorted_intersect::sorted_intersect;
+use crate::storage::NodeNameIndex;
 use itertools::Itertools;
 
 /// Defined Key Value store for Log storage
@@ -21,12 +22,13 @@ pub type LogStorageKV = dyn KeyValueStoreWithSchema<LogStore> + Sync + Send;
 pub struct LogFilters {
     pub level: Vec<LogLevel>,
     pub date: Option<u128>,
+    pub node_name: Option<u16>,
 }
 
 impl LogFilters {
     /// Check, if there are no set filters
     pub fn empty(&self) -> bool {
-        self.level.is_empty() && self.date.is_none()
+        self.level.is_empty() && self.date.is_none() && self.node_name.is_none()
     }
 }
 
@@ -36,6 +38,7 @@ pub struct LogStore {
     kv: Arc<LogStorageKV>,
     level_index: LevelIndex,
     timestamp_index: TimestampIndex,
+    node_name_index: NodeNameIndex,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
 }
@@ -47,7 +50,8 @@ impl LogStore {
         Self {
             kv: kv.clone(),
             level_index: LevelIndex::new(kv.clone()),
-            timestamp_index: TimestampIndex::new(kv),
+            timestamp_index: TimestampIndex::new(kv.clone()),
+            node_name_index: NodeNameIndex::new(kv),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(0)),
         }
@@ -72,13 +76,17 @@ impl LogStore {
     /// Create all indexes for given value
     pub fn make_indexes(&self, primary_index: u64, value: &LogMessage) -> Result<(), StorageError> {
         self.level_index.store_index(&primary_index, value)?;
-        self.timestamp_index.store_index(&primary_index, value)
+        self.timestamp_index.store_index(&primary_index, value)?;
+        SecondaryIndex::<Self>::store_index(&self.node_name_index, &primary_index, value)?;
+        Ok(())
     }
 
     /// Delete all indexes for given value
     pub fn delete_indexes(&self, primary_index: u64, value: &LogMessage) -> Result<(), StorageError> {
         self.level_index.delete_index(&primary_index, value)?;
-        self.timestamp_index.delete_index(&primary_index, value)
+        self.timestamp_index.delete_index(&primary_index, value)?;
+        SecondaryIndex::<Self>::delete_index(&self.node_name_index, &primary_index, value)?;
+        Ok(())
     }
 
     /// Put messages onto specific index
@@ -122,6 +130,9 @@ impl LogStore {
             if let Some(timestamp) = filters.date {
                 iters.push(self.timestamp_iterator(cursor_index, timestamp)?);
             }
+            if let Some(node_name) = filters.node_name {
+                iters.push(self.node_name_iterator(cursor_index, node_name)?);
+            }
             ret.extend(self.load_indexes(sorted_intersect(iters, limit).into_iter()));
         }
         Ok(ret)
@@ -152,6 +163,13 @@ impl LogStore {
     pub fn timestamp_iterator<'a>(&'a self, cursor_index: Option<u64>, timestamp: u128) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
         println!("Getting the timestamp iterator");
         Ok(Box::new(self.timestamp_index.get_iterator(&cursor_index.unwrap_or(std::u64::MAX), timestamp, Direction::Reverse)?
+            .filter_map(|(_, value)| {
+                value.ok()
+            })))
+    }
+
+    pub fn node_name_iterator<'a>(&'a self, cursor_index: Option<u64>, node_name: u16) -> Result<Box<dyn 'a + Iterator<Item=u64>>, StorageError> {
+        Ok(Box::new(SecondaryIndex::<Self>::get_concrete_prefix_iterator(&self.node_name_index, &cursor_index.unwrap_or(std::u64::MAX), node_name)?
             .filter_map(|(_, value)| {
                 value.ok()
             })))

@@ -6,10 +6,12 @@ mod log_storage;
 mod rpc_storage;
 mod stat_storage;
 mod secondary_index;
+mod node_name_index;
 
 pub use p2p_storage::{P2pStore, P2pFilters, secondary_indexes::Type as P2pMessageType};
 pub use log_storage::{LogStore, LogFilters};
 pub use rpc_storage::{RpcStore, RpcFilters};
+pub use self::node_name_index::{HasNodeName, NodeNameIndex};
 pub(crate) use p2p_storage::secondary_indexes as p2p_indexes;
 pub(crate) use log_storage::secondary_indexes as log_indexes;
 pub(crate) use rpc_storage::secondary_indexes as rpc_indexes;
@@ -82,6 +84,7 @@ pub fn cfs() -> Vec<ColumnFamilyDescriptor> {
         log_indexes::LevelIndex::descriptor(&cache),
         log_indexes::TimestampIndex::descriptor(&cache),
         rpc_indexes::RemoteAddrIndex::descriptor(&cache),
+        node_name_index::NodeNameIndex::descriptor(&cache),
     ]
 }
 

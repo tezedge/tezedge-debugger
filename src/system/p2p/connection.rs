@@ -1,18 +1,18 @@
 use std::{net::SocketAddr, mem};
 use tokio::{
     sync::mpsc::{self, error::SendError},
-    task::{JoinHandle, JoinError},
+    task::JoinHandle,
 };
 use futures::future::Either;
 
 use super::{connection_parser::Parser, parser::{Command, Message}, report::ConnectionReport};
-use crate::messages::p2p_message::SourceType;
+use crate::{storage_::indices::Initiator, system::utils::UnboundedReceiverStream};
 
 pub struct Connection {
     state: ConnectionState,
     tx: mpsc::UnboundedSender<Either<Message, Command>>,
     handle: JoinHandle<ConnectionReport>,
-    source_type: SourceType,
+    source_type: Initiator,
     // it is possible we receive/send connection message in wrong order
     // do connect and receive the message and then send
     // or do accept and send the message and then receive
@@ -36,7 +36,7 @@ impl Connection {
         let (tx, rx) = mpsc::unbounded_channel();
         let source_type = parser.source_type.clone();
         let remote_address = parser.remote_address.clone();
-        let handle = tokio::spawn(parser.run(rx, tx_report));
+        let handle = tokio::spawn(parser.run(UnboundedReceiverStream::new(rx), tx_report));
         Connection {
             state: ConnectionState::Initial,
             tx,
@@ -121,8 +121,17 @@ impl Connection {
         self.send(Either::Right(command))
     }
 
-    pub async fn join(mut self) -> Result<ConnectionReport, JoinError> {
+    pub async fn join(mut self) -> Option<ConnectionReport> {
         self.send_command(Command::Terminate);
-        self.handle.await
+        match self.handle.await {
+            Ok(report) => Some(report),
+            Err(error) => {
+                tracing::error!(
+                    error = tracing::field::display(&error),
+                    msg = "P2P failed to join task which was processing the connection",
+                );
+                None
+            },
+        }
     }
 }

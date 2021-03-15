@@ -1,2 +1,3 @@
 [v1]
-"tezedge_debugger 0.1.0 (path+file:///home/vscode/workspace/simplestaking/tezedge-debugger)" = ["decrypt", "drone-client", "drone-server", "replayer", "tezedge-debugger"]
+"bpf-sniffer 0.1.0 (path+file:///var/home/vladislav/workspace/simplestaking/tezedge-debugger/bpf-sniffer)" = ["bpf-sniffer"]
+"tezedge_debugger 0.1.0 (path+file:///var/home/vladislav/workspace/simplestaking/tezedge-debugger)" = ["tezedge-debugger"]

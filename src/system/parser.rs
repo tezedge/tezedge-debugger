@@ -1,17 +1,20 @@
-use std::{collections::HashMap, convert::TryFrom, net::{SocketAddr, IpAddr}, sync::{Arc, Mutex}};
-use tokio::{stream::StreamExt, sync::mpsc};
-use sniffer::{BpfModule, SnifferEvent, RingBufferData, EventId};
-
-use super::{p2p, reporter::Reporter, processor, DebuggerConfig, NodeConfig};
-use crate::{
-    messages::p2p_message::{P2pMessage, SourceType},
-    storage::MessageStore,
+use std::{
+    collections::HashMap,
+    convert::TryFrom,
+    net::{SocketAddr, IpAddr},
 };
+use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
+use bpf_sniffer_lib::{Command, EventId, RingBuffer, RingBufferData, SnifferEvent, BpfModuleClient};
+
+use super::{p2p, DebuggerConfig, NodeConfig};
+use crate::storage_::{P2pStore, StoreClient, p2p::Message as P2pMessage, indices::Initiator};
+use crate::system::utils::ReceiverStream;
 
 pub struct Parser {
-    module: BpfModule,
     config: DebuggerConfig,
-    storage: MessageStore,
+    storage: P2pStore,
+    sniffer: BpfModuleClient,
     pid_to_config: HashMap<u32, NodeConfig>,
     counter: u64,
 }
@@ -22,53 +25,87 @@ enum Event {
 }
 
 impl Parser {
-    pub fn new(storage: &MessageStore, config: &DebuggerConfig) -> Self {
-        Parser {
-            module: BpfModule::load(),
-            config: config.clone(),
-            storage: storage.clone(),
-            pid_to_config: HashMap::new(),
-            counter: 0,
+    /// spawn a (green)thread which parse the data from the kernel,
+    /// returns object which can report statistics
+    pub fn try_spawn(
+        storage: &P2pStore,
+        config: &DebuggerConfig,
+        rx_p2p_command: mpsc::Receiver<p2p::Command>,
+        tx_p2p_report: mpsc::Sender<p2p::Report>,
+    ) {
+        match BpfModuleClient::new(&config.bpf_sniffer) {
+            Ok((sniffer, ring_buffer)) => {
+                let s = Parser {
+                    config: config.clone(),
+                    storage: storage.clone(),
+                    sniffer,
+                    pid_to_config: HashMap::new(),
+                    counter: 0,
+                };
+                tokio::spawn(s.run(ring_buffer, rx_p2p_command, tx_p2p_report));
+            },
+            Err(error) => tracing::error!(
+                error = tracing::field::display(&error),
+                "failed to connect to bpf sniffer",
+            ),
         }
     }
 
-    /// spawn a (green)thread which parse the data from the kernel,
-    /// returns object which can report statistics
-    pub fn spawn(self) -> Arc<Mutex<Reporter>> {
-        let (tx_p2p_command, rx_p2p_command) = mpsc::channel(1);
-        let (tx_p2p_report, rx_p2p_report) = mpsc::channel(1);
-        tokio::spawn(self.run(rx_p2p_command, tx_p2p_report));
-        let reporter = Reporter::new(tx_p2p_command, rx_p2p_report);
-        Arc::new(Mutex::new(reporter))
+    fn send_command(&mut self, cmd: Command) {
+        match self.sniffer.send_command(cmd) {
+            Ok(()) => (),
+            Err(error) => {
+                tracing::error!(
+                    error = tracing::field::display(&error),
+                    "failed to send command to sniffer",
+                );
+            }
+        }
     }
 
     async fn run(
         self,
+        ring_buffer: RingBuffer,
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     ) {
-        let db = processor::spawn_processor(self.storage.clone(), self.config.clone());
-        for node_config in &self.config.nodes {
-            self.module.watch_port(node_config.p2p_port);
-        }
-        let rb = self.module.main_buffer();
+        let db = StoreClient::spawn(self.storage.clone());
         let mut s = self;
+
+        for node_config in &s.config.nodes.clone() {
+            let cmd = Command::WatchPort { port: node_config.p2p_port };
+            s.send_command(cmd);
+        }
+
         // merge streams, let await either some data from the kernel,
         // or some command from the overlying code
+        let rx_p2p_command = ReceiverStream::new(rx_p2p_command);
         let mut stream =
-            rb.map(Event::RbData).merge(rx_p2p_command.map(Event::P2pCommand));
+            ring_buffer.map(Event::RbData).merge(rx_p2p_command.map(Event::P2pCommand));
         let mut p2p_parser = p2p::Parser::new(tx_p2p_report);
         while let Some(event) = stream.next().await {
             match event {
                 Event::RbData(slice) => s.process(&mut p2p_parser, slice, &db).await,
                 // while executing this command new slices from the kernel will not be processed
                 // so it is impossible to have data race
-                Event::P2pCommand(command) => p2p_parser.execute(command).await,
+                Event::P2pCommand(command) => {
+                    p2p_parser.execute(command).await;
+                    if let p2p::Command::Terminate = command {
+                        // TODO: timeout
+                        p2p_parser.terminate().await;
+                        break;
+                    }
+                },
             }
         }
     }
 
-    async fn process(&mut self, parser: &mut p2p::Parser, slice: RingBufferData, db: &mpsc::UnboundedSender<P2pMessage>) {
+    async fn process(
+        &mut self,
+        parser: &mut p2p::Parser,
+        slice: RingBufferData,
+        db: &StoreClient<P2pMessage>,
+    ) {
         match SnifferEvent::try_from(slice.as_ref()) {
             Err(error) => tracing::error!("{:?}", error),
             Ok(SnifferEvent::Bind { id, address }) => {
@@ -161,27 +198,35 @@ impl Parser {
         parser: &mut p2p::Parser,
         id: EventId,
         address: SocketAddr,
-        db: &mpsc::UnboundedSender<P2pMessage>,
+        db: &StoreClient<P2pMessage>,
         listened_on: Option<u32>,
     ) {
         let source_type = if listened_on.is_some() {
-            SourceType::Remote
+            Initiator::Remote
         } else {
-            SourceType::Local
+            Initiator::Local
         };
         let socket_id = id.socket_id.clone();
 
         // the message is not belong to the node
         if self.should_ignore(&address) {
             tracing::info!(id = tracing::field::display(&id), msg = "ignore");
-            self.module.ignore(socket_id);
+            let cmd = Command::IgnoreConnection {
+                pid: id.socket_id.pid,
+                fd: id.socket_id.fd,
+            };
+            self.send_command(cmd);
         } else {
             if let Some(config) = self.pid_to_config.get(&id.socket_id.pid) {
                 let r = parser.process_connect(&config, id, address, db, source_type).await;
                 if !r.have_identity {
                     tracing::warn!("ignore connection because no identity");
-                    self.module.ignore(socket_id);
-                }    
+                    let cmd = Command::IgnoreConnection {
+                        pid: socket_id.pid,
+                        fd: socket_id.fd,
+                    };
+                    self.send_command(cmd);
+                }
             } else {
                 tracing::warn!(
                     id = tracing::field::display(&id),

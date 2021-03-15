@@ -3,10 +3,9 @@ FROM simplestakingcom/tezedge-bpf-builder:latest as builder
 RUN apt install -y g++ git
 
 COPY . .
-RUN git reset --hard e99c0e47b896ca804875e8213b144fd841e91ff2 && \
-    cargo install --bins --root . --path .
-# RUN cp debugger_config.toml bin/debugger_config.toml
+RUN cargo build --bin tezedge-debugger --release && cargo build -p bpf-sniffer --release
 
-FROM ubuntu:20.04
+FROM ubuntu:20.10
 WORKDIR /home/appuser/
-COPY --from=builder /home/appuser/bin ./
+COPY --from=builder /home/appuser/target/none/release/bpf-sniffer ./
+COPY --from=builder /home/appuser/target/none/release/tezedge-debugger ./

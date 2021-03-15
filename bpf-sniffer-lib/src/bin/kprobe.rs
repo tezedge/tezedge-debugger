@@ -7,7 +7,7 @@
 
 use redbpf_probes::kprobe::prelude::*;
 use core::{mem, ptr};
-use sniffer::{SocketId, EventId, DataTag, SyscallContext, SyscallContextFull, send, AppIo, AppProbes};
+use bpf_sniffer_lib::{SocketId, EventId, DataTag, SyscallContext, SyscallContextFull, send, AppIo, AppProbes};
 
 program!(0xFFFFFFFE, "GPL");
 

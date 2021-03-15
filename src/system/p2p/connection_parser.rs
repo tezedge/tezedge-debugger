@@ -3,7 +3,8 @@
 
 use std::{fmt, net::SocketAddr};
 use futures::future::Either;
-use tokio::{stream::StreamExt, sync::mpsc};
+use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
 use tracing::field::DisplayValue;
 use tezos_messages::p2p::{
     encoding::{
@@ -15,9 +16,9 @@ use tezos_messages::p2p::{
     binary_message::BinaryMessage,
 };
 use crypto::{hash::HashType, blake2b};
-use tezos_encoding::binary_reader::BinaryReaderError;
+use tezos_encoding::binary_reader::BinaryReaderErrorKind;
 use tezos_conversation::{Identity, Conversation, Packet, ConsumeResult, ChunkMetadata, ChunkInfoPair, Sender};
-use sniffer::{SocketId, EventId};
+use bpf_sniffer_lib::{SocketId, EventId};
 
 use super::{
     report::{ConnectionReport, ParserError, ParserErrorReport},
@@ -27,22 +28,25 @@ use super::{
 
 use crate::{
     system::NodeConfig,
-    messages::p2p_message::{
-        P2pMessage,
-        SourceType,
-        TezosPeerMessage,
-        PartialPeerMessage,
-        HandshakeMessage,
+    storage_::{
+        StoreClient,
+        p2p::{
+            Message as P2pMessage,
+            TezosPeerMessage,
+            PartialPeerMessage,
+            HandshakeMessage,
+        },
+        indices::{Initiator, NodeName, Sender as InterceptedSender},
     },
 };
 
 pub struct Parser {
     pub identity: Identity,
     pub config: NodeConfig,
-    pub source_type: SourceType,
+    pub source_type: Initiator,
     pub remote_address: SocketAddr,
     pub id: SocketId,
-    pub db: mpsc::UnboundedSender<P2pMessage>,
+    pub db: StoreClient<P2pMessage>,
 }
 
 struct State {
@@ -56,20 +60,22 @@ struct State {
 
 struct ErrorContext {
     is_incoming: bool,
-    source_type: SourceType,
+    source_type: Initiator,
     event_id: EventId,
     chunk_counter: usize,
+    node_port: u16,
 }
 
 impl fmt::Display for ErrorContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{{ source {:?}, chunk {} {}, id {} }}",
+            "{{ source {:?}, chunk {} {}, id {}, node {} }}",
             self.source_type,
             self.chunk_counter,
             if self.is_incoming { "incoming" } else { "outgoing" },
             self.event_id,
+            self.node_port,
         )
     }
 }
@@ -88,7 +94,7 @@ impl Parser {
     }
 
     // TODO: split
-    async fn run_inner<S>(self, mut events: S, mut tx_report: mpsc::Sender<ConnectionReport>) -> Result<ConnectionReport, ConnectionReport>
+    async fn run_inner<S>(self, mut events: S, tx_report: mpsc::Sender<ConnectionReport>) -> Result<ConnectionReport, ConnectionReport>
     where
         S: Unpin + StreamExt<Item = Either<Message, Command>>,
     {
@@ -140,10 +146,10 @@ impl Parser {
             );
             let (result, sender, _) = state.conversation.add(Some(&self.identity), &packet);
             let ok = match (&sender, &self.source_type) {
-                (&Sender::Initiator, &SourceType::Local) => !incoming,
-                (&Sender::Initiator, &SourceType::Remote) => incoming,
-                (&Sender::Responder, &SourceType::Local) => incoming,
-                (&Sender::Responder, &SourceType::Remote) => !incoming,
+                (&Sender::Initiator, &Initiator::Local) => !incoming,
+                (&Sender::Initiator, &Initiator::Remote) => incoming,
+                (&Sender::Responder, &Initiator::Local) => incoming,
+                (&Sender::Responder, &Initiator::Remote) => !incoming,
             };
             if !ok {
                 tracing::debug!(
@@ -159,19 +165,21 @@ impl Parser {
                     let message = ConnectionMessage::from_bytes(&chunk_info.data()[2..])
                         .map(|cm: ConnectionMessage| {
                             if incoming {
-                                let hash = blake2b::digest_128(&chunk_info.data()[4..36]);
-                                state.statistics.peer_id =
-                                    Some(HashType::CryptoboxPublicKeyHash.hash_to_b58check(&hash));
+                                let id = || {
+                                    let hash = blake2b::digest_128(&chunk_info.data()[4..36]).ok()?;
+                                    HashType::CryptoboxPublicKeyHash.hash_to_b58check(&hash).ok()
+                                };
+                                state.statistics.peer_id = id();
                             }
                             HandshakeMessage::ConnectionMessage(cm)
                         })
                         .map(TezosPeerMessage::HandshakeMessage)
                         .map_err(|error| error.to_string());
-                    let p2p_msg = P2pMessage::new(
-                        self.config.name.clone(),
+                    let p2p_msg = P2pMessage::with_message(
+                        NodeName(self.config.p2p_port.clone()),
                         self.remote_address.clone(),
-                        incoming,
                         self.source_type,
+                        InterceptedSender::new(incoming),
                         chunk_info.data().to_vec(),
                         chunk_info.data().to_vec(),
                         message,
@@ -188,12 +196,12 @@ impl Parser {
                     for ChunkInfoPair { encrypted, decrypted } in regular {
                         let ec = self.error_context(&state, incoming, &event_id);
                         let message = state.process(decrypted.data(), ec, incoming);
-                        let p2p_msg = P2pMessage::new(
-                            self.config.name.clone(),
+                        let p2p_msg = P2pMessage::with_message(
+                            NodeName(self.config.p2p_port.clone()),
                             self.remote_address.clone(),
-                            incoming,
                             self.source_type,
-                            encrypted.data().to_vec(),
+                            InterceptedSender::new(incoming),
+                                encrypted.data().to_vec(),
                             decrypted.data().to_vec(),
                             message,
                         );
@@ -209,13 +217,13 @@ impl Parser {
                             tracing::error!(context = context, msg = "cannot decrypt");
                         }
                         let p2p_msg = P2pMessage::new(
-                            self.config.name.clone(),
+                            NodeName(self.config.p2p_port.clone()),
                             self.remote_address.clone(),
-                            incoming,
                             self.source_type,
-                            chunk.data().to_vec(),
+                            InterceptedSender::new(incoming),
+                                chunk.data().to_vec(),
                             vec![],
-                            Err("cannot decrypt".to_string()),
+                            Some("cannot decrypt".to_string()),
                         );
                         state.inc(incoming, false, chunk.data().len());
                         let error_context = self.error_context(&state, incoming, &event_id);
@@ -236,11 +244,20 @@ impl Parser {
                 },
                 ConsumeResult::PowInvalid => {
                     let context = self.error_context(&state, incoming, &event_id);
-                    let payload = tracing::field::display(hex::encode(packet.payload.as_slice()));
-                    if state.statistics.error_report.is_some() {
-                        tracing::debug!(context = context, payload = payload, msg = "wrong pow");
+                    if packet.payload.len() < 0x10000 {
+                        let payload = tracing::field::display(hex::encode(packet.payload.as_slice()));
+                        if state.statistics.error_report.is_some() {
+                            tracing::debug!(context = context, payload = payload, msg = "wrong pow");
+                        } else {
+                            tracing::error!(context = context, payload = payload, msg = "wrong pow");
+                        }
                     } else {
-                        tracing::error!(context = context, payload = payload, msg = "wrong pow");
+                        tracing::error!(
+                            context = context,
+                            remote_address = tracing::field::display(self.remote_address),
+                            payload_len = packet.payload.len(),
+                            msg = "wrong pow, payload is huge",
+                        );
                     }
                     state.report_error(ParserError::WrongProofOfWork);
                 },
@@ -265,16 +282,16 @@ impl Parser {
             source_type: self.source_type,
             event_id: event_id.clone(),
             chunk_counter: state.chunk(is_incoming),
+            node_port: self.config.p2p_port,
         };
         tracing::field::display(ctx)
     }
 
     fn store_db(&self, state: &mut State, message: P2pMessage, error_context: DisplayValue<ErrorContext>) -> Result<(), ConnectionReport> {
         self.db.send(message)
-            .map_err(|err| {
+            .map_err(|_| {
                 tracing::error!(
                     context = error_context,
-                    error = tracing::field::display(&err),
                     msg = "db channel closed abruptly",
                 );
                 state.report_error(ParserError::FailedToWriteInDatabase);
@@ -360,20 +377,16 @@ impl State {
                 self.statistics.incomplete_dropped_messages += 1;
                 self.buffer.clear();
             }
-            return r.messages()
-                .first()
-                .ok_or("empty".to_string())
-                .map(|m| {
-                    let m = m.clone().into();
-                    self.metadata.count_message(&m, incoming);
-                    TezosPeerMessage::PeerMessage(m)
-                })
+            let m = r.message();
+            let m = m.clone().into();
+            self.metadata.count_message(&m, incoming);
+            return Ok(TezosPeerMessage::PeerMessage(m));
         }
 
         self.buffer.extend_from_slice(content);
         match PeerMessageResponse::from_bytes(self.buffer.as_slice()) {
-            Err(e) => match &e {
-                &BinaryReaderError::Underflow { .. } => {
+            Err(e) => match &e.kind() {
+                &BinaryReaderErrorKind::Underflow { .. } => {
                     match PartialPeerMessage::from_bytes(self.buffer.as_slice()) {
                         Some(p) => Ok(TezosPeerMessage::PartialPeerMessage(p)),
                         None => {
@@ -389,14 +402,10 @@ impl State {
             },
             Ok(r) => {
                 self.buffer.clear();
-                r.messages()
-                    .first()
-                    .ok_or("empty".to_string())
-                    .map(|m| {
-                        let m = m.clone().into();
-                        self.metadata.count_message(&m, incoming);
-                        TezosPeerMessage::PeerMessage(m)
-                    })
+                let m = r.message();
+                let m = m.clone().into();
+                self.metadata.count_message(&m, incoming);
+                return Ok(TezosPeerMessage::PeerMessage(m));
             },
         }
     }
