@@ -5,26 +5,36 @@
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-use std::{fs, io::Read, path::Path, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}};
+use std::{fs, io::Read, path::Path, sync::{Arc, Mutex}};
+use futures::FutureExt;
 use rocksdb::Cache;
 use storage::persistent::{open_kv, DbConfiguration};
+use tokio::sync::oneshot;
 use tezedge_debugger::{
-    system::{DebuggerConfig, syslog_producer},
+    system::{DebuggerConfig, Reporter},
     endpoints::routes,
-    storage_::{P2pStore, p2p, LogStore, log, SecondaryIndices, local::LocalDb},
+    storage_::{P2pStore, p2p, LogStore, log, SecondaryIndices, remote::{DbServer, ColumnFamilyDescriptorExt}, local::LocalDb},
 };
-use tezedge_debugger::system::Reporter;
 
 /// Create new message store, from well defined path
-fn open_database(config: &DebuggerConfig) -> Result<(P2pStore, LogStore), failure::Error> {
+fn open_database(config: &DebuggerConfig) -> Result<(DbServer, P2pStore, LogStore), failure::Error> {
     let path = Path::new(&config.db_path);
     if path.exists() && !config.keep_db {
         let _ = fs::remove_dir_all(path);
     }
     let cache = Cache::new_lru_cache(1)?;
+    let mut cf_dictionary = Vec::new();
+    for ColumnFamilyDescriptorExt { short_id, name } in P2pStore::schemas_ext().chain(LogStore::schemas_ext()) {
+        let short_id = short_id as usize;
+        if cf_dictionary.len() < short_id + 1 {
+            cf_dictionary.resize(short_id + 1, "");
+        }
+        cf_dictionary[short_id] = name;
+    }
     let schemas = P2pStore::schemas(&cache).chain(LogStore::schemas(&cache));
     let rocksdb = Arc::new(LocalDb::new(open_kv(&path, schemas, &DbConfiguration::default())?));
     Ok((
+        DbServer::bind("/tmp/debugger_db.sock", &rocksdb, cf_dictionary)?,
         P2pStore::new(&rocksdb, p2p::Indices::new(&rocksdb), config.p2p_message_limit),
         LogStore::new(&rocksdb, log::Indices::new(&rocksdb), config.log_message_limit),
     ))
@@ -48,27 +58,17 @@ async fn main() -> Result<(), failure::Error> {
     let config = load_config()?;
 
     // Initialize storage for messages
-    let (p2p_db, log_db) = open_database(&config)?;
+    let (db_server, p2p_db, log_db) = open_database(&config)?;
 
-    let running = Arc::new(AtomicBool::new(true));
-
-    // Create syslog server for each node to capture logs from docker / syslogs
-    for node_config in &config.nodes {
-        // TODO: spawn a single server for all nodes
-        syslog_producer::spawn(&log_db, node_config, running.clone());
-    }
-
-    // Create and spawn bpf sniffing system
+    let (t_tx, t_rx) = oneshot::channel();
+    let db_server_handle = db_server.spawn(t_rx.map(|r| r.unwrap()));
     let reporter = Arc::new(Mutex::new(Reporter::new()));
-    reporter.lock().unwrap().spawn_parser(p2p_db.clone(), &config);
-    tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter.clone())).run(([0, 0, 0, 0], config.rpc_port)));
+    tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
 
     // Wait for SIGTERM signal
     tokio::signal::ctrl_c().await?;
-
-    tracing::info!("ctrl-c received");
-    running.store(false, Ordering::Relaxed);
-    reporter.lock().unwrap().terminate().await;
+    t_tx.send(()).unwrap();
+    let () = db_server_handle.await?;
 
     Ok(())
 }

@@ -1,5 +1,5 @@
 use std::{sync::Arc, mem};
-use storage::{persistent::KeyValueSchema, StorageError};
+use storage::{persistent::{KeyValueSchema, KeyValueStoreWithSchema}, StorageError};
 use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform, Cache};
 use super::{
     message::Schema,
@@ -11,7 +11,7 @@ use super::{
     ColumnFamilyDescriptorExt,
 };
 
-struct NodeNameSchema;
+pub struct NodeNameSchema;
 
 impl KeyValueSchema for NodeNameSchema {
     type Key = NodeNameKey;
@@ -35,7 +35,7 @@ impl KeyValueSchemaExt for NodeNameSchema {
     }
 }
 
-struct LogLevelSchema;
+pub struct LogLevelSchema;
 
 impl KeyValueSchema for LogLevelSchema {
     type Key = LogLevelKey;
@@ -59,7 +59,7 @@ impl KeyValueSchemaExt for LogLevelSchema {
     }
 }
 
-struct LogTimestampSchema;
+pub struct LogTimestampSchema;
 
 impl KeyValueSchema for LogTimestampSchema {
     type Key = TimestampKey;
@@ -91,18 +91,46 @@ pub struct Filters {
     pub date: Option<u128>,
 }
 
-#[derive(Clone)]
-pub struct Indices {
-    node_name_index: SecondaryIndex<Schema, NodeNameSchema, NodeName>,
-    log_level_index: SecondaryIndex<Schema, LogLevelSchema, LogLevel>,
-    timestamp_index: SecondaryIndex<Schema, LogTimestampSchema, u128>,
+pub struct Indices<KvStorage>
+where
+    KvStorage: AsRef<DB>
+        + KeyValueStoreWithSchema<NodeNameSchema>
+        + KeyValueStoreWithSchema<LogLevelSchema>
+        + KeyValueStoreWithSchema<LogTimestampSchema>,
+{
+    node_name_index: SecondaryIndex<KvStorage, Schema, NodeNameSchema, NodeName>,
+    log_level_index: SecondaryIndex<KvStorage, Schema, LogLevelSchema, LogLevel>,
+    timestamp_index: SecondaryIndex<KvStorage, Schema, LogTimestampSchema, u128>,
 }
 
-impl SecondaryIndices for Indices {
+impl<KvStorage> Clone for Indices<KvStorage>
+where
+    KvStorage: AsRef<DB>
+        + KeyValueStoreWithSchema<NodeNameSchema>
+        + KeyValueStoreWithSchema<LogLevelSchema>
+        + KeyValueStoreWithSchema<LogTimestampSchema>,
+{
+    fn clone(&self) -> Self {
+        Indices {
+            node_name_index: self.node_name_index.clone(),
+            log_level_index: self.log_level_index.clone(),
+            timestamp_index: self.timestamp_index.clone(),
+        }
+    }
+}
+
+impl<KvStorage> SecondaryIndices for Indices<KvStorage>
+where
+    KvStorage: AsRef<DB>
+        + KeyValueStoreWithSchema<NodeNameSchema>
+        + KeyValueStoreWithSchema<LogLevelSchema>
+        + KeyValueStoreWithSchema<LogTimestampSchema>,
+{
+    type KvStorage = KvStorage;
     type PrimarySchema = Schema;
     type Filter = Filters;
 
-    fn new(kv: &Arc<DB>) -> Self {
+    fn new(kv: &Arc<Self::KvStorage>) -> Self {
         Indices {
             node_name_index: SecondaryIndex::new(kv),
             log_level_index: SecondaryIndex::new(kv),

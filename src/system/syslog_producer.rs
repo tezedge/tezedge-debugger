@@ -7,12 +7,15 @@ use tokio::{
     task::JoinHandle,
 };
 use crate::{
-    storage_::{LogStore, StoreCollector, log, indices::NodeName},
+    storage_::{StoreCollector, log, indices::NodeName},
     system::NodeConfig,
 };
 
 /// Spawn new Syslog UDP server, for processing syslogs.
-pub fn spawn(storage: &LogStore, node: &NodeConfig, running: Arc<AtomicBool>) -> JoinHandle<()> {
+pub fn spawn<S>(storage: &S, node: &NodeConfig, running: Arc<AtomicBool>) -> JoinHandle<()>
+where
+    S: StoreCollector<Message = log::Message> + Clone + Send + 'static,
+{
     // Create the server
     let syslog_port = node.syslog_port;
     let name = node.p2p_port.clone();

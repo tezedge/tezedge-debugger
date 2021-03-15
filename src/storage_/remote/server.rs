@@ -8,11 +8,12 @@ use std::{
 };
 use tokio::{net::UnixListener, io::AsyncReadExt, task::JoinHandle};
 use generic_array::{ArrayLength, GenericArray, typenum};
-use rocksdb::{DB, WriteOptions};
+use rocksdb::WriteOptions;
 use futures::{
     future::{self, FutureExt, Either},
     pin_mut,
 };
+use crate::storage_::local::LocalDb;
 use super::common::{DbRemoteOperation, KEY_SIZE_LIMIT, VALUE_SIZE_LIMIT};
 
 pub enum DbServerError {
@@ -76,7 +77,7 @@ impl DbServerError {
 }
 
 pub struct DbServer {
-    inner: Arc<DB>,
+    inner: Arc<LocalDb>,
     cf_dictionary: Vec<&'static str>,
     listener: UnixListener,
 }
@@ -84,7 +85,7 @@ pub struct DbServer {
 impl DbServer {
     //const READER_CAPACITY: usize = 0x1000000;  // 16 MiB
 
-    pub fn bind<P>(path: P, inner: &Arc<DB>, cf_dictionary: Vec<&'static str>) -> io::Result<Self>
+    pub fn bind<P>(path: P, inner: &Arc<LocalDb>, cf_dictionary: Vec<&'static str>) -> io::Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -135,7 +136,7 @@ impl DbServer {
 
 async fn handle_connection<S>(
     mut stream: S,
-    inner: Arc<DB>,
+    inner: Arc<LocalDb>,
     cf_dictionary: Vec<&'static str>,
     write_opts: &WriteOptions,
 ) -> Result<(), DbServerError>
@@ -158,7 +159,7 @@ where
 
 async fn handle_connection_inner<S>(
     stream: &mut S,
-    inner: Arc<DB>,
+    inner: Arc<LocalDb>,
     cf_dictionary: &Vec<&'static str>,
     write_opts: &WriteOptions,
 ) -> Result<(), DbServerError>
@@ -176,7 +177,7 @@ where
             Err(DbServerError::KeySize(key_size))?;
         }
         let value_size = read_u32(stream).await? as usize;
-        if value_size > KEY_SIZE_LIMIT {
+        if value_size > VALUE_SIZE_LIMIT {
             Err(DbServerError::ValueSize(value_size))?;
         }
 
@@ -185,8 +186,8 @@ where
         let key = &big_buf[0..key_size];
         let value = &big_buf[key_size..(key_size + value_size)];
 
-        let cf = inner.cf_handle(name).ok_or(DbServerError::ColumnNotFound { name })?;
-        inner.put_cf_opt(cf, key, value, &write_opts)?;
+        let cf = inner.as_ref().as_ref().cf_handle(name).ok_or(DbServerError::ColumnNotFound { name })?;
+        inner.as_ref().as_ref().put_cf_opt(cf, key, value, &write_opts)?;
 
         // TODO: buf read
         /*let buf = future::poll_fn(|cx| buf_stream.poll_fill_buf(cx)).await?;

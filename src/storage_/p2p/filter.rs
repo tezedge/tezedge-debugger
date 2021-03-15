@@ -1,5 +1,5 @@
 use std::{net::SocketAddr, sync::Arc, mem};
-use storage::{persistent::KeyValueSchema, StorageError};
+use storage::{persistent::{KeyValueSchema, KeyValueStoreWithSchema}, StorageError};
 use rocksdb::{DB, ColumnFamilyDescriptor, Options, SliceTransform, Cache};
 use super::{
     message::Schema,
@@ -11,7 +11,7 @@ use super::{
     ColumnFamilyDescriptorExt,
 };
 
-struct RemoteAddrSchema;
+pub struct RemoteAddrSchema;
 
 impl KeyValueSchema for RemoteAddrSchema {
     type Key = RemoteAddrKey;
@@ -35,7 +35,7 @@ impl KeyValueSchemaExt for RemoteAddrSchema {
     }
 }
 
-struct P2pTypeSchema;
+pub struct P2pTypeSchema;
 
 impl KeyValueSchema for P2pTypeSchema {
     type Key = P2pTypeKey;
@@ -59,7 +59,7 @@ impl KeyValueSchemaExt for P2pTypeSchema {
     }
 }
 
-struct IncomingSchema;
+pub struct IncomingSchema;
 
 impl KeyValueSchema for IncomingSchema {
     type Key = SenderKey;
@@ -83,7 +83,7 @@ impl KeyValueSchemaExt for IncomingSchema {
     }
 }
 
-struct SourceTypeSchema;
+pub struct SourceTypeSchema;
 
 impl KeyValueSchema for SourceTypeSchema {
     type Key = InitiatorKey;
@@ -107,7 +107,7 @@ impl KeyValueSchemaExt for SourceTypeSchema {
     }
 }
 
-struct NodeNameSchema;
+pub struct NodeNameSchema;
 
 impl KeyValueSchema for NodeNameSchema {
     type Key = NodeNameKey;
@@ -141,20 +141,56 @@ pub struct Filters {
     pub types: Vec<P2pType>,
 }
 
-#[derive(Clone)]
-pub struct Indices {
-    remote_addr_index: SecondaryIndex<Schema, RemoteAddrSchema, SocketAddr>,
-    type_index: SecondaryIndex<Schema, P2pTypeSchema, P2pType>,
-    incoming_index: SecondaryIndex<Schema, IncomingSchema, Sender>,
-    source_type_index: SecondaryIndex<Schema, SourceTypeSchema, Initiator>,
-    node_name_index: SecondaryIndex<Schema, NodeNameSchema, NodeName>,
+pub struct Indices<KvStorage>
+where
+    KvStorage: AsRef<DB>
+        + KeyValueStoreWithSchema<RemoteAddrSchema>
+        + KeyValueStoreWithSchema<P2pTypeSchema>
+        + KeyValueStoreWithSchema<IncomingSchema>
+        + KeyValueStoreWithSchema<SourceTypeSchema>
+        + KeyValueStoreWithSchema<NodeNameSchema>,
+{
+    remote_addr_index: SecondaryIndex<KvStorage, Schema, RemoteAddrSchema, SocketAddr>,
+    type_index: SecondaryIndex<KvStorage, Schema, P2pTypeSchema, P2pType>,
+    incoming_index: SecondaryIndex<KvStorage, Schema, IncomingSchema, Sender>,
+    source_type_index: SecondaryIndex<KvStorage, Schema, SourceTypeSchema, Initiator>,
+    node_name_index: SecondaryIndex<KvStorage, Schema, NodeNameSchema, NodeName>,
 }
 
-impl SecondaryIndices for Indices {
+impl<KvStorage> Clone for Indices<KvStorage>
+where
+    KvStorage: AsRef<DB>
+        + KeyValueStoreWithSchema<RemoteAddrSchema>
+        + KeyValueStoreWithSchema<P2pTypeSchema>
+        + KeyValueStoreWithSchema<IncomingSchema>
+        + KeyValueStoreWithSchema<SourceTypeSchema>
+        + KeyValueStoreWithSchema<NodeNameSchema>,
+{
+    fn clone(&self) -> Self {
+        Indices {
+            remote_addr_index: self.remote_addr_index.clone(),
+            type_index: self.type_index.clone(),
+            incoming_index: self.incoming_index.clone(),
+            source_type_index: self.source_type_index.clone(),
+            node_name_index: self.node_name_index.clone(),
+        }
+    }
+}
+
+impl<KvStorage> SecondaryIndices for Indices<KvStorage>
+where
+    KvStorage: AsRef<DB>
+        + KeyValueStoreWithSchema<RemoteAddrSchema>
+        + KeyValueStoreWithSchema<P2pTypeSchema>
+        + KeyValueStoreWithSchema<IncomingSchema>
+        + KeyValueStoreWithSchema<SourceTypeSchema>
+        + KeyValueStoreWithSchema<NodeNameSchema>,
+{
+    type KvStorage = KvStorage;
     type PrimarySchema = Schema;
     type Filter = Filters;
 
-    fn new(kv: &Arc<DB>) -> Self {
+    fn new(kv: &Arc<Self::KvStorage>) -> Self {
         Indices {
             remote_addr_index: SecondaryIndex::new(kv),
             type_index: SecondaryIndex::new(kv),

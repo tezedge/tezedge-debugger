@@ -5,28 +5,19 @@
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-use std::{fs, io::Read, path::Path, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}};
-use rocksdb::Cache;
-use storage::persistent::{open_kv, DbConfiguration};
+use std::{fs, io::Read, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}};
 use tezedge_debugger::{
     system::{DebuggerConfig, syslog_producer},
-    endpoints::routes,
-    storage_::{P2pStore, p2p, LogStore, log, SecondaryIndices, local::LocalDb},
+    storage_::{P2pStoreClient, p2p, LogStoreClient, log, SecondaryIndices, remote::DbClient},
 };
 use tezedge_debugger::system::Reporter;
 
 /// Create new message store, from well defined path
-fn open_database(config: &DebuggerConfig) -> Result<(P2pStore, LogStore), failure::Error> {
-    let path = Path::new(&config.db_path);
-    if path.exists() && !config.keep_db {
-        let _ = fs::remove_dir_all(path);
-    }
-    let cache = Cache::new_lru_cache(1)?;
-    let schemas = P2pStore::schemas(&cache).chain(LogStore::schemas(&cache));
-    let rocksdb = Arc::new(LocalDb::new(open_kv(&path, schemas, &DbConfiguration::default())?));
+fn open_database(config: &DebuggerConfig) -> Result<(P2pStoreClient, LogStoreClient), failure::Error> {
+    let client = Arc::new(DbClient::connect("/tmp/debugger_db.sock")?);
     Ok((
-        P2pStore::new(&rocksdb, p2p::Indices::new(&rocksdb), config.p2p_message_limit),
-        LogStore::new(&rocksdb, log::Indices::new(&rocksdb), config.log_message_limit),
+        P2pStoreClient::new(&client, p2p::Indices::new(&client), config.p2p_message_limit),
+        LogStoreClient::new(&client, log::Indices::new(&client), config.log_message_limit),
     ))
 }
 
@@ -60,8 +51,7 @@ async fn main() -> Result<(), failure::Error> {
 
     // Create and spawn bpf sniffing system
     let reporter = Arc::new(Mutex::new(Reporter::new()));
-    reporter.lock().unwrap().spawn_parser(p2p_db.clone(), &config);
-    tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter.clone())).run(([0, 0, 0, 0], config.rpc_port)));
+    reporter.lock().unwrap().spawn_parser(p2p_db, &config);
 
     // Wait for SIGTERM signal
     tokio::signal::ctrl_c().await?;

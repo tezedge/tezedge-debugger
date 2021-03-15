@@ -1,7 +1,7 @@
 use tokio::sync::mpsc;
 use warp::reply::{Json, json};
 use super::{DebuggerConfig, p2p};
-use crate::storage_::P2pStore;
+use crate::storage_::{StoreCollector, p2p::Message as P2pMessage};
 
 #[cfg(target_os = "linux")]
 use super::parser::Parser;
@@ -26,7 +26,10 @@ impl Reporter {
         }
     }
 
-    pub fn spawn_parser(&mut self, storage: &P2pStore, config: &DebuggerConfig) {
+    pub fn spawn_parser<S>(&mut self, storage: S, config: &DebuggerConfig)
+    where
+        S: StoreCollector<Message = P2pMessage> + Clone + Send + Sync + 'static,
+    {
         if let Some(rx_p2p_command) = self.rx_p2p_command.take() {
             #[cfg(target_os = "linux")] {
                 Parser::try_spawn(storage, config, rx_p2p_command, self.tx_p2p_report.clone())

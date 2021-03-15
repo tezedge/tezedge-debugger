@@ -39,18 +39,20 @@ where
 }
 
 /// generic secondary index store
-pub struct SecondaryIndex<PrimarySchema, Schema, Field>
+pub struct SecondaryIndex<KvStorage, PrimarySchema, Schema, Field>
 where
+    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
     PrimarySchema: KeyValueSchema,
     Schema: KeyValueSchema<Key = Field::Key, Value = PrimarySchema::Key>,
     Field: FilterField<PrimarySchema>,
 {
-    kv: Arc<DB>,
+    kv: Arc<KvStorage>,
     phantom_data: PhantomData<(PrimarySchema, Schema, Field)>,
 }
 
-impl<PrimarySchema, Schema, Field> Clone for SecondaryIndex<PrimarySchema, Schema, Field>
+impl<KvStorage, PrimarySchema, Schema, Field> Clone for SecondaryIndex<KvStorage, PrimarySchema, Schema, Field>
 where
+    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
     PrimarySchema: KeyValueSchema,
     PrimarySchema::Value: Access<Field>,
     Schema: KeyValueSchema<Key = Field::Key, Value = PrimarySchema::Key>,
@@ -64,36 +66,33 @@ where
     }
 }
 
-impl<PrimarySchema, Schema, Field> SecondaryIndex<PrimarySchema, Schema, Field>
+impl<KvStorage, PrimarySchema, Schema, Field> SecondaryIndex<KvStorage, PrimarySchema, Schema, Field>
 where
+    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
     PrimarySchema: KeyValueSchema,
     PrimarySchema::Value: Access<Field>,
     Schema: KeyValueSchema<Key = Field::Key, Value = PrimarySchema::Key>,
     Field: FilterField<PrimarySchema>,
 {
-    pub fn new(kv: &Arc<DB>) -> Self {
+    pub fn new(kv: &Arc<KvStorage>) -> Self {
         SecondaryIndex {
             kv: kv.clone(),
             phantom_data: PhantomData,
         }
     }
 
-    fn inner(&self) -> &impl KeyValueStoreWithSchema<Schema> {
-        self.kv.as_ref()
-    }
-
     /// Build new index for given value and store it.
     pub fn store_index(&self, primary_key: &PrimarySchema::Key, value: &PrimarySchema::Value) -> Result<(), StorageError> {
         let field = value.accessor();
         let key = field.make_index(primary_key);
-        self.inner().put(&key, primary_key).map_err(Into::into)
+        self.kv.put(&key, primary_key).map_err(Into::into)
     }
 
     /// Delete secondary index for primary key - value
     pub fn delete_index(&self, primary_key: &PrimarySchema::Key, value: &PrimarySchema::Value) -> Result<(), StorageError> {
         let field = value.accessor();
         let key = field.make_index(primary_key);
-        self.inner().delete(&key).map_err(Into::into)
+        self.kv.delete(&key).map_err(Into::into)
     }
 
     /// Get iterator starting from specific secondary index build from primary key and field value
@@ -109,13 +108,15 @@ where
         let key = key.encode()?;
         let cf = self
             .kv
+            .as_ref()
+            .as_ref()
             .cf_handle(Schema::name())
             .ok_or(DBError::MissingColumnFamily { name: Schema::name() })?;
         let mut opts = ReadOptions::default();
         opts.set_prefix_same_as_start(true);
 
         Ok(SecondaryIndexIterator {
-            inner: self.kv.iterator_cf_opt(cf, opts, IteratorMode::From(&key, Direction::Reverse)),
+            inner: self.kv.as_ref().as_ref().iterator_cf_opt(cf, opts, IteratorMode::From(&key, Direction::Reverse)),
             phantom_data: PhantomData,
         })
     }
@@ -132,21 +133,24 @@ where
         let key = key.encode()?;
         let cf = self
             .kv
+            .as_ref()
+            .as_ref()
             .cf_handle(Schema::name())
             .ok_or(DBError::MissingColumnFamily { name: Schema::name() })?;
 
         Ok(SecondaryIndexIterator {
-            inner: self.kv.iterator_cf(cf, IteratorMode::From(&key, Direction::Reverse)),
+            inner: self.kv.as_ref().as_ref().iterator_cf(cf, IteratorMode::From(&key, Direction::Reverse)),
             phantom_data: PhantomData,
         })
     }
 }
 
 pub trait SecondaryIndices {
+    type KvStorage;
     type PrimarySchema: KeyValueSchema;
     type Filter;
 
-    fn new(kv: &Arc<DB>) -> Self;
+    fn new(kv: &Arc<Self::KvStorage>) -> Self;
 
     fn schemas(cache: &Cache) -> Vec<ColumnFamilyDescriptor>;
 
