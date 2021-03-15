@@ -1,7 +1,7 @@
 use std::{time::{SystemTime, UNIX_EPOCH}, str::FromStr};
 use serde::{Serialize, Deserialize};
 use storage::persistent::{KeyValueSchema, BincodeEncoded};
-use super::{Access, indices::{NodeName, LogLevel}, MessageHasId};
+use super::{Access, indices::{NodeName, LogLevel}, MessageHasId, KeyValueSchemaExt};
 
 /// Received logs saved in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,4 +151,10 @@ impl KeyValueSchema for Schema {
     type Value = Message;
 
     fn name() -> &'static str { "log_message_storage" }
+}
+
+impl KeyValueSchemaExt for Schema {
+    fn short_id() -> u16 {
+        0x0001
+    }
 }

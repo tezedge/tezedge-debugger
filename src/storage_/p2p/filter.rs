@@ -7,6 +7,8 @@ use super::{
     SecondaryIndices,
     indices::{RemoteAddrKey, P2pTypeKey, P2pType, SenderKey, Sender, InitiatorKey, Initiator, NodeNameKey, NodeName},
     sorted_intersect::sorted_intersect,
+    KeyValueSchemaExt,
+    ColumnFamilyDescriptorExt,
 };
 
 struct RemoteAddrSchema;
@@ -24,6 +26,12 @@ impl KeyValueSchema for RemoteAddrSchema {
 
     fn name() -> &'static str {
         "p2p_reverse_remote_index"
+    }
+}
+
+impl KeyValueSchemaExt for RemoteAddrSchema {
+    fn short_id() -> u16 {
+        0x0020
     }
 }
 
@@ -45,6 +53,12 @@ impl KeyValueSchema for P2pTypeSchema {
     }
 }
 
+impl KeyValueSchemaExt for P2pTypeSchema {
+    fn short_id() -> u16 {
+        0x0021
+    }
+}
+
 struct IncomingSchema;
 
 impl KeyValueSchema for IncomingSchema {
@@ -60,6 +74,12 @@ impl KeyValueSchema for IncomingSchema {
 
     fn name() -> &'static str {
         "p2p_incoming_index"
+    }
+}
+
+impl KeyValueSchemaExt for IncomingSchema {
+    fn short_id() -> u16 {
+        0x0022
     }
 }
 
@@ -81,6 +101,12 @@ impl KeyValueSchema for SourceTypeSchema {
     }
 }
 
+impl KeyValueSchemaExt for SourceTypeSchema {
+    fn short_id() -> u16 {
+        0x0023
+    }
+}
+
 struct NodeNameSchema;
 
 impl KeyValueSchema for NodeNameSchema {
@@ -96,6 +122,12 @@ impl KeyValueSchema for NodeNameSchema {
 
     fn name() -> &'static str {
         "p2p_node_name_index"
+    }
+}
+
+impl KeyValueSchemaExt for NodeNameSchema {
+    fn short_id() -> u16 {
+        0x0024
     }
 }
 
@@ -139,6 +171,16 @@ impl SecondaryIndices for Indices {
             IncomingSchema::descriptor(cache),
             SourceTypeSchema::descriptor(cache),
             NodeNameSchema::descriptor(cache),
+        ]
+    }
+
+    fn schemas_ext() -> Vec<ColumnFamilyDescriptorExt> {
+        vec![
+            RemoteAddrSchema::descriptor_ext(),
+            P2pTypeSchema::descriptor_ext(),
+            IncomingSchema::descriptor_ext(),
+            SourceTypeSchema::descriptor_ext(),
+            NodeNameSchema::descriptor_ext(),
         ]
     }
 

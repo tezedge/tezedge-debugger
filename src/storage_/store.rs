@@ -7,9 +7,9 @@ use storage::{
     Direction,
     IteratorMode,
     StorageError,
-    persistent::{BincodeEncoded, KeyValueSchema, KeyValueStoreWithSchema},
+    persistent::{BincodeEncoded, KeyValueStoreWithSchema},
 };
-use super::secondary_index::SecondaryIndices;
+use super::{secondary_index::SecondaryIndices, remote::{KeyValueSchemaExt, ColumnFamilyDescriptorExt}};
 
 pub trait MessageHasId {
     fn set_id(&mut self, id: u64);
@@ -28,7 +28,7 @@ pub trait StoreCollector {
 pub struct Store<Message, Schema, Indices>
 where
     Message: BincodeEncoded + MessageHasId,
-    Schema: KeyValueSchema<Key = u64, Value = Message>,
+    Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema>,
 {
     kv: Arc<DB>,
@@ -42,7 +42,7 @@ where
 impl<Message, Schema, Indices> Clone for Store<Message, Schema, Indices>
 where
     Message: BincodeEncoded + MessageHasId,
-    Schema: KeyValueSchema<Key = u64, Value = Message>,
+    Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema> + Clone,
 {
     fn clone(&self) -> Self {
@@ -60,7 +60,7 @@ where
 impl<Message, Schema, Indices> Store<Message, Schema, Indices>
 where
     Message: BincodeEncoded + MessageHasId,
-    Schema: KeyValueSchema<Key = u64, Value = Message>,
+    Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema>,
 {
     pub fn new(kv: &Arc<DB>, limit: u64) -> Self {
@@ -78,6 +78,12 @@ where
         use std::iter;
 
         Indices::schemas(cache).into_iter().chain(iter::once(Schema::descriptor(cache)))
+    }
+
+    pub fn schemas_ext() -> impl Iterator<Item = ColumnFamilyDescriptorExt> {
+        use std::iter;
+
+        Indices::schemas_ext().into_iter().chain(iter::once(Schema::descriptor_ext()))
     }
 
     fn inner(&self) -> &impl KeyValueStoreWithSchema<Schema> {
@@ -143,7 +149,7 @@ where
 impl<Message, Schema, Indices> StoreCollector for Store<Message, Schema, Indices>
 where
     Message: BincodeEncoded + MessageHasId,
-    Schema: KeyValueSchema<Key = u64, Value = Message>,
+    Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema> + Clone,
 {
     type Message = Message;

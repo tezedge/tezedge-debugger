@@ -1,6 +1,7 @@
 use std::{marker::PhantomData, sync::Arc};
 use rocksdb::{Cache, ColumnFamilyDescriptor, DB, DBIterator, ReadOptions, IteratorMode, Direction};
 use storage::{StorageError, persistent::{DBError, KeyValueSchema, KeyValueStoreWithSchema, codec::Codec, Encoder, Decoder}};
+use super::remote::ColumnFamilyDescriptorExt;
 
 pub trait FilterField<PrimarySchema>
 where
@@ -148,6 +149,8 @@ pub trait SecondaryIndices {
     fn new(kv: &Arc<DB>) -> Self;
 
     fn schemas(cache: &Cache) -> Vec<ColumnFamilyDescriptor>;
+
+    fn schemas_ext() -> Vec<ColumnFamilyDescriptorExt>;
 
     fn store_indices(
         &self,

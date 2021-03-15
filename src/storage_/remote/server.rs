@@ -73,14 +73,14 @@ impl DbServerError {
 
 pub struct DbServer {
     inner: Arc<DB>,
-    cf_dictionary: &'static [&'static str],
+    cf_dictionary: Vec<&'static str>,
     listener: UnixListener,
 }
 
 impl DbServer {
     const READER_CAPACITY: usize = 0x1000000;  // 16 MiB
 
-    pub fn bind<P>(path: P, inner: &Arc<DB>, cf_dictionary: &'static [&'static str]) -> io::Result<Self>
+    pub fn bind<P>(path: P, inner: &Arc<DB>, cf_dictionary: Vec<&'static str>) -> io::Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -113,14 +113,14 @@ impl DbServer {
 fn handle_connection<S>(
     buf_stream: &mut S,
     inner: Arc<DB>,
-    cf_dictionary: &'static [&'static str],
+    cf_dictionary: Vec<&'static str>,
     write_opts: &WriteOptions,
 ) -> Result<(), DbServerError>
 where
     S: BufRead,
 {
     loop {
-        match handle_connection_inner(buf_stream, inner.clone(), cf_dictionary, write_opts) {
+        match handle_connection_inner(buf_stream, inner.clone(), &cf_dictionary, write_opts) {
             Ok(()) => (),
             Err(e) => {
                 if e.eof() {
@@ -136,7 +136,7 @@ where
 fn handle_connection_inner<S>(
     buf_stream: &mut S,
     inner: Arc<DB>,
-    cf_dictionary: &'static [&'static str],
+    cf_dictionary: &Vec<&'static str>,
     write_opts: &WriteOptions,
 ) -> Result<(), DbServerError>
 where

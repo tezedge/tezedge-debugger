@@ -9,7 +9,7 @@ use tezos_messages::p2p::encoding::{
     prelude::*,
 };
 use tezos_encoding::encoding::{HasEncoding, Encoding};
-use super::{Access, indices::{P2pType, Initiator, Sender, NodeName}, MessageHasId};
+use super::{Access, indices::{P2pType, Initiator, Sender, NodeName}, MessageHasId, KeyValueSchemaExt};
 
 /// P2PMessage as stored in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -317,4 +317,10 @@ impl KeyValueSchema for Schema {
     type Value = Message;
 
     fn name() -> &'static str { "p2p_message_storage" }
+}
+
+impl KeyValueSchemaExt for Schema {
+    fn short_id() -> u16 {
+        0x0002
+    }
 }

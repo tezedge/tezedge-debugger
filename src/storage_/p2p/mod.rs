@@ -9,4 +9,5 @@ use super::{
     store::MessageHasId,
     sorted_intersect,
     indices,
+    remote::{KeyValueSchemaExt, ColumnFamilyDescriptorExt},
 };

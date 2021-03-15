@@ -7,6 +7,8 @@ use super::{
     SecondaryIndices,
     indices::{NodeNameKey, NodeName, LogLevelKey, LogLevel, TimestampKey},
     sorted_intersect::sorted_intersect,
+    KeyValueSchemaExt,
+    ColumnFamilyDescriptorExt,
 };
 
 struct NodeNameSchema;
@@ -24,6 +26,12 @@ impl KeyValueSchema for NodeNameSchema {
 
     fn name() -> &'static str {
         "log_node_name_index"
+    }
+}
+
+impl KeyValueSchemaExt for NodeNameSchema {
+    fn short_id() -> u16 {
+        0x0010
     }
 }
 
@@ -45,6 +53,12 @@ impl KeyValueSchema for LogLevelSchema {
     }
 }
 
+impl KeyValueSchemaExt for LogLevelSchema {
+    fn short_id() -> u16 {
+        0x0011
+    }
+}
+
 struct LogTimestampSchema;
 
 impl KeyValueSchema for LogTimestampSchema {
@@ -60,6 +74,12 @@ impl KeyValueSchema for LogTimestampSchema {
 
     fn name() -> &'static str {
         "log_timestamp_index"
+    }
+}
+
+impl KeyValueSchemaExt for LogTimestampSchema {
+    fn short_id() -> u16 {
+        0x0012
     }
 }
 
@@ -95,6 +115,14 @@ impl SecondaryIndices for Indices {
             NodeNameSchema::descriptor(cache),
             LogLevelSchema::descriptor(cache),
             LogTimestampSchema::descriptor(cache),
+        ]
+    }
+
+    fn schemas_ext() -> Vec<ColumnFamilyDescriptorExt> {
+        vec![
+            NodeNameSchema::descriptor_ext(),
+            LogLevelSchema::descriptor_ext(),
+            LogTimestampSchema::descriptor_ext(),
         ]
     }
 

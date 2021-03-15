@@ -4,4 +4,4 @@ mod server;
 pub use self::server::{DbServerError, DbServer};
 
 mod client;
-pub use self::client::{KeyValueSchemaExt, DbClient};
+pub use self::client::{KeyValueSchemaExt, ColumnFamilyDescriptorExt, DbClient};

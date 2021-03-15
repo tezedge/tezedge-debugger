@@ -11,6 +11,18 @@ where
     Self: KeyValueSchema,
 {
     fn short_id() -> u16;
+
+    fn descriptor_ext() -> ColumnFamilyDescriptorExt {
+        ColumnFamilyDescriptorExt {
+            short_id: Self::short_id(),
+            name: Self::name(),
+        }
+    }
+}
+
+pub struct ColumnFamilyDescriptorExt {
+    pub short_id: u16,
+    pub name: &'static str,
 }
 
 pub struct DbClient {
