@@ -2,3 +2,4 @@ target/
 /bin/
 *.heap
 dev-dir
+*.gz
