@@ -41,13 +41,13 @@ async fn main() -> Result<(), failure::Error> {
     // Initialize storage for messages
     let (p2p_db, log_db) = open_database(&config)?;
 
-    //let running = Arc::new(AtomicBool::new(true));
+    let running = Arc::new(AtomicBool::new(true));
 
     // Create syslog server for each node to capture logs from docker / syslogs
-    //for node_config in &config.nodes {
+    for node_config in &config.nodes {
         // TODO: spawn a single server for all nodes
-    //    syslog_producer::spawn(&log_db, node_config, running.clone());
-    //}
+        syslog_producer::spawn(&log_db, node_config, running.clone());
+    }
 
     // Create and spawn bpf sniffing system
     let reporter = Arc::new(Mutex::new(Reporter::new()));
@@ -57,7 +57,7 @@ async fn main() -> Result<(), failure::Error> {
     tokio::signal::ctrl_c().await?;
 
     tracing::info!("ctrl-c received");
-    //running.store(false, Ordering::Relaxed);
+    running.store(false, Ordering::Relaxed);
     reporter.lock().unwrap().terminate().await;
 
     Ok(())

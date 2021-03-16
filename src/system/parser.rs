@@ -161,10 +161,10 @@ impl Parser {
                 self.process_close(parser, id).await
             },
             Ok(SnifferEvent::Read { id, data }) => {
-                self.process_data(parser, id, data.to_vec(), true)
+                self.process_data(parser, id, data.to_vec(), true).await
             },
             Ok(SnifferEvent::Write { id, data }) => {
-                self.process_data(parser, id, data.to_vec(), false)
+                self.process_data(parser, id, data.to_vec(), false).await
             },
             Ok(SnifferEvent::Debug { id, msg }) => tracing::warn!("{} {}", id, msg),
         }
@@ -246,7 +246,7 @@ impl Parser {
         parser.process_close(id).await;
     }
 
-    fn process_data(
+    async fn process_data(
         &mut self,
         parser: &mut p2p::Parser,
         id: EventId,
@@ -260,6 +260,6 @@ impl Parser {
             counter: self.counter,
             event_id: id,
         };
-        parser.process_data(message);
+        parser.process_data(message).await;
     }
 }

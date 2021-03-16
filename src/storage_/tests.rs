@@ -1,14 +1,14 @@
 use std::{sync::Arc, net::SocketAddr, iter, path::Path, fs};
 use rocksdb::Cache;
 use storage::persistent::{open_kv, DbConfiguration};
-use super::{P2pStore, p2p, indices, StoreCollector};
+use super::{P2pStore, p2p, indices, StoreCollector, local::LocalDb, SecondaryIndices};
 
 fn p2p<P: AsRef<Path>>(path: P) -> P2pStore {
     let _ = fs::remove_dir_all(&path);
     let cache = Cache::new_lru_cache(1).unwrap();
     let schemas = P2pStore::schemas(&cache);
-    let rocksdb = Arc::new(open_kv(&path, schemas, &DbConfiguration::default()).unwrap());
-    P2pStore::new(&rocksdb, u64::MAX)
+    let rocksdb = Arc::new(LocalDb::new(open_kv(&path, schemas, &DbConfiguration::default()).unwrap()));
+    P2pStore::new(&rocksdb, p2p::Indices::new(&rocksdb), u64::MAX)
 }
 
 #[test]

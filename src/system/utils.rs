@@ -11,6 +11,7 @@ pin_project_lite::pin_project! {
 }
 
 impl<T> UnboundedReceiverStream<T> {
+    #[allow(dead_code)]
     pub fn new(inner: mpsc::UnboundedReceiver<T>) -> Self {
         UnboundedReceiverStream { inner: inner }
     }

@@ -60,7 +60,7 @@ impl Parser {
     pub async fn execute(&mut self, command: Command) {
         let mut num = 0;
         for (_, c) in &mut self.working_connections {
-            c.send_command(command);
+            c.send_command(command).await;
             num += 1;
         }
 
@@ -171,9 +171,9 @@ impl Parser {
         }
     }
 
-    pub fn process_data(&mut self, message: Message) {
+    pub async fn process_data(&mut self, message: Message) {
         match self.working_connections.get_mut(&message.event_id.socket_id) {
-            Some(connection) => connection.process(message),
+            Some(connection) => connection.process(message).await,
             None => {
                 // It is possible due to race condition,
                 // when we consider to ignore connection, we do not create

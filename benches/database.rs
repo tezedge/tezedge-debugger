@@ -2,7 +2,7 @@ use std::{sync::Arc, net::SocketAddr, path::Path, iter};
 use rocksdb::Cache;
 use storage::persistent::{DbConfiguration, open_kv};
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId, black_box};
-use tezedge_debugger::storage_::{P2pStore, indices, p2p};
+use tezedge_debugger::storage_::{P2pStore, p2p, indices, StoreCollector, local::LocalDb, SecondaryIndices};
 
 fn p2p<P: AsRef<Path>>(path: P) -> P2pStore {
     //use std::fs;
@@ -10,8 +10,8 @@ fn p2p<P: AsRef<Path>>(path: P) -> P2pStore {
     //let _ = fs::remove_dir_all(&path);
     let cache = Cache::new_lru_cache(1).unwrap();
     let schemas = P2pStore::schemas(&cache);
-    let rocksdb = Arc::new(open_kv(&path, schemas, &DbConfiguration::default()).unwrap());
-    P2pStore::new(&rocksdb)
+    let rocksdb = Arc::new(LocalDb::new(open_kv(&path, schemas, &DbConfiguration::default()).unwrap()));
+    P2pStore::new(&rocksdb, p2p::Indices::new(&rocksdb), u64::MAX)
 }
 
 #[allow(dead_code)]

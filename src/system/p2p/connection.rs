@@ -6,11 +6,11 @@ use tokio::{
 use futures::future::Either;
 
 use super::{connection_parser::Parser, parser::{Command, Message}, report::ConnectionReport};
-use crate::{storage_::indices::Initiator, system::utils::UnboundedReceiverStream};
+use crate::{storage_::indices::Initiator, system::utils::ReceiverStream};
 
 pub struct Connection {
     state: ConnectionState,
-    tx: mpsc::UnboundedSender<Either<Message, Command>>,
+    tx: mpsc::Sender<Either<Message, Command>>,
     handle: JoinHandle<ConnectionReport>,
     source_type: Initiator,
     // it is possible we receive/send connection message in wrong order
@@ -33,10 +33,10 @@ impl Connection {
         tx_report: mpsc::Sender<ConnectionReport>,
         parser: Parser,
     ) -> Self {
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(0x10);
         let source_type = parser.source_type.clone();
         let remote_address = parser.remote_address.clone();
-        let handle = tokio::spawn(parser.run(UnboundedReceiverStream::new(rx), tx_report));
+        let handle = tokio::spawn(parser.run(ReceiverStream::new(rx), tx_report));
         Connection {
             state: ConnectionState::Initial,
             tx,
@@ -46,7 +46,7 @@ impl Connection {
         }
     }
 
-    pub fn process(&mut self, message: Message) {
+    pub async fn process(&mut self, message: Message) {
         let local_is_initiator = self.source_type.is_local();
         let state = mem::replace(&mut self.state, ConnectionState::Invalid);
         let state = match state {
@@ -73,20 +73,20 @@ impl Connection {
             },
             // connection messages are in correct order
             ConnectionState::Initial => {
-                self.send_message(message);
+                self.send_message(message).await;
                 ConnectionState::CorrectOrder
             },
             // both connection messages are already processed, it is a regular message
             ConnectionState::Completed | ConnectionState::CorrectOrder => {
-                self.send_message(message);
+                self.send_message(message).await;
                 ConnectionState::Completed
             },
             // send stored message, and then current message, so they will be in correct order
             ConnectionState::Unordered(mut stored_message) => {
                 let mut current_message = message;
                 mem::swap(&mut current_message.counter, &mut stored_message.counter);
-                self.send_message(stored_message);
-                self.send_message(current_message);
+                self.send_message(stored_message).await;
+                self.send_message(current_message).await;
                 ConnectionState::Completed
             },
             ConnectionState::Invalid => ConnectionState::Invalid,
@@ -94,8 +94,8 @@ impl Connection {
         let _ = mem::replace(&mut self.state, state);
     }
 
-    fn send(&mut self, item: Either<Message, Command>) {
-        match self.tx.send(item) {
+    async fn send(&mut self, item: Either<Message, Command>) {
+        match self.tx.send(item).await {
             Err(SendError(Either::Left(message))) => {
                 tracing::error!(
                     id = tracing::field::display(&message.event_id),
@@ -113,16 +113,16 @@ impl Connection {
         }
     }
 
-    fn send_message(&mut self, message: Message) {
-        self.send(Either::Left(message))
+    async fn send_message(&mut self, message: Message) {
+        self.send(Either::Left(message)).await
     }
 
-    pub fn send_command(&mut self, command: Command) {
-        self.send(Either::Right(command))
+    pub async fn send_command(&mut self, command: Command) {
+        self.send(Either::Right(command)).await
     }
 
     pub async fn join(mut self) -> Option<ConnectionReport> {
-        self.send_command(Command::Terminate);
+        self.send_command(Command::Terminate).await;
         match self.handle.await {
             Ok(report) => Some(report),
             Err(error) => {
