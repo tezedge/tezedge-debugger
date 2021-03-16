@@ -16,6 +16,14 @@ edition = "2018"
 name = "tezedge-debugger"
 path = "src/bin/debugger.rs"
 
+[[bin]]
+name = "tezedge-debugger-db"
+path = "src/bin/debugger_db.rs"
+
+[[bin]]
+name = "tezedge-debugger-parser"
+path = "src/bin/debugger_parser.rs"
+
 [[bench]]
 name = "database"
 harness = false

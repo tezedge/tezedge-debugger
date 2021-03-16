@@ -25,13 +25,14 @@ pub trait StoreCollector {
 }
 
 /// generic message store
-pub struct Store<Message, Schema, Indices>
+pub struct Store<KvStorage, Message, Schema, Indices>
 where
+    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
     Message: BincodeEncoded + MessageHasId,
     Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema>,
 {
-    kv: Arc<DB>,
+    kv: Arc<KvStorage>,
     count: Arc<AtomicU64>,
     seq: Arc<AtomicU64>,
     limit: u64,
@@ -39,8 +40,9 @@ where
     phantom_data: PhantomData<(Message, Schema)>,
 }
 
-impl<Message, Schema, Indices> Clone for Store<Message, Schema, Indices>
+impl<KvStorage, Message, Schema, Indices> Clone for Store<KvStorage, Message, Schema, Indices>
 where
+    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
     Message: BincodeEncoded + MessageHasId,
     Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema> + Clone,
@@ -57,19 +59,20 @@ where
     }
 }
 
-impl<Message, Schema, Indices> Store<Message, Schema, Indices>
+impl<KvStorage, Message, Schema, Indices> Store<KvStorage, Message, Schema, Indices>
 where
+    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
     Message: BincodeEncoded + MessageHasId,
     Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema>,
 {
-    pub fn new(kv: &Arc<DB>, limit: u64) -> Self {
+    pub fn new(kv: &Arc<KvStorage>, indices: Indices, limit: u64) -> Self {
         Store {
             kv: kv.clone(),
             count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(0)),
             limit,
-            indices: Indices::new(kv),
+            indices,
             phantom_data: PhantomData,
         }
     }
@@ -107,7 +110,7 @@ where
         let ret = if let Some(keys) = self.indices.filter_iterator(&cursor_index, limit, &filter)? {
             keys.iter()
                 .filter_map(move |index| {
-                    match self.inner().get(&index) {
+                    match self.kv.get(&index) {
                         Ok(Some(value)) => {
                             Some(value)
                         },
@@ -146,8 +149,9 @@ where
     }
 }
 
-impl<Message, Schema, Indices> StoreCollector for Store<Message, Schema, Indices>
+impl<KvStorage, Message, Schema, Indices> StoreCollector for Store<KvStorage, Message, Schema, Indices>
 where
+    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
     Message: BincodeEncoded + MessageHasId,
     Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
     Indices: SecondaryIndices<PrimarySchema = Schema> + Clone,
@@ -161,16 +165,16 @@ where
             self.delete_message(index - self.limit)?;
         }
         msg.set_id(index);
-        self.inner().put(&index, &msg)?;
+        self.kv.put(&index, &msg)?;
         self.indices.store_indices(&index, &msg)?;
         self.inc_count();
         Ok(index)
     }
 
     fn delete_message(&self, index: u64) -> Result<(), StorageError> {
-        if let Some(value) = self.inner().get(&index)? {
+        if let Some(value) = self.kv.get(&index)? {
             self.indices.delete_indices(&index, &value)?;
-            self.inner().delete(&index)?;
+            self.kv.delete(&index)?;
         }
         Ok(())
     }

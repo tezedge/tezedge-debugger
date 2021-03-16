@@ -3,7 +3,7 @@ use storage::{
     persistent::{KeyValueSchema, KeyValueStoreWithSchema, DBError, database::IteratorWithSchema, Encoder},
     IteratorMode,
 };
-use rocksdb::WriteBatch;
+use rocksdb::{DB, WriteBatch};
 use super::common::{DbRemoteOperation, KEY_SIZE_LIMIT, VALUE_SIZE_LIMIT};
 
 pub trait KeyValueSchemaExt
@@ -36,6 +36,12 @@ impl DbClient {
     {
         let stream = RwLock::new(UnixStream::connect(path)?);
         Ok(DbClient { stream })
+    }
+}
+
+impl AsRef<DB> for DbClient {
+    fn as_ref(&self) -> &DB {
+        unimplemented!()
     }
 }
 

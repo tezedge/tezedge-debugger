@@ -8,12 +8,11 @@ use tokio_stream::StreamExt;
 use bpf_sniffer_lib::{Command, EventId, RingBuffer, RingBufferData, SnifferEvent, BpfModuleClient};
 
 use super::{p2p, DebuggerConfig, NodeConfig};
-use crate::storage_::{P2pStore, StoreClient, p2p::Message as P2pMessage, indices::Initiator};
+use crate::storage_::{StoreCollector, StoreClient, p2p::Message as P2pMessage, indices::Initiator};
 use crate::system::utils::ReceiverStream;
 
 pub struct Parser {
     config: DebuggerConfig,
-    storage: P2pStore,
     sniffer: BpfModuleClient,
     pid_to_config: HashMap<u32, NodeConfig>,
     counter: u64,
@@ -27,22 +26,24 @@ enum Event {
 impl Parser {
     /// spawn a (green)thread which parse the data from the kernel,
     /// returns object which can report statistics
-    pub fn try_spawn(
-        storage: &P2pStore,
+    pub fn try_spawn<S>(
+        storage: S,
         config: &DebuggerConfig,
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
         tx_p2p_report: mpsc::Sender<p2p::Report>,
-    ) {
+    )
+    where
+        S: StoreCollector<Message = P2pMessage> + Clone + Send + Sync + 'static,
+    {
         match BpfModuleClient::new(&config.bpf_sniffer) {
             Ok((sniffer, ring_buffer)) => {
                 let s = Parser {
                     config: config.clone(),
-                    storage: storage.clone(),
                     sniffer,
                     pid_to_config: HashMap::new(),
                     counter: 0,
                 };
-                tokio::spawn(s.run(ring_buffer, rx_p2p_command, tx_p2p_report));
+                tokio::spawn(s.run(storage, ring_buffer, rx_p2p_command, tx_p2p_report));
             },
             Err(error) => tracing::error!(
                 error = tracing::field::display(&error),
@@ -63,13 +64,17 @@ impl Parser {
         }
     }
 
-    async fn run(
+    async fn run<S>(
         self,
+        storage: S,
         ring_buffer: RingBuffer,
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
         tx_p2p_report: mpsc::Sender<p2p::Report>,
-    ) {
-        let db = StoreClient::spawn(self.storage.clone());
+    )
+    where
+        S: StoreCollector<Message = P2pMessage> + Clone + Send + Sync + 'static,
+    {
+        let db = StoreClient::spawn(storage);
         let mut s = self;
 
         for node_config in &s.config.nodes.clone() {
