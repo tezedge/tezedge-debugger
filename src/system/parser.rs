@@ -5,6 +5,7 @@ use std::{
 };
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
+use smallvec::SmallVec;
 use bpf_sniffer_lib::{Command, EventId, RingBuffer, RingBufferData, SnifferEvent, BpfModuleClient};
 
 use super::{p2p, DebuggerConfig, NodeConfig};
@@ -19,7 +20,7 @@ pub struct Parser {
 }
 
 enum Event {
-    RbData(RingBufferData),
+    RbData(SmallVec<[RingBufferData; 64]>),
     P2pCommand(p2p::Command),
 }
 
@@ -90,7 +91,11 @@ impl Parser {
         let mut p2p_parser = p2p::Parser::new(tx_p2p_report);
         while let Some(event) = stream.next().await {
             match event {
-                Event::RbData(slice) => s.process(&mut p2p_parser, slice, &db).await,
+                Event::RbData(slice_vec) => {
+                    for slice in slice_vec {
+                        s.process(&mut p2p_parser, slice, &db).await;
+                    }
+                },
                 // while executing this command new slices from the kernel will not be processed
                 // so it is impossible to have data race
                 Event::P2pCommand(command) => {

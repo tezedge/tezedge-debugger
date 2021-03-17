@@ -48,6 +48,7 @@
         "sendmsg",
         "sendto",
         "simplestakingcom",
+        "smallvec",
         "structopt",
         "syslogs",
         "tgid",
