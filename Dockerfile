@@ -3,10 +3,10 @@ FROM simplestakingcom/tezedge-bpf-builder:latest as builder
 RUN apt install -y g++ git
 
 COPY . .
-RUN cargo build -p bpf-sniffer --relase && \
-    cargo build --bin tezedge-debugger --relase && \
-    cargo build --bin tezedge-debugger-db --relase && \
-    cargo build --bin tezedge-debugger-parser --relase
+RUN cargo build -p bpf-sniffer --release && \
+    cargo build --bin tezedge-debugger --release && \
+    cargo build --bin tezedge-debugger-db --release && \
+    cargo build --bin tezedge-debugger-parser --release
 
 FROM ubuntu:20.10
 WORKDIR /home/appuser/
