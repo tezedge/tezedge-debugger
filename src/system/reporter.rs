@@ -1,4 +1,4 @@
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 use warp::reply::{Json, json};
 use super::{DebuggerConfig, p2p};
 use crate::storage_::{StoreCollector, p2p::Message as P2pMessage};
@@ -26,7 +26,7 @@ impl Reporter {
         }
     }
 
-    pub fn spawn_parser<S>(&mut self, storage: S, config: &DebuggerConfig)
+    pub fn spawn_parser<S>(&mut self, storage: S, config: &DebuggerConfig) -> Option<JoinHandle<()>>
     where
         S: StoreCollector<Message = P2pMessage> + Clone + Send + Sync + 'static,
     {
@@ -36,9 +36,11 @@ impl Reporter {
             }
             #[cfg(not(target_os = "linux"))] {
                 tracing::warn!("can intercept p2p only on linux");
+                None
             }
         } else {
             tracing::warn!("p2p system already running");
+            None
         }
     }
 

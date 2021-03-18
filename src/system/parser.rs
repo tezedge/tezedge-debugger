@@ -3,7 +3,7 @@ use std::{
     convert::TryFrom,
     net::{SocketAddr, IpAddr},
 };
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_stream::StreamExt;
 use smallvec::SmallVec;
 use bpf_sniffer_lib::{Command, EventId, RingBuffer, RingBufferData, SnifferEvent, BpfModuleClient};
@@ -32,7 +32,7 @@ impl Parser {
         config: &DebuggerConfig,
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
         tx_p2p_report: mpsc::Sender<p2p::Report>,
-    )
+    ) -> Option<JoinHandle<()>>
     where
         S: StoreCollector<Message = P2pMessage> + Clone + Send + Sync + 'static,
     {
@@ -44,12 +44,15 @@ impl Parser {
                     pid_to_config: HashMap::new(),
                     counter: 0,
                 };
-                tokio::spawn(s.run(storage, ring_buffer, rx_p2p_command, tx_p2p_report));
+                Some(tokio::spawn(s.run(storage, ring_buffer, rx_p2p_command, tx_p2p_report)))
             },
-            Err(error) => tracing::error!(
-                error = tracing::field::display(&error),
-                "failed to connect to bpf sniffer",
-            ),
+            Err(error) => {
+                tracing::error!(
+                    error = tracing::field::display(&error),
+                    "failed to connect to bpf sniffer",
+                );
+                None
+            },
         }
     }
 
@@ -86,6 +89,7 @@ impl Parser {
         // merge streams, let await either some data from the kernel,
         // or some command from the overlying code
         let rx_p2p_command = ReceiverStream::new(rx_p2p_command);
+        let observer = ring_buffer.observer();
         let mut stream =
             ring_buffer.map(Event::RbData).merge(rx_p2p_command.map(Event::P2pCommand));
         let mut p2p_parser = p2p::Parser::new(tx_p2p_report);
@@ -107,6 +111,11 @@ impl Parser {
                     }
                 },
             }
+        }
+
+        match super::ring_buffer_analyzer::dump("target/rb.json", "target/rb.bin", &observer) {
+            Ok(()) => (),
+            Err(error) => tracing::error!("cannot save ring buffer report {:?}", error),
         }
     }
 

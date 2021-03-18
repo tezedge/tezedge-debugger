@@ -41,15 +41,11 @@ criterion = "0.3"
 [dependencies]
 hex = "0.4"
 warp = "0.3"
-bytes = "1.0"
 rocksdb = "0.15"
 failure = "0.1"
 itertools = "0.10"
-structopt = "0.3"
-async-trait = "0.1"
 strum = { version = "0.20", features = ["derive"] }
 chrono = "0.4"
-sudo = "0.6"
 generic-array = "0.14"
 smallvec = "1.6"
 

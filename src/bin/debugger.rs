@@ -60,7 +60,7 @@ async fn main() -> Result<(), failure::Error> {
 
     // Create and spawn bpf sniffing system
     let reporter = Arc::new(Mutex::new(Reporter::new()));
-    reporter.lock().unwrap().spawn_parser(p2p_db.clone(), &config);
+    let parser = reporter.lock().unwrap().spawn_parser(p2p_db.clone(), &config);
     tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter.clone())).run(([0, 0, 0, 0], config.rpc_port)));
 
     // Wait for SIGTERM signal
@@ -69,6 +69,9 @@ async fn main() -> Result<(), failure::Error> {
     tracing::info!("ctrl-c received");
     running.store(false, Ordering::Relaxed);
     reporter.lock().unwrap().terminate().await;
+    if let Some(parser) = parser {
+        parser.await?;
+    }
 
     Ok(())
 }

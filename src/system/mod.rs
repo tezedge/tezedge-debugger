@@ -8,6 +8,7 @@ pub mod syslog_producer;
 
 // new capturing system
 mod reporter;
+pub use self::reporter::Reporter;
 
 #[cfg(target_os = "linux")]
 mod utils;
@@ -16,7 +17,7 @@ mod parser;
 #[cfg(target_os = "linux")]
 mod p2p;
 
-pub use self::reporter::Reporter;
+mod ring_buffer_analyzer;
 
 mod settings {
     use serde::Deserialize;
