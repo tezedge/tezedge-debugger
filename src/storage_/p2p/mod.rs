@@ -1,6 +1,9 @@
 mod message;
 pub use self::message::{Message, Schema, TezosPeerMessage, PartialPeerMessage, FullPeerMessage, HandshakeMessage};
 
+mod frontend_message;
+pub use self::frontend_message::FrontendMessage;
+
 mod filter;
 pub use self::filter::{Indices, Filters};
 

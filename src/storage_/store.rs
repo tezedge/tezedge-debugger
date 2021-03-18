@@ -103,6 +103,10 @@ where
         self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
+    pub fn get(&self, index: u64) -> Result<Option<Message>, StorageError> {
+        self.kv.get(&index).map_err(Into::into)
+    }
+
     /// Create iterator ending on given index. If no value is provided
     /// start at the end
     pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filter: &Indices::Filter) -> Result<Vec<Message>, StorageError> {

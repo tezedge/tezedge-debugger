@@ -4,7 +4,7 @@
 use std::{net::SocketAddr, convert::TryInto};
 use warp::{Filter, Rejection, reply::{with_status, json, WithStatus, Json}, http::StatusCode};
 use serde::{Serialize, Deserialize};
-use crate::storage_::{P2pStore, p2p::Filters, indices::{P2pType, ParseTypeError, Initiator, Sender, NodeName}};
+use crate::storage_::{P2pStore, p2p::{Filters, FrontendMessage}, indices::{P2pType, ParseTypeError, Initiator, Sender, NodeName}};
 
 /// Cursor structure mapped from the endpoint URI
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -54,10 +54,23 @@ pub fn p2p(storage: P2pStore) -> impl Filter<Extract=(WithStatus<Json>, ), Error
             let cursor_id = cursor.cursor_id.clone();
             match cursor.try_into() {
                 Ok(filters) => match storage.get_cursor(cursor_id, limit, &filters) {
-                    Ok(msgs) => with_status(json(&msgs), StatusCode::OK),
+                    Ok(msgs) => {
+                        let msgs = msgs.into_iter().map(FrontendMessage::new).collect::<Vec<_>>();
+                        with_status(json(&msgs), StatusCode::OK)
+                    },
                     Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
                 },
                 Err(type_err) => with_status(json(&format!("invalid type-name: {}", type_err)), StatusCode::BAD_REQUEST),
+            }
+        })
+}
+
+pub fn p2p_message(storage: P2pStore) -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
+    warp::path!("v2" / "p2p" / u64)
+        .map(move |index: u64| -> WithStatus<Json> {
+            match storage.get(index) {
+                Ok(msg) => with_status(json(&msg.map(|m| m.message)), StatusCode::OK),
+                Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
             }
         })
 }
