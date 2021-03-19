@@ -79,8 +79,11 @@ pub fn dyn_sized<K>(id: EventId, tag: DataTag, data: &[u8], rb: &mut RingBuffer)
 where
     K: Bit,
 {
+    // data len 124 happens often, let's have special case 148 = 124 + sizeof DataDescriptor
     let length_to_send = data.len() + mem::size_of::<DataDescriptor>();
-    if length_to_send <= Shleft::<typenum::U1, typenum::U8>::USIZE {
+    if length_to_send <= typenum::U148::USIZE {
+        sized_inner::<typenum::U148, K>(id, tag, data, rb)
+    } else if length_to_send <= Shleft::<typenum::U1, typenum::U8>::USIZE {
         sized_inner::<Shleft<typenum::U1, typenum::U8>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U9>::USIZE {
         sized_inner::<Shleft<typenum::U1, typenum::U9>, K>(id, tag, data, rb)
@@ -120,9 +123,5 @@ where
         sized_inner::<Shleft<typenum::U1, typenum::U26>, K>(id, tag, data, rb)
     } else if length_to_send <= Shleft::<typenum::U1, typenum::U27>::USIZE {
         sized_inner::<Shleft<typenum::U1, typenum::U27>, K>(id, tag, data, rb)
-    } else if length_to_send <= Shleft::<typenum::U1, typenum::U28>::USIZE {
-        sized_inner::<Shleft<typenum::U1, typenum::U28>, K>(id, tag, data, rb)
-    } else if length_to_send <= Shleft::<typenum::U1, typenum::U29>::USIZE {
-        sized_inner::<Shleft<typenum::U1, typenum::U29>, K>(id, tag, data, rb)
     }
 }
