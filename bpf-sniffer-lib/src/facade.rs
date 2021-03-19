@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use std::{convert::TryFrom, io::{self, Write}, fmt, mem, net::{SocketAddr, IpAddr}, os::unix::net::UnixStream, path::Path, str::FromStr};
-use redbpf::{load::Loader, Module, ringbuf::RingBuffer, ringbuf_sync::RingBufferSync, HashMap, Map};
+use redbpf::{load::Loader, Module, ringbuf::{RingBuffer, RingBufferData}, ringbuf_sync::RingBufferSync, HashMap, Map};
 use passfd::FdPassingExt;
 use super::{SocketId, EventId, DataDescriptor, DataTag, address::Address, bpf_code::CODE};
 
@@ -15,9 +15,9 @@ impl From<Address> for SocketAddr {
     }
 }
 
-pub enum SnifferEvent<'a> {
-    Write { id: EventId, data: &'a [u8] },
-    Read { id: EventId, data: &'a [u8] },
+pub enum SnifferEvent {
+    Write { id: EventId, data: Vec<u8> },
+    Read { id: EventId, data: Vec<u8> },
     Connect { id: EventId, address: SocketAddr },
     Bind { id: EventId, address: SocketAddr },
     Listen { id: EventId },
@@ -70,10 +70,10 @@ pub enum SnifferErrorCode {
     Fault,
 }
 
-impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
+impl RingBufferData for SnifferEvent {
     type Error = SnifferError;
 
-    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+    fn from_rb_slice(value: &[u8]) -> Result<Self, Self::Error> {
         let descriptor = DataDescriptor::try_from(value)
             .map_err(|()| SnifferError::SliceTooShort(value.len()))?;
         let data = &value[mem::size_of::<DataDescriptor>()..];
@@ -82,7 +82,7 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
                 SnifferError::write(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
                     SnifferEvent::Write {
                         id,
-                        data: &data[..size],
+                        data: data[..size].to_vec(),
                     }
                 })
             },
@@ -90,7 +90,7 @@ impl<'a> TryFrom<&'a [u8]> for SnifferEvent<'a> {
                 SnifferError::read(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
                     SnifferEvent::Read {
                         id,
-                        data: &data[..size],
+                        data: data[..size].to_vec(),
                     }
                 })
             },
@@ -153,7 +153,7 @@ impl BpfModule {
             .unwrap()
     }
 
-    pub fn main_buffer(&self) -> RingBuffer {
+    pub fn main_buffer<D>(&self) -> RingBuffer<D> {
         let rb_map = self.main_buffer_map();
         RingBuffer::from_map(&rb_map).unwrap()
     }
@@ -246,7 +246,7 @@ pub struct BpfModuleClient {
 }
 
 impl BpfModuleClient {
-    pub fn new<P>(path: P) -> io::Result<(Self, RingBuffer)>
+    pub fn new<P, D>(path: P) -> io::Result<(Self, RingBuffer<D>)>
     where
         P: AsRef<Path>,
     {

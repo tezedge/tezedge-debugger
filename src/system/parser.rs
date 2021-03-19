@@ -1,12 +1,11 @@
 use std::{
     collections::HashMap,
-    convert::TryFrom,
     net::{SocketAddr, IpAddr},
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_stream::StreamExt;
 use smallvec::SmallVec;
-use bpf_sniffer_lib::{Command, EventId, RingBuffer, RingBufferData, SnifferEvent, BpfModuleClient};
+use bpf_sniffer_lib::{Command, EventId, RingBuffer, SnifferEvent, BpfModuleClient};
 
 use super::{p2p, DebuggerConfig, NodeConfig};
 use crate::storage_::{StoreCollector, StoreClient, p2p::Message as P2pMessage, indices::Initiator};
@@ -20,7 +19,7 @@ pub struct Parser {
 }
 
 enum Event {
-    RbData(SmallVec<[RingBufferData; 64]>),
+    RbData(SmallVec<[SnifferEvent; 64]>),
     P2pCommand(p2p::Command),
 }
 
@@ -71,7 +70,7 @@ impl Parser {
     async fn run<S>(
         self,
         storage: S,
-        ring_buffer: RingBuffer,
+        ring_buffer: RingBuffer<SnifferEvent>,
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     )
@@ -96,8 +95,8 @@ impl Parser {
         while let Some(event) = stream.next().await {
             match event {
                 Event::RbData(slice_vec) => {
-                    for slice in slice_vec {
-                        s.process(&mut p2p_parser, slice, &db).await;
+                    for event in slice_vec {
+                        s.process(&mut p2p_parser, event, &db).await;
                     }
                 },
                 // while executing this command new slices from the kernel will not be processed
@@ -122,12 +121,11 @@ impl Parser {
     async fn process(
         &mut self,
         parser: &mut p2p::Parser,
-        slice: RingBufferData,
+        event: SnifferEvent,
         db: &StoreClient<P2pMessage>,
     ) {
-        match SnifferEvent::try_from(slice.as_ref()) {
-            Err(error) => tracing::error!("{:?}", error),
-            Ok(SnifferEvent::Bind { id, address }) => {
+        match event {
+            SnifferEvent::Bind { id, address } => {
                 tracing::info!(
                     id = tracing::field::display(&id),
                     address = tracing::field::display(&address),
@@ -144,13 +142,13 @@ impl Parser {
                     )
                 }
             },
-            Ok(SnifferEvent::Listen { id }) => {
+            SnifferEvent::Listen { id } => {
                 tracing::info!(
                     id = tracing::field::display(&id),
                     msg = "Syscall Listen",
                 );
             },
-            Ok(SnifferEvent::Connect { id, address }) => {
+            SnifferEvent::Connect { id, address } => {
                 tracing::info!(
                     id = tracing::field::display(&id),
                     address = tracing::field::display(&address),
@@ -158,7 +156,7 @@ impl Parser {
                 );
                 self.process_connect(parser, id, address, &db, None).await;
             },
-            Ok(SnifferEvent::Accept { id, listen_on_fd, address }) => {
+            SnifferEvent::Accept { id, listen_on_fd, address } => {
                 tracing::info!(
                     id = tracing::field::display(&id),
                     listen_on_fd = tracing::field::display(&listen_on_fd),
@@ -167,20 +165,20 @@ impl Parser {
                 );
                 self.process_connect(parser, id, address, &db, Some(listen_on_fd)).await;
             },
-            Ok(SnifferEvent::Close { id }) => {
+            SnifferEvent::Close { id } => {
                 tracing::info!(
                     id = tracing::field::display(&id),
                     msg = "Syscall Close",
                 );
                 self.process_close(parser, id).await
             },
-            Ok(SnifferEvent::Read { id, data }) => {
-                self.process_data(parser, id, data.to_vec(), true).await
+            SnifferEvent::Read { id, data } => {
+                self.process_data(parser, id, data, true).await
             },
-            Ok(SnifferEvent::Write { id, data }) => {
-                self.process_data(parser, id, data.to_vec(), false).await
+            SnifferEvent::Write { id, data } => {
+                self.process_data(parser, id, data, false).await
             },
-            Ok(SnifferEvent::Debug { id, msg }) => tracing::warn!("{} {}", id, msg),
+            SnifferEvent::Debug { id, msg } => tracing::warn!("{} {}", id, msg),
         }
     }
 
