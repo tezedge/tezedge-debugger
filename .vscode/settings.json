@@ -20,6 +20,7 @@
         "greylisted",
         "hashset",
         "heapify",
+        "heaptrack",
         "itertools",
         "jemallocator",
         "kmerge",
