@@ -1,13 +1,10 @@
-use std::{
-    sync::{Arc, atomic::{Ordering, AtomicU64}},
-    marker::PhantomData,
-};
+use std::sync::{Arc, atomic::{Ordering, AtomicU64}};
 use rocksdb::{Cache, ColumnFamilyDescriptor, DB};
 use storage::{
     Direction,
     IteratorMode,
     StorageError,
-    persistent::{BincodeEncoded, KeyValueStoreWithSchema},
+    persistent::{BincodeEncoded, KeyValueStoreWithSchema, KeyValueSchema},
 };
 use super::{secondary_index::SecondaryIndices, remote::{KeyValueSchemaExt, ColumnFamilyDescriptorExt}};
 
@@ -24,78 +21,71 @@ pub trait StoreCollector {
     fn delete_message(&self, index: u64) -> Result<(), StorageError>;
 }
 
+type Message<Indices> = <<Indices as SecondaryIndices>::PrimarySchema as KeyValueSchema>::Value;
+
 /// generic message store
-pub struct Store<KvStorage, Message, Schema, Indices>
+pub struct Store<Indices>
 where
-    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
-    Message: BincodeEncoded + MessageHasId,
-    Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
-    Indices: SecondaryIndices<PrimarySchema = Schema>,
+    Indices: SecondaryIndices,
+    Indices::KvStorage: KeyValueStoreWithSchema<Indices::PrimarySchema> + AsRef<DB>,
+    Indices::PrimarySchema: KeyValueSchemaExt<Key = u64>,
+    Message<Indices>: BincodeEncoded + MessageHasId,
 {
-    kv: Arc<KvStorage>,
-    count: Arc<AtomicU64>,
+    kv: Arc<Indices::KvStorage>,
     seq: Arc<AtomicU64>,
     limit: u64,
     indices: Indices,
-    phantom_data: PhantomData<(Message, Schema)>,
 }
 
-impl<KvStorage, Message, Schema, Indices> Clone for Store<KvStorage, Message, Schema, Indices>
+impl<Indices> Clone for Store<Indices>
 where
-    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
-    Message: BincodeEncoded + MessageHasId,
-    Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
-    Indices: SecondaryIndices<PrimarySchema = Schema> + Clone,
+    Indices: SecondaryIndices + Clone,
+    Indices::KvStorage: KeyValueStoreWithSchema<Indices::PrimarySchema> + AsRef<DB>,
+    Indices::PrimarySchema: KeyValueSchemaExt<Key = u64>,
+    Message<Indices>: BincodeEncoded + MessageHasId,
 {
     fn clone(&self) -> Self {
         Store {
             kv: self.kv.clone(),
-            count: self.count.clone(),
             seq: self.seq.clone(),
             limit: self.limit,
             indices: self.indices.clone(),
-            phantom_data: PhantomData,
         }
     }
 }
 
-impl<KvStorage, Message, Schema, Indices> Store<KvStorage, Message, Schema, Indices>
+impl<Indices> Store<Indices>
 where
-    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
-    Message: BincodeEncoded + MessageHasId,
-    Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
-    Indices: SecondaryIndices<PrimarySchema = Schema>,
+    Indices: SecondaryIndices,
+    Indices::KvStorage: KeyValueStoreWithSchema<Indices::PrimarySchema> + AsRef<DB>,
+    Indices::PrimarySchema: KeyValueSchemaExt<Key = u64>,
+    Message<Indices>: BincodeEncoded + MessageHasId,
 {
-    pub fn new(kv: &Arc<KvStorage>, indices: Indices, limit: u64) -> Self {
+    pub fn new(kv: &Arc<Indices::KvStorage>, indices: Indices, limit: u64) -> Self {
         Store {
             kv: kv.clone(),
-            count: Arc::new(AtomicU64::new(0)),
             seq: Arc::new(AtomicU64::new(0)),
             limit,
             indices,
-            phantom_data: PhantomData,
         }
     }
 
     pub fn schemas(cache: &Cache) -> impl Iterator<Item = ColumnFamilyDescriptor> {
         use std::iter;
 
-        Indices::schemas(cache).into_iter().chain(iter::once(Schema::descriptor(cache)))
+        Indices::schemas(cache).into_iter()
+            .chain(iter::once(<Indices as SecondaryIndices>::PrimarySchema::descriptor(cache)))
     }
 
     pub fn schemas_ext() -> impl Iterator<Item = ColumnFamilyDescriptorExt> {
         use std::iter;
 
-        Indices::schemas_ext().into_iter().chain(iter::once(Schema::descriptor_ext()))
+        Indices::schemas_ext().into_iter()
+            .chain(iter::once(<Indices as SecondaryIndices>::PrimarySchema::descriptor_ext()))
     }
 
-    fn inner(&self) -> &impl KeyValueStoreWithSchema<Schema> {
+    fn inner(&self) -> &impl KeyValueStoreWithSchema<Indices::PrimarySchema> {
         self.kv.as_ref()
-    }
-
-    // Increment count of messages in the store
-    fn inc_count(&self) {
-        self.count.fetch_add(1, Ordering::SeqCst);
     }
 
     // Reserve new index for later use.
@@ -103,13 +93,18 @@ where
         self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
-    pub fn get(&self, index: u64) -> Result<Option<Message>, StorageError> {
+    pub fn get(&self, index: u64) -> Result<Option<Message<Indices>>, StorageError> {
         self.kv.get(&index).map_err(Into::into)
     }
 
     /// Create iterator ending on given index. If no value is provided
     /// start at the end
-    pub fn get_cursor(&self, cursor_index: Option<u64>, limit: usize, filter: &Indices::Filter) -> Result<Vec<Message>, StorageError> {
+    pub fn get_cursor(
+        &self,
+        cursor_index: Option<u64>,
+        limit: usize,
+        filter: &Indices::Filter,
+    ) -> Result<Vec<Message<Indices>>, StorageError> {
         let cursor_index = cursor_index.unwrap_or(u64::MAX);
         let ret = if let Some(keys) = self.indices.filter_iterator(&cursor_index, limit, &filter)? {
             keys.iter()
@@ -153,14 +148,14 @@ where
     }
 }
 
-impl<KvStorage, Message, Schema, Indices> StoreCollector for Store<KvStorage, Message, Schema, Indices>
+impl<Indices> StoreCollector for Store<Indices>
 where
-    KvStorage: KeyValueStoreWithSchema<Schema> + AsRef<DB>,
-    Message: BincodeEncoded + MessageHasId,
-    Schema: KeyValueSchemaExt<Key = u64, Value = Message>,
-    Indices: SecondaryIndices<PrimarySchema = Schema> + Clone,
+    Indices: SecondaryIndices,
+    Indices::KvStorage: KeyValueStoreWithSchema<Indices::PrimarySchema> + AsRef<DB>,
+    Indices::PrimarySchema: KeyValueSchemaExt<Key = u64>,
+    Message<Indices>: BincodeEncoded + MessageHasId,
 {
-    type Message = Message;
+    type Message = Message<Indices>;
 
     fn store_message(&self, msg: Self::Message) -> Result<u64, StorageError> {
         let mut msg = msg;
@@ -171,7 +166,6 @@ where
         msg.set_id(index);
         self.kv.put(&index, &msg)?;
         self.indices.store_indices(&index, &msg)?;
-        self.inc_count();
         Ok(index)
     }
 
