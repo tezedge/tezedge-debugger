@@ -85,8 +85,29 @@ where
     }
 
     fn delete(&self, key: &S::Key) -> Result<(), DBError> {
-        let _ = key;
-        unimplemented!()
+        // 2 (column_index) + 2 (op) + 4 (key_size) = 8
+        let mut header = [0; 8];
+
+        let column_index = S::short_id();
+        header[0..2].clone_from_slice(column_index.to_ne_bytes().as_ref());
+
+        let op = DbRemoteOperation::Delete;
+        header[2..4].clone_from_slice((op as u16).to_ne_bytes().as_ref());
+
+        let key = key.encode()?;
+        let key_size = key.len();
+        if key_size > KEY_SIZE_LIMIT {
+            let name = format!("key too big {}, limit: {}", key_size, KEY_SIZE_LIMIT);
+            Err(DBError::DatabaseIncompatibility { name })?;
+        }
+        header[4..8].clone_from_slice((key_size as u32).to_ne_bytes().as_ref());
+
+        let mut stream = self.stream.write().unwrap();
+        let mut to_write = Vec::with_capacity(8 + key_size);
+        to_write.extend_from_slice(&header);
+        to_write.extend_from_slice(&key);
+        stream.write_all(&to_write)
+            .map_err(|e| DBError::DatabaseIncompatibility { name: e.to_string() })
     }
 
     fn merge(&self, key: &S::Key, value: &S::Value) -> Result<(), DBError> {

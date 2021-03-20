@@ -2,6 +2,7 @@
 #[repr(u16)]
 pub enum DbRemoteOperation {
     Put,
+    Delete,
 }
 
 pub const KEY_SIZE_LIMIT: usize = 0x1000;  // 4 KiB

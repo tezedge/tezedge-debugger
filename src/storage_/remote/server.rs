@@ -223,6 +223,18 @@ where
             let value = &big_buf[key_size..(key_size + value_size)];
             inner.put_cf_opt(cf, key, value, &write_opts)?;
         }*/
+    } else if DbRemoteOperation::Delete as u16 == op {
+        let key_size = read_u32(stream).await? as usize;
+        if key_size > KEY_SIZE_LIMIT {
+            Err(DbServerError::KeySize(key_size))?;
+        }
+
+        let mut big_buf = vec![0; key_size];
+        stream.read_exact(&mut big_buf).await?;
+        let key = &big_buf[0..key_size];
+
+        let cf = inner.as_ref().as_ref().cf_handle(name).ok_or(DbServerError::ColumnNotFound { name })?;
+        inner.as_ref().as_ref().delete_cf_opt(cf, key, &write_opts)?;
     } else { // add operations here
         tracing::error!(op = op, "unsupported operation");
         Err(DbServerError::UnsupportedOperation(op))?;
