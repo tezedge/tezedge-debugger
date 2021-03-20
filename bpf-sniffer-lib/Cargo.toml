@@ -20,10 +20,9 @@ cty = { version = "0.2", optional = true }
 typenum = { version = "1.12", optional = true }
 # facade
 redbpf = { version = "1.3", default-features = false, optional = true }
-futures = { version = "0.3", optional = true }
-hex = { version = "0.4", optional = true }
-passfd = { version = "0.1", optional = true }
+# common
+bpf-common = { path = "../bpf-common" }
 
 [features]
-facade = ["cargo-bpf/build", "redbpf/load", "futures", "hex", "passfd"]
+facade = ["cargo-bpf/build", "redbpf/load"]
 probes = ["cargo-bpf/bindings", "redbpf-macros", "redbpf-probes", "cty", "typenum"]

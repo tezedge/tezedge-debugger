@@ -4,13 +4,13 @@ version = "0.1.0"
 authors = ["Vladislav Melnik <vladislav.melnik@simplestaking.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-bpf-sniffer-lib = { path = "../bpf-sniffer-lib", features = ["facade"] }
 sudo = "0.6"
 structopt = "0.3"
 tracing = "0.1"
 tracing-subscriber = "0.2"
 passfd = "0.1"
 ctrlc = "3.1"
+
+bpf-sniffer-lib = { path = "../bpf-sniffer-lib", features = ["facade"] }
+bpf-common = { path = "../bpf-common", features = ["std"] }

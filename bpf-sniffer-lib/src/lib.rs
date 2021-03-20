@@ -4,14 +4,9 @@
 #![cfg_attr(feature = "probes", no_std)]
 
 #[cfg(feature = "facade")]
-mod facade;
+mod module;
 #[cfg(feature = "facade")]
-pub use self::facade::{BpfModule, SnifferError, SnifferErrorCode, SnifferEvent, Command, BpfModuleClient};
-#[cfg(feature = "facade")]
-pub use redbpf::ringbuf::{RingBuffer, RingBufferSync, RingBufferObserver};
-
-#[cfg(feature = "facade")]
-mod bpf_code;
+pub use self::module::BpfModule;
 
 #[cfg(feature = "probes")]
 mod syscall_context;
@@ -21,9 +16,7 @@ pub use self::syscall_context::{SyscallContext, SyscallContextFull};
 #[cfg(feature = "probes")]
 pub mod send;
 
-mod data_descriptor;
-pub use self::data_descriptor::{SocketId, EventId, DataDescriptor, DataTag};
-
+#[cfg(feature = "probes")]
 mod address;
 #[cfg(feature = "probes")]
 pub use self::address::Address;

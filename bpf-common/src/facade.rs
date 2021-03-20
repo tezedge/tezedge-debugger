@@ -1,19 +1,19 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{convert::TryFrom, io::{self, Write}, fmt, mem, net::{SocketAddr, IpAddr}, os::unix::net::UnixStream, path::Path, str::FromStr};
-use redbpf::{load::Loader, Module, ringbuf::{RingBuffer, RingBufferSync, RingBufferData}, HashMap, Map};
+use std::{
+    convert::TryFrom,
+    io::{self, Write},
+    fmt,
+    mem,
+    net::{SocketAddr, IpAddr},
+    os::unix::net::UnixStream,
+    path::Path,
+    str::FromStr,
+};
+use bpf_ring_buffer::{RingBuffer, RingBufferSync, RingBufferData};
 use passfd::FdPassingExt;
-use super::{SocketId, EventId, DataDescriptor, DataTag, address::Address, bpf_code::CODE};
-
-impl From<Address> for SocketAddr {
-    fn from(a: Address) -> Self {
-        match a {
-            Address::Inet { port, ip, .. } => SocketAddr::new(IpAddr::V4(ip.into()), port),
-            Address::Inet6 { port, ip, .. } => SocketAddr::new(IpAddr::V6(ip.into()), port),
-        }
-    }
-}
+use super::{EventId, DataDescriptor, DataTag};
 
 pub enum SnifferEvent {
     Write { id: EventId, data: Vec<u8> },
@@ -74,6 +74,22 @@ impl RingBufferData for SnifferEvent {
     type Error = SnifferError;
 
     fn from_rb_slice(value: &[u8]) -> Result<Self, Self::Error> {
+        fn parse_socket_address(b: &[u8]) -> Result<SocketAddr, ()> {
+            let address_family = u16::from_le_bytes(TryFrom::try_from(&b[0..2]).map_err(|_| ())?);
+            let port = u16::from_be_bytes(TryFrom::try_from(&b[2..4]).map_err(|_| ())?);
+            match address_family {
+                2 => {
+                    let ip = <[u8; 4]>::try_from(&b[4..8]).map_err(|_| ())?;
+                    Ok(SocketAddr::new(IpAddr::V4(ip.into()), port))
+                },
+                10 => {
+                    let ip = <[u8; 16]>::try_from(&b[8..24]).map_err(|_| ())?;
+                    Ok(SocketAddr::new(IpAddr::V6(ip.into()), port))
+                },
+                _ => Err(()),
+            }
+        }
+
         let descriptor = DataDescriptor::try_from(value)
             .map_err(|()| SnifferError::SliceTooShort(value.len()))?;
         let data = &value[mem::size_of::<DataDescriptor>()..];
@@ -98,14 +114,14 @@ impl RingBufferData for SnifferEvent {
                 Ok(SnifferEvent::Connect {
                     id: descriptor.id,
                     // should not fail, already checked inside bpf code
-                    address: Address::try_from(data).unwrap().into(),
+                    address: parse_socket_address(data).unwrap(),
                 })
             },
             DataTag::Bind => {
                 Ok(SnifferEvent::Bind {
                     id: descriptor.id,
                     // should not fail, already checked inside bpf code
-                    address: Address::try_from(data).unwrap().into(),
+                    address: parse_socket_address(data).unwrap(),
                 })
             },
             DataTag::Listen => Ok(SnifferEvent::Listen { id: descriptor.id }),
@@ -113,7 +129,7 @@ impl RingBufferData for SnifferEvent {
                 Ok(SnifferEvent::Accept {
                     id: descriptor.id,
                     listen_on_fd: u32::from_le_bytes(TryFrom::try_from(&data[0..4]).unwrap()),
-                    address: Address::try_from(&data[4..]).unwrap().into(),
+                    address: parse_socket_address(&data[4..]).unwrap(),
                 })
             },
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
@@ -124,71 +140,6 @@ impl RingBufferData for SnifferEvent {
                 })
             },
         }
-    }
-}
-
-pub struct BpfModule(Module);
-
-impl BpfModule {
-    // TODO: handle error
-    pub fn load() -> Self {
-        let mut loaded = Loader::load(CODE).expect("Error loading BPF program");
-        for probe in loaded.kprobes_mut() {
-            // try to detach the kprobe, if previous run of the sniffer did not cleanup
-            let _ = probe
-                .detach_kprobe_namespace("default", &probe.name());
-            probe
-                .attach_kprobe_namespace("default", &probe.name(), 0)
-                .expect(&format!("Error attaching kprobe program {}", probe.name()));
-        }
-        BpfModule(loaded.module)
-    }
-
-    pub fn main_buffer_map(&self) -> &Map {
-        self
-            .0
-            .maps
-            .iter()
-            .find(|m| m.name == "main_buffer")
-            .unwrap()
-    }
-
-    pub fn main_buffer<D>(&self) -> RingBuffer<D> {
-        let rb_map = self.main_buffer_map();
-        RingBuffer::from_map(&rb_map).unwrap()
-    }
-
-    pub fn main_buffer_sync(&self) -> RingBufferSync {
-        let rb_map = self.main_buffer_map();
-        RingBufferSync::from_map(&rb_map).unwrap()
-    }
-
-    fn connections_map(&self) -> HashMap<SocketId, u32> {
-        let map = self
-            .0
-            .maps
-            .iter()
-            .find(|m| m.name == "connections")
-            .unwrap();
-        HashMap::new(map).unwrap()
-    }
-
-    pub fn ignore(&self, id: SocketId) {
-        self.connections_map().delete(id);
-    }
-
-    fn ports_to_watch_map(&self) -> HashMap<u16, u32> {
-        let map = self
-            .0
-            .maps
-            .iter()
-            .find(|m| m.name == "ports")
-            .unwrap();
-        HashMap::new(map).unwrap()
-    }
-
-    pub fn watch_port(&self, port: u16) {
-        self.ports_to_watch_map().set(port, 1)
     }
 }
 

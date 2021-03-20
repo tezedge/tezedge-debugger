@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "bpf-sniffer-lib", "tester", "bpf-sniffer"]
+members = [".", "tester", "bpf-sniffer-lib", "bpf-sniffer", "bpf-common", "bpf-ring-buffer"]
 
 [package]
 name = "tezedge_debugger"
@@ -71,7 +71,7 @@ networking = { tag = "v1.1.2", git = "https://github.com/simplestaking/tezedge" 
 tezos-conversation = { branch = "develop", git = "https://github.com/simplestaking/tezos-dissector" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-bpf-sniffer-lib = { path = "bpf-sniffer-lib", features = ["facade"] }
+bpf-common = { path = "bpf-common", features = ["std"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 jemallocator = { version = "0.3.2", optional = true }

@@ -5,7 +5,7 @@ use std::{
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_stream::StreamExt;
 use smallvec::SmallVec;
-use bpf_sniffer_lib::{Command, EventId, RingBuffer, SnifferEvent, BpfModuleClient};
+use bpf_common::{Command, EventId, RingBuffer, SnifferEvent, BpfModuleClient};
 
 use super::{p2p, DebuggerConfig, NodeConfig};
 use crate::storage_::{StoreCollector, StoreClient, p2p::Message as P2pMessage, indices::Initiator};

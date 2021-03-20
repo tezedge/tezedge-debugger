@@ -6,7 +6,7 @@ use std::{
 };
 use tokio::{sync::mpsc, time};
 use tezos_conversation::Identity;
-use bpf_sniffer_lib::{EventId, SocketId};
+use bpf_common::{EventId, SocketId};
 
 use crate::{
     storage_::{StoreClient, p2p::Message as P2pMessage, indices::Initiator},

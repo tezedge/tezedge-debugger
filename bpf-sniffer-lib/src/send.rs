@@ -4,7 +4,7 @@
 use core::{mem, ptr, ops::Sub};
 use typenum::{Unsigned, Bit, Shleft};
 use redbpf_probes::{maps::RingBuffer, helpers::gen};
-use super::data_descriptor::{EventId, DataDescriptor, DataTag};
+use bpf_common::{EventId, DataDescriptor, DataTag};
 
 #[inline(always)]
 pub fn sized<S, K>(id: EventId, tag: DataTag, data: &[u8], rb: &mut RingBuffer)

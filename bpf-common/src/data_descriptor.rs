@@ -3,9 +3,6 @@
 
 use core::{mem, ptr, convert::TryFrom, fmt};
 
-#[cfg(feature = "probes")]
-use redbpf_probes::helpers;
-
 #[repr(C)]
 pub struct DataDescriptor {
     pub id: EventId,
@@ -21,7 +18,6 @@ pub struct EventId {
 }
 
 impl EventId {
-    #[cfg(feature = "probes")]
     pub fn new(socket_id: SocketId, _ts_start: u64, ts_finish: u64) -> Self {
         EventId {
             socket_id: socket_id,

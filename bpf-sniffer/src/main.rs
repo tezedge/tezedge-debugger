@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 use std::{fs, io::{BufReader, BufRead}, os::unix::{fs::PermissionsExt, io::AsRawFd, net::UnixListener}, process, str::FromStr};
-use bpf_sniffer_lib::{BpfModule, Command, SocketId};
 use tracing::Level;
 use structopt::StructOpt;
 use passfd::FdPassingExt;
+use bpf_sniffer_lib::BpfModule;
+use bpf_common::{Command, SocketId};
 
 #[derive(StructOpt)]
 pub struct Opts {

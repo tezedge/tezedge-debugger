@@ -1,5 +1,5 @@
 use std::{fs::File, io::{self, Write}, path::Path};
-use bpf_sniffer_lib::RingBufferObserver;
+use bpf_common::RingBufferObserver;
 
 pub fn dump<P, Q>(json_path: P, bin_path: Q, observer: &RingBufferObserver) -> io::Result<()>
 where
