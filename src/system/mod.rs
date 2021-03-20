@@ -6,7 +6,6 @@ pub mod syslog_producer;
 //pub mod rpc_parser;
 //pub mod replayer;
 
-// new capturing system
 mod reporter;
 pub use self::reporter::Reporter;
 

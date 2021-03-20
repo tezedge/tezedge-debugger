@@ -8,7 +8,7 @@ mod facade;
 #[cfg(feature = "facade")]
 pub use self::facade::{BpfModule, SnifferError, SnifferErrorCode, SnifferEvent, Command, BpfModuleClient};
 #[cfg(feature = "facade")]
-pub use redbpf::{ringbuf::{RingBuffer, RingBufferObserver}, ringbuf_sync::RingBufferSync};
+pub use redbpf::ringbuf::{RingBuffer, RingBufferSync, RingBufferObserver};
 
 #[cfg(feature = "facade")]
 mod bpf_code;

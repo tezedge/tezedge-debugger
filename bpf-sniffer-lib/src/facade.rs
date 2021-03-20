@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use std::{convert::TryFrom, io::{self, Write}, fmt, mem, net::{SocketAddr, IpAddr}, os::unix::net::UnixStream, path::Path, str::FromStr};
-use redbpf::{load::Loader, Module, ringbuf::{RingBuffer, RingBufferData}, ringbuf_sync::RingBufferSync, HashMap, Map};
+use redbpf::{load::Loader, Module, ringbuf::{RingBuffer, RingBufferSync, RingBufferData}, HashMap, Map};
 use passfd::FdPassingExt;
 use super::{SocketId, EventId, DataDescriptor, DataTag, address::Address, bpf_code::CODE};
 
@@ -253,7 +253,18 @@ impl BpfModuleClient {
         let stream = UnixStream::connect(path)?;
         let fd = stream.recv_fd()?;
         let rb = RingBuffer::new(fd, 0x40000000)?;
-        
+
+        Ok((BpfModuleClient { stream }, rb))
+    }
+
+    pub fn new_sync<P>(path: P) -> io::Result<(Self, RingBufferSync)>
+    where
+        P: AsRef<Path>,
+    {
+        let stream = UnixStream::connect(path)?;
+        let fd = stream.recv_fd()?;
+        let rb = RingBufferSync::new(fd, 0x40000000)?;
+
         Ok((BpfModuleClient { stream }, rb))
     }
 
