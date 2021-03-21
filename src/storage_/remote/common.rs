@@ -3,6 +3,7 @@
 pub enum DbRemoteOperation {
     Put,
     Delete,
+    Get,
 }
 
 pub const KEY_SIZE_LIMIT: usize = 0x1000;  // 4 KiB

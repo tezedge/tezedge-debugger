@@ -6,7 +6,7 @@ use std::{
     fmt,
     sync::Arc,
 };
-use tokio::{net::UnixListener, io::AsyncReadExt, task::JoinHandle};
+use tokio::{net::UnixListener, io::{AsyncReadExt, AsyncWriteExt}, task::JoinHandle};
 use generic_array::{ArrayLength, GenericArray, typenum};
 use rocksdb::WriteOptions;
 use futures::{
@@ -141,7 +141,7 @@ async fn handle_connection<S>(
     write_opts: &WriteOptions,
 ) -> Result<(), DbServerError>
 where
-    S: AsyncReadExt + Unpin,
+    S: AsyncReadExt + AsyncWriteExt + Unpin,
 {
     loop {
         match handle_connection_inner(&mut stream, inner.clone(), &cf_dictionary, write_opts).await {
@@ -164,7 +164,7 @@ async fn handle_connection_inner<S>(
     write_opts: &WriteOptions,
 ) -> Result<(), DbServerError>
 where
-    S: AsyncReadExt + Unpin,
+    S: AsyncReadExt + AsyncWriteExt + Unpin,
 {
     let index = read_u16(stream).await? as usize;
     let name = *cf_dictionary.get(index)
@@ -235,6 +235,22 @@ where
 
         let cf = inner.as_ref().as_ref().cf_handle(name).ok_or(DbServerError::ColumnNotFound { name })?;
         inner.as_ref().as_ref().delete_cf_opt(cf, key, &write_opts)?;
+    } else if DbRemoteOperation::Get as u16 == op {
+        let key_size = read_u32(stream).await? as usize;
+        if key_size > KEY_SIZE_LIMIT {
+            Err(DbServerError::KeySize(key_size))?;
+        }
+
+        let mut big_buf = vec![0; key_size];
+        stream.read_exact(&mut big_buf).await?;
+        let key = &big_buf[0..key_size];
+
+        let value = {
+            let cf = inner.as_ref().as_ref().cf_handle(name).ok_or(DbServerError::ColumnNotFound { name })?;
+            inner.as_ref().as_ref().get_cf(cf, key)?.unwrap_or(Vec::new())
+        };
+        stream.write_all(&(value.len() as u32).to_ne_bytes()).await?;
+        stream.write_all(&value).await?;
     } else { // add operations here
         tracing::error!(op = op, "unsupported operation");
         Err(DbServerError::UnsupportedOperation(op))?;
