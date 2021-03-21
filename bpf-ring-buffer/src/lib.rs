@@ -278,11 +278,12 @@ impl RingBufferSync {
                     Err(error) => log::error!("rb parse data: {:?}", error),
                 }
             }
+
+            // store our position to tell kernel it can overwrite memory behind our position
+            self.observer.consumer_pos.store(self.consumer_pos_value, Ordering::Release);
+
             // if kernel decide to discard this slice, go to the next iteration
         };
-
-        // store our position to tell kernel it can overwrite memory behind our position
-        self.observer.consumer_pos.store(self.consumer_pos_value, Ordering::Release);
 
         if vec.is_empty() {
             Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
