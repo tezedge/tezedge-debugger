@@ -18,8 +18,6 @@ services:
       - "./config-docker.toml:/home/appuser/config.toml:ro"
       - "./target:/tmp/report:rw"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
-    entrypoint: sh -c "./bpf-sniffer & sleep 0.5 ; ./tezedge-debugger-db & sleep 1 ; heaptrack ./tezedge-debugger-parser; cp heaptrack.*.gz /tmp/report"
-    #entrypoint: sh -c "./bpf-sniffer & sleep 0.5 && ./tezedge-debugger ; sleep inf"
     ports:
       - "17732:17732"      # debugger RPC port
       - "10000:10000/udp"  # debugger syslog port for tezedge node
