@@ -121,8 +121,8 @@ impl Connection {
         self.send(Either::Right(command)).await
     }
 
-    pub async fn join(mut self) -> Option<ConnectionReport> {
-        self.send_command(Command::Terminate).await;
+    pub async fn join(self) -> Option<ConnectionReport> {
+        drop(self.tx);
         match self.handle.await {
             Ok(report) => Some(report),
             Err(error) => {
