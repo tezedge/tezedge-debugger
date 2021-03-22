@@ -42,7 +42,7 @@ fn prepare_p2p(db: &P2pStore) {
                     bytes,
                     None,
                 );
-                db.store_message(&message).unwrap();
+                db.store_message(message).unwrap();
             }
         }
     }
