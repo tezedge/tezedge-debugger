@@ -3,7 +3,6 @@
 
 
 pub mod syslog_producer;
-//pub mod rpc_parser;
 //pub mod replayer;
 
 mod reporter;

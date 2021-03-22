@@ -3,10 +3,6 @@
 
 mod p2p;
 mod log;
-#[allow(dead_code)]
-mod rpc;
-#[allow(dead_code)]
-mod stat;
 mod version;
 mod report;
 

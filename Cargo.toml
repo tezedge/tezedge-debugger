@@ -28,10 +28,6 @@ path = "src/bin/debugger_parser.rs"
 name = "database"
 harness = false
 
-[[bench]]
-name = "database_old"
-harness = false
-
 [dev-dependencies]
 ws = "0.9"
 url = "2.2"
