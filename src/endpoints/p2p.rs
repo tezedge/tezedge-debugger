@@ -69,7 +69,31 @@ pub fn p2p_message(storage: P2pStore) -> impl Filter<Extract=(WithStatus<Json>, 
     warp::path!("v2" / "p2p" / u64)
         .map(move |index: u64| -> WithStatus<Json> {
             match storage.get(index) {
-                Ok(msg) => with_status(json(&msg.map(|m| m.message)), StatusCode::OK),
+                Ok(msg) => {
+                    let msg = msg.and_then(|msg| {
+                        use tezos_messages::p2p::{
+                            encoding::peer::PeerMessageResponse,
+                            binary_message::BinaryMessage,
+                        };
+                        use crate::storage_::p2p::TezosPeerMessage;
+
+                        if let Some(msg) = msg.message {
+                            Some(msg)
+                        } else {
+                            let length = msg.decrypted_bytes.len();
+                            if length > 18 {
+                                if let Ok(peer_message) = PeerMessageResponse::from_bytes(&msg.decrypted_bytes[2..(length - 16)]) {
+                                    Some(TezosPeerMessage::PeerMessage(peer_message.message().clone().into()))
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                    });
+                    with_status(json(&msg), StatusCode::OK)
+                },
                 Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
             }
         })
