@@ -15,7 +15,8 @@ pub fn routes(p2p_db: P2pStore, log_db: LogStore, reporter: Arc<Mutex<Reporter>>
     warp::get().and(
         self::p2p::p2p(p2p_db.clone())
             .or(self::p2p::p2p_message(p2p_db.clone()))
-            .or(self::report::p2p_report(reporter))
+            .or(self::report::p2p_report(reporter.clone()))
+            .or(self::report::rb_report(reporter.clone()))
             .or(self::log::log(log_db.clone()))
             .or(self::version::api_call())
     )

@@ -59,6 +59,10 @@ impl Reporter {
         }
     }
 
+    pub async fn get_counter(&mut self) {
+        let _ = self.tx_p2p_command.send(p2p::Command::GetCounter).await;
+    }
+
     pub async fn terminate(&self) {
         #[cfg(target_os = "linux")] {
             let _ = self.tx_p2p_command.send(p2p::Command::Terminate).await;

@@ -28,6 +28,7 @@ pub struct Message {
 #[derive(Debug, Clone, Copy)]
 pub enum Command {
     GetReport,
+    GetCounter,
     Terminate,
 }
 
@@ -98,6 +99,7 @@ where
                     Err(_) => (),
                 }
             },
+            Command::GetCounter => (),
             Command::Terminate => (),
         }
     }

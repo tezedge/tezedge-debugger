@@ -4,7 +4,10 @@
 use redbpf::{load::Loader, Module, HashMap, Map};
 use bpf_common::SocketId;
 
-pub struct BpfModule(Module);
+pub struct BpfModule {
+    inner: Module,
+    counter_map_index: usize,
+}
 
 #[repr(C)]
 struct AlignedTo<A, B>
@@ -35,12 +38,16 @@ impl BpfModule {
                 .attach_kprobe_namespace("default", &probe.name(), 0)
                 .expect(&format!("Error attaching kprobe program {}", probe.name()));
         }
-        BpfModule(loaded.module)
+        let i = loaded.module.maps.iter().enumerate().find(|&(_, m)| m.name == "overall_counter").unwrap().0;
+        BpfModule {
+            inner: loaded.module,
+            counter_map_index: i,
+        }
     }
 
     pub fn main_buffer_map(&self) -> &Map {
         self
-            .0
+            .inner
             .maps
             .iter()
             .find(|m| m.name == "main_buffer")
@@ -49,7 +56,7 @@ impl BpfModule {
 
     fn connections_map(&self) -> HashMap<SocketId, u32> {
         let map = self
-            .0
+            .inner
             .maps
             .iter()
             .find(|m| m.name == "connections")
@@ -63,7 +70,7 @@ impl BpfModule {
 
     fn ports_to_watch_map(&self) -> HashMap<u16, u32> {
         let map = self
-            .0
+            .inner
             .maps
             .iter()
             .find(|m| m.name == "ports")
@@ -73,5 +80,9 @@ impl BpfModule {
 
     pub fn watch_port(&self, port: u16) {
         self.ports_to_watch_map().set(port, 1)
+    }
+
+    pub fn get_counter(&self) -> u64 {
+        HashMap::new(&self.inner.maps[self.counter_map_index]).unwrap().get(0 as u32).unwrap_or(0)
     }
 }

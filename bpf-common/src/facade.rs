@@ -151,6 +151,7 @@ pub enum Command {
         pid: u32,
         fd: u32,
     },
+    FetchCounter,
 }
 
 impl FromStr for Command {
@@ -176,7 +177,9 @@ impl FromStr for Command {
                     .parse()
                     .map_err(|e| format!("failed to parse fd: {}", e))?;
                 Ok(Command::IgnoreConnection { pid, fd })
-
+            },
+            Some("fetch_counter") => {
+                Ok(Command::FetchCounter)
             },
             _ => Err("unexpected command".to_string()),
         }
@@ -188,6 +191,7 @@ impl fmt::Display for Command {
         match self {
             &Command::WatchPort { port } => write!(f, "watch_port {}", port),
             &Command::IgnoreConnection { pid, fd } => write!(f, "ignore_connection {} {}", pid, fd),
+            &Command::FetchCounter => write!(f, "fetch_counter"),
         }
     }
 }

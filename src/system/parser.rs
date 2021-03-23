@@ -103,6 +103,9 @@ impl Parser {
                 // so it is impossible to have data race
                 Event::P2pCommand(command) => {
                     p2p_parser.execute(command).await;
+                    if let p2p::Command::GetCounter = command {
+                        s.send_command(Command::FetchCounter);
+                    }
                     if let p2p::Command::Terminate = command {
                         // TODO: timeout
                         p2p_parser.terminate().await;

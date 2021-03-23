@@ -63,6 +63,10 @@ fn main() {
                         module.ignore(SocketId { pid, fd });
                         tracing::info!("ignore connection pid: {}, fd: {}", pid, fd);
                     },
+                    Ok(Command::FetchCounter) => {
+                        let counter = module.get_counter();
+                        tracing::info!("counter: {}", counter);
+                    },
                     Err(error) => {
                         tracing::warn!("bad command: {}", error);
                     },

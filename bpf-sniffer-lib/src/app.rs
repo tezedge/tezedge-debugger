@@ -21,6 +21,8 @@ pub trait AppIo {
 
     fn push_context(&mut self, thread_id: u32, pid: u32, ts: u64, context: SyscallContext);
     fn pop_context<H: FnOnce(&mut Self, SyscallContext, u64)>(&mut self, thread_id: u32, handler: H);
+
+    fn inc_counter(&mut self);
 }
 
 pub trait AppProbes {
@@ -106,6 +108,7 @@ impl<App: AppIo> AppProbes for App {
 
             let id = EventId::new(SocketId { pid, fd }, ts, ts);
             send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], self.rb());
+            self.inc_counter();
         }
     }
 
@@ -155,7 +158,8 @@ impl<App: AppIo> AppProbes for App {
                         let port = a.port();
                         if app.is_interesting_port(port) {
                             app.reg_process(pid, port);
-                            send::sized::<typenum::U28, typenum::B0>(id, DataTag::Bind, address, app.rb())
+                            send::sized::<typenum::U28, typenum::B0>(id, DataTag::Bind, address, app.rb());
+                            app.inc_counter();
                         } else {
                             // ignore
                         }
@@ -169,6 +173,7 @@ impl<App: AppIo> AppProbes for App {
                 if regs.is_syscall_success() {
                     let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                     send::sized::<typenum::U0, typenum::B0>(id, DataTag::Listen, &[], app.rb());
+                    app.inc_counter();
                 }
             },
             SyscallContext::Connect { fd, address } => {
@@ -185,13 +190,15 @@ impl<App: AppIo> AppProbes for App {
                     let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                     if let Ok(_) = Address::try_from(tmp.as_ref()) {
                         app.reg_connection(pid, fd, false);
-                        send::sized::<typenum::U28, typenum::B0>(id, DataTag::Connect, address, app.rb())
+                        send::sized::<typenum::U28, typenum::B0>(id, DataTag::Connect, address, app.rb());
+                        app.inc_counter();
                     } else {
                         // AF_UNSPEC
                         if tmp[0] == 0 && tmp[1] == 0 {
                             if app.is_connection(pid, fd) {
                                 app.forget_connection(pid, fd);
                                 send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());
+                                app.inc_counter();
                             }
                         }
                         // ignore connection to other type of address
@@ -216,13 +223,15 @@ impl<App: AppIo> AppProbes for App {
                     let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                     if let Ok(_) = Address::try_from(tmp.as_ref()) {
                         app.reg_connection(pid, fd, true);
-                        send::sized::<typenum::U28, typenum::B0>(id, DataTag::Accept, address, app.rb())
+                        send::sized::<typenum::U28, typenum::B0>(id, DataTag::Accept, address, app.rb());
+                        app.inc_counter();
                     } else {
                         // AF_UNSPEC
                         if tmp[0] == 0 && tmp[1] == 0 {
                             if app.is_connection(pid, fd) {
                                 app.forget_connection(pid, fd);
                                 send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());
+                                app.inc_counter();
                             }
                         }
                         // ignore connection to other type of address
@@ -235,7 +244,8 @@ impl<App: AppIo> AppProbes for App {
                 if regs.is_syscall_success() && read as i64 > 0 {
                     let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
                     let id = EventId::new(SocketId { pid, fd }, ts0, ts);
-                    send::dyn_sized::<typenum::B0>(id, DataTag::Read, data, app.rb())
+                    send::dyn_sized::<typenum::B0>(id, DataTag::Read, data, app.rb());
+                    app.inc_counter();
                 }
             },
             SyscallContext::Write { fd, data_ptr } => {
@@ -243,7 +253,8 @@ impl<App: AppIo> AppProbes for App {
                 if regs.is_syscall_success() && written as i64 > 0 {
                     let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
                     let id = EventId::new(SocketId { pid, fd }, ts0, ts);
-                    send::dyn_sized::<typenum::B0>(id, DataTag::Write, data, app.rb())
+                    send::dyn_sized::<typenum::B0>(id, DataTag::Write, data, app.rb());
+                    app.inc_counter();
                 }
             },
             _ => (),

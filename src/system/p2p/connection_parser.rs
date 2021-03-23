@@ -133,6 +133,7 @@ where
                     tx_report.send(report).await.unwrap();
                     continue;
                 },
+                Either::Right(Command::GetCounter) => continue,
                 // TODO:
                 Either::Right(Command::Terminate) => break,
             };

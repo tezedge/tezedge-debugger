@@ -34,6 +34,9 @@ static mut connections: HashSet<SocketId> = HashSet::with_max_entries(8192);
 #[map]
 static mut syscall_contexts: HashMap<u32, SyscallContextFull> = HashMap::with_max_entries(256);
 
+#[map]
+static mut overall_counter: HashMap<u32, u64> = HashMap::with_max_entries(1);
+
 struct App;
 
 impl AppIo for App {
@@ -103,6 +106,13 @@ impl AppIo for App {
                 map.delete(&thread_id);
             },
             None => (),
+        }
+    }
+
+    fn inc_counter(&mut self) {
+        unsafe {
+            let c = overall_counter.get(&0).cloned().unwrap_or(0) + 1;
+            overall_counter.set(&0, &c);
         }
     }
 }
