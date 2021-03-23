@@ -38,7 +38,7 @@ pub struct ProcessingConnectionResult {
 
 pub struct Parser<S>
 where
-    S: Clone + StoreCollector<Message = P2pMessage> + Send + 'static,
+    S: Clone + StoreCollector<P2pMessage> + Send + 'static,
 {
     identity_cache: Option<Identity>,
     tx_report: mpsc::Sender<Report>,
@@ -51,7 +51,7 @@ where
 
 impl<S> Parser<S>
 where
-    S: Clone + StoreCollector<Message = P2pMessage> + Send + 'static,
+    S: Clone + StoreCollector<P2pMessage> + Send + 'static,
 {
     pub fn new(tx_report: mpsc::Sender<Report>, db: S) -> Self {
         let (tx_connection_report, rx_connection_report) = mpsc::channel(0x1000);

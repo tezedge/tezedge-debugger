@@ -28,7 +28,7 @@ impl Reporter {
 
     pub fn spawn_parser<S>(&mut self, storage: S, config: &DebuggerConfig) -> Option<JoinHandle<()>>
     where
-        S: Clone + StoreCollector<Message = P2pMessage> + Send + 'static,
+        S: Clone + StoreCollector<P2pMessage> + Send + 'static,
     {
         if let Some(rx_p2p_command) = self.rx_p2p_command.take() {
             #[cfg(target_os = "linux")] {

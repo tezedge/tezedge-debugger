@@ -33,7 +33,7 @@ impl Parser {
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     ) -> Option<JoinHandle<()>>
     where
-        S: Clone + StoreCollector<Message = P2pMessage> + Send + 'static,
+        S: Clone + StoreCollector<P2pMessage> + Send + 'static,
     {
         match BpfModuleClient::new(&config.bpf_sniffer) {
             Ok((sniffer, ring_buffer)) => {
@@ -75,7 +75,7 @@ impl Parser {
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     )
     where
-        S: Clone + StoreCollector<Message = P2pMessage> + Send + 'static,
+        S: Clone + StoreCollector<P2pMessage> + Send + 'static,
     {
         let db = storage;
         let mut s = self;
@@ -127,7 +127,7 @@ impl Parser {
         event: SnifferEvent,
     )
     where
-        S: Clone + StoreCollector<Message = P2pMessage> + Send,
+        S: Clone + StoreCollector<P2pMessage> + Send,
     {
         match event {
             SnifferEvent::Bind { id, address } => {
@@ -223,7 +223,7 @@ impl Parser {
         listened_on: Option<u32>,
     )
     where
-        S: Clone + StoreCollector<Message = P2pMessage> + Send,
+        S: Clone + StoreCollector<P2pMessage> + Send,
     {
         let source_type = if listened_on.is_some() {
             Initiator::Remote
@@ -263,7 +263,7 @@ impl Parser {
 
     async fn process_close<S>(&mut self, parser: &mut p2p::Parser<S>, id: EventId)
     where
-        S: Clone + StoreCollector<Message = P2pMessage> + Send,
+        S: Clone + StoreCollector<P2pMessage> + Send,
     {
         parser.process_close(id).await;
     }
@@ -276,7 +276,7 @@ impl Parser {
         incoming: bool,
     )
     where
-        S: Clone + StoreCollector<Message = P2pMessage> + Send,
+        S: Clone + StoreCollector<P2pMessage> + Send,
     {
         self.counter += 1;
         let message = p2p::Message {

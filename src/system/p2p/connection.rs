@@ -37,7 +37,7 @@ impl Connection {
         parser: Parser<S>,
     ) -> Self
     where
-        S: StoreCollector<Message = P2pMessage> + Send + 'static,
+        S: StoreCollector<P2pMessage> + Send + 'static,
     {
         let (tx, rx) = mpsc::channel(0x10);
         let source_type = parser.source_type.clone();

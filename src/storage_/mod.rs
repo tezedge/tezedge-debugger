@@ -7,9 +7,6 @@ mod sorted_intersect;
 mod store;
 pub use self::store::{Store, StoreCollector};
 
-mod store_mpsc;
-pub use self::store_mpsc::StoreClient;
-
 mod secondary_index;
 pub use self::secondary_index::SecondaryIndices;
 

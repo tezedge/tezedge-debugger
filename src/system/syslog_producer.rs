@@ -14,7 +14,7 @@ use crate::{
 /// Spawn new Syslog UDP server, for processing syslogs.
 pub fn spawn<S>(storage: &S, node: &NodeConfig, running: Arc<AtomicBool>) -> JoinHandle<()>
 where
-    S: StoreCollector<Message = log::Message> + Clone + Send + 'static,
+    S: StoreCollector<log::Message> + Clone + Send + 'static,
 {
     // Create the server
     let syslog_port = node.syslog_port;

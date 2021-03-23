@@ -40,7 +40,7 @@ use crate::{
 
 pub struct Parser<S>
 where
-    S: StoreCollector<Message = P2pMessage> + 'static,
+    S: StoreCollector<P2pMessage> + 'static,
 {
     pub identity: Identity,
     pub config: NodeConfig,
@@ -82,7 +82,7 @@ impl fmt::Display for ErrorContext {
 
 impl<S> Parser<S>
 where
-    S: StoreCollector<Message = P2pMessage> + 'static,
+    S: StoreCollector<P2pMessage> + 'static,
  {
     const DEFAULT_POW_TARGET: f64 = 26.0;
 

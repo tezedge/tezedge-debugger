@@ -12,10 +12,11 @@ pub trait MessageHasId {
     fn set_id(&mut self, id: u64);
 }
 
-pub trait StoreCollector {
-    type Message: MessageHasId;
-
-    fn store_message(&self, msg: Self::Message) -> Result<u64, StorageError>;
+pub trait StoreCollector<Message>
+where
+    Message: MessageHasId,
+{
+    fn store_message(&self, msg: Message) -> Result<u64, StorageError>;
 
     /// Deletes the message and corresponding secondary indices.
     fn delete_message(&self, index: u64) -> Result<(), StorageError>;
@@ -148,16 +149,14 @@ where
     }
 }
 
-impl<Indices> StoreCollector for Store<Indices>
+impl<M, Indices> StoreCollector<M> for Store<Indices>
 where
     Indices: SecondaryIndices,
     Indices::KvStorage: KeyValueStoreWithSchema<Indices::PrimarySchema> + AsRef<DB>,
-    Indices::PrimarySchema: KeyValueSchemaExt<Key = u64>,
+    Indices::PrimarySchema: KeyValueSchemaExt<Key = u64, Value = M>,
     Message<Indices>: BincodeEncoded + MessageHasId,
 {
-    type Message = Message<Indices>;
-
-    fn store_message(&self, msg: Self::Message) -> Result<u64, StorageError> {
+    fn store_message(&self, msg: M) -> Result<u64, StorageError> {
         let mut msg = msg;
         let index = self.reserve_index();
         if index >= self.limit {
