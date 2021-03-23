@@ -41,7 +41,7 @@ pub struct Parser<S>
 where
     S: Clone + StoreCollector<P2pMessage> + Send + 'static,
 {
-    identity_cache: Option<Identity>,
+    identity_cache: HashMap<u16, Identity>,
     tx_report: mpsc::Sender<Report>,
     rx_connection_report: mpsc::Receiver<ConnectionReport>,
     tx_connection_report: mpsc::Sender<ConnectionReport>,
@@ -57,7 +57,7 @@ where
     pub fn new(tx_report: mpsc::Sender<Report>, db: S) -> Self {
         let (tx_connection_report, rx_connection_report) = mpsc::channel(0x1000);
         Parser {
-            identity_cache: None,
+            identity_cache: HashMap::new(),
             tx_report,
             rx_connection_report,
             tx_connection_report,
@@ -136,11 +136,17 @@ where
         }
     }
 
-    fn try_load_identity(&mut self, path: &str) -> Option<Identity> {
-        if self.identity_cache.is_none() {
-            self.identity_cache = Self::load_identity(path).ok();
+    fn try_load_identity(&mut self, path: &str, port: u16) -> Option<Identity> {
+        match self.identity_cache.get(&port) {
+            Some(id) => Some(id.clone()),
+            None => {
+                let id = Self::load_identity(path).ok();
+                if let Some(id) = id.clone() {
+                    self.identity_cache.insert(port, id);
+                }
+                id
+            }
         }
-        self.identity_cache.clone()
     }
 
     pub async fn process_connect(
@@ -150,7 +156,7 @@ where
         remote_address: SocketAddr,
         source_type: Initiator,
     ) -> ProcessingConnectionResult {
-        if let Some(identity) = self.try_load_identity(&config.identity_path) {
+        if let Some(identity) = self.try_load_identity(&config.identity_path, config.p2p_port) {
             let bytes_counter = Arc::new(AtomicU64::new(0));
             let parser = connection_parser::Parser {
                 identity,

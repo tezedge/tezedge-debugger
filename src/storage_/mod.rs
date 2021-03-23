@@ -5,7 +5,7 @@ pub mod indices;
 mod sorted_intersect;
 
 mod store;
-pub use self::store::{Store, StoreCollector};
+pub use self::store::{Store, StoreCollector, MessageHasId};
 
 mod secondary_index;
 pub use self::secondary_index::SecondaryIndices;
