@@ -5,7 +5,7 @@ use std::{
     ptr,
     slice,
     mem,
-    sync::{Arc, atomic::{AtomicUsize, Ordering}},
+    sync::{Arc, atomic::{Ordering, AtomicUsize, AtomicBool}},
     task::{Context, Poll},
     pin::Pin,
     os::unix::io::AsRawFd,
@@ -292,36 +292,45 @@ impl RingBufferSync {
         }
     }
 
-    fn wait(&mut self) {
+    fn wait(&self, running: &AtomicBool) {
         let mut fds = libc::pollfd {
             fd: self.as_raw_fd(),
             events: libc::POLLIN,
             revents: 0,
         };
-        loop {
-            match unsafe { libc::poll(&mut fds, 1, 100) } {
+        while running.load(Ordering::Relaxed) {
+            match unsafe { libc::poll(&mut fds, 1, 1_000) } {
                 0 => log::debug!("ringbuf wait timeout"),
                 1 => {
                     if fds.revents & libc::POLLIN != 0 {
                         break;
                     }
                 },
-                i32::MIN..=-1 => log::error!("ringbuf error: {:?}", io::Error::last_os_error()),
+                i32::MIN..=-1 => {
+                    let error = io::Error::last_os_error();
+                    if io::ErrorKind::Interrupted != error.kind() {
+                        log::error!("ringbuf error: {:?}", error);
+                    }
+                },
                 // poll should not return bigger then number of fds, we have 1
-                r @ 2..=i32::MAX => log::error!("ringbuf poll {}, {:?}", r, io::Error::last_os_error()),
+                r @ 2..=i32::MAX => log::error!("ringbuf poll {}", r),
             }
             fds.revents = 0;
         }
     }
 
-    pub fn read_blocking<D>(&mut self) -> io::Result<SmallVec<[D; 64]>>
+    pub fn read_blocking<D>(&mut self, running: &AtomicBool) -> io::Result<SmallVec<[D; 64]>>
     where
         D: RingBufferData,
     {
         match self.read() {
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                self.wait();
-                self.read()
+                self.wait(running.clone());
+                if running.load(Ordering::Relaxed) {
+                    self.read_blocking(running)
+                } else {
+                    Ok(SmallVec::new())
+                }
             },
             x => x,
         }

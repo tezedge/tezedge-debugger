@@ -1,0 +1,27 @@
+[package]
+name = "tezedge-recorder"
+version = "0.1.0"
+authors = ["Vladislav Melnik <vladislav.melnik@simplestaking.com>"]
+edition = "2018"
+
+[dependencies]
+toml = "0.5"
+serde = "1.0"
+serde_json = "1.0"
+hex = "0.4"
+rocksdb = "0.15"
+anyhow = "1.0"
+thiserror = "1.0"
+ctrlc = "3.1"
+log = "0.4"
+simple_logger = "1.11"
+either = "1.6"
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+jemallocator = { version = "0.3.2", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+bpf-common = { path = "../bpf-common", features = ["std"] }
+
+crypto = { tag = "v1.1.5", git = "https://github.com/simplestaking/tezedge" }
+storage = { tag = "v1.1.5", git = "htps://github.com/simplestaking/tezedge" }

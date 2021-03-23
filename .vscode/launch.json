@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Launch",
             "cwd": "${workspaceFolder}",
-            "program": "${workspaceFolder}/target/none/debug/tezedge-debugger",
+            "program": "${workspaceFolder}/target/none/debug/tezedge-debugger-new",
             "args": [],
             "env": {
                 "KERNEL_VERSION": "5.10.18",
