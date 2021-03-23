@@ -13,30 +13,31 @@ use tokio::sync::oneshot;
 use tezedge_debugger::{
     system::{DebuggerConfig, Reporter},
     endpoints::routes,
-    storage_::{P2pStore, p2p, LogStore, log, SecondaryIndices, remote::{DbServer, ColumnFamilyDescriptorExt}, local::LocalDb},
+    storage_::{P2pStore, p2p, LogStore, log, PerfStore, SecondaryIndices, remote::{DbServer, ColumnFamilyDescriptorExt}, local::LocalDb},
 };
 
 /// Create new message store, from well defined path
-fn open_database(config: &DebuggerConfig) -> Result<(DbServer, P2pStore, LogStore), failure::Error> {
+fn open_database(config: &DebuggerConfig) -> Result<(DbServer, P2pStore, LogStore, PerfStore), failure::Error> {
     let path = Path::new(&config.db_path);
     if path.exists() && !config.keep_db {
         let _ = fs::remove_dir_all(path);
     }
     let cache = Cache::new_lru_cache(1)?;
     let mut cf_dictionary = Vec::new();
-    for ColumnFamilyDescriptorExt { short_id, name } in P2pStore::schemas_ext().chain(LogStore::schemas_ext()) {
+    for ColumnFamilyDescriptorExt { short_id, name } in P2pStore::schemas_ext().chain(LogStore::schemas_ext()).chain(PerfStore::schemas_ext()) {
         let short_id = short_id as usize;
         if cf_dictionary.len() < short_id + 1 {
             cf_dictionary.resize(short_id + 1, "");
         }
         cf_dictionary[short_id] = name;
     }
-    let schemas = P2pStore::schemas(&cache).chain(LogStore::schemas(&cache));
+    let schemas = P2pStore::schemas(&cache).chain(LogStore::schemas(&cache)).chain(PerfStore::schemas(&cache));
     let rocksdb = Arc::new(LocalDb::new(open_kv(&path, schemas, &DbConfiguration::default())?));
     Ok((
         DbServer::bind("/tmp/debugger_db.sock", &rocksdb, cf_dictionary)?,
         P2pStore::new(&rocksdb, p2p::Indices::new(&rocksdb), config.p2p_message_limit),
         LogStore::new(&rocksdb, log::Indices::new(&rocksdb), config.log_message_limit),
+        PerfStore::new(&rocksdb, SecondaryIndices::new(&rocksdb), u64::MAX),
     ))
 }
 
@@ -58,12 +59,12 @@ async fn main() -> Result<(), failure::Error> {
     let config = load_config()?;
 
     // Initialize storage for messages
-    let (db_server, p2p_db, log_db) = open_database(&config)?;
+    let (db_server, p2p_db, log_db, perf_db) = open_database(&config)?;
 
     let (t_tx, t_rx) = oneshot::channel();
     let db_server_handle = db_server.spawn(t_rx.map(|r| r.unwrap()));
     let reporter = Arc::new(Mutex::new(Reporter::new()));
-    tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
+    tokio::spawn(warp::serve(routes(p2p_db, log_db, perf_db, reporter)).run(([0, 0, 0, 0], config.rpc_port)));
 
     // Wait for SIGTERM signal
     tokio::signal::ctrl_c().await?;

@@ -30,3 +30,4 @@ pub type LogStoreClient = Store<log::Indices<remote::DbClient>>;
 
 use std::marker::PhantomData;
 pub type PerfStore = Store<PhantomData<(local::LocalDb, perf::Schema)>>;
+pub type PerfStoreClient = Store<PhantomData<(remote::DbClient, perf::Schema)>>;

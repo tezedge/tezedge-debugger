@@ -8,16 +8,17 @@ static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 use std::{fs, io::Read, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}};
 use tezedge_debugger::{
     system::{DebuggerConfig, syslog_producer},
-    storage_::{P2pStoreClient, p2p, LogStoreClient, log, SecondaryIndices, remote::DbClient},
+    storage_::{P2pStoreClient, p2p, LogStoreClient, log, PerfStoreClient, SecondaryIndices, remote::DbClient},
 };
 use tezedge_debugger::system::Reporter;
 
 /// Create new message store, from well defined path
-fn open_database(config: &DebuggerConfig) -> Result<(P2pStoreClient, LogStoreClient), failure::Error> {
+fn open_database(config: &DebuggerConfig) -> Result<(P2pStoreClient, LogStoreClient, PerfStoreClient), failure::Error> {
     let client = Arc::new(DbClient::connect("/tmp/debugger_db.sock")?);
     Ok((
         P2pStoreClient::new(&client, p2p::Indices::new(&client), config.p2p_message_limit),
         LogStoreClient::new(&client, log::Indices::new(&client), config.log_message_limit),
+        PerfStoreClient::new(&client, SecondaryIndices::new(&client), u64::MAX),
     ))
 }
 
@@ -39,7 +40,7 @@ async fn main() -> Result<(), failure::Error> {
     let config = load_config()?;
 
     // Initialize storage for messages
-    let (p2p_db, log_db) = open_database(&config)?;
+    let (p2p_db, log_db, perf_db) = open_database(&config)?;
 
     let running = Arc::new(AtomicBool::new(true));
 
@@ -51,7 +52,11 @@ async fn main() -> Result<(), failure::Error> {
 
     // Create and spawn bpf sniffing system
     let reporter = Arc::new(Mutex::new(Reporter::new()));
-    reporter.lock().unwrap().spawn_parser(p2p_db, &config);
+    let _ = {
+        let mut reporter_locked = reporter.lock().unwrap();
+        reporter_locked.spawn_perf_reporter(perf_db.clone());
+        reporter_locked.spawn_parser(p2p_db.clone(), &config)
+    };
 
     // Wait for SIGTERM signal
     tokio::signal::ctrl_c().await?;
