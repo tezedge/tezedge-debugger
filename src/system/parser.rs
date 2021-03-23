@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 use bpf_common::{Command, EventId, RingBuffer, SnifferEvent, BpfModuleClient};
 
 use super::{p2p, DebuggerConfig, NodeConfig};
-use crate::storage_::{StoreCollector, StoreClient, p2p::Message as P2pMessage, indices::Initiator};
+use crate::storage_::{StoreCollector, p2p::Message as P2pMessage, indices::Initiator};
 use crate::system::utils::ReceiverStream;
 
 pub struct Parser {
@@ -33,7 +33,7 @@ impl Parser {
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     ) -> Option<JoinHandle<()>>
     where
-        S: StoreCollector<Message = P2pMessage> + Clone + Send + Sync + 'static,
+        S: Clone + StoreCollector<Message = P2pMessage> + Send + 'static,
     {
         match BpfModuleClient::new(&config.bpf_sniffer) {
             Ok((sniffer, ring_buffer)) => {
@@ -75,9 +75,9 @@ impl Parser {
         tx_p2p_report: mpsc::Sender<p2p::Report>,
     )
     where
-        S: StoreCollector<Message = P2pMessage> + Clone + Send + Sync + 'static,
+        S: Clone + StoreCollector<Message = P2pMessage> + Send + 'static,
     {
-        let db = StoreClient::spawn(storage);
+        let db = storage;
         let mut s = self;
 
         for node_config in &s.config.nodes.clone() {
@@ -91,12 +91,12 @@ impl Parser {
         let observer = ring_buffer.observer();
         let mut stream =
             ring_buffer.map(Event::RbData).merge(rx_p2p_command.map(Event::P2pCommand));
-        let mut p2p_parser = p2p::Parser::new(tx_p2p_report);
+        let mut p2p_parser = p2p::Parser::new(tx_p2p_report, db);
         while let Some(event) = stream.next().await {
             match event {
                 Event::RbData(slice_vec) => {
                     for event in slice_vec {
-                        s.process(&mut p2p_parser, event, &db).await;
+                        s.process(&mut p2p_parser, event).await;
                     }
                 },
                 // while executing this command new slices from the kernel will not be processed
@@ -118,12 +118,14 @@ impl Parser {
         }
     }
 
-    async fn process(
+    async fn process<S>(
         &mut self,
-        parser: &mut p2p::Parser,
+        parser: &mut p2p::Parser<S>,
         event: SnifferEvent,
-        db: &StoreClient<P2pMessage>,
-    ) {
+    )
+    where
+        S: Clone + StoreCollector<Message = P2pMessage> + Send,
+    {
         match event {
             SnifferEvent::Bind { id, address } => {
                 tracing::info!(
@@ -154,7 +156,7 @@ impl Parser {
                     address = tracing::field::display(&address),
                     msg = "Syscall Connect",
                 );
-                self.process_connect(parser, id, address, &db, None).await;
+                self.process_connect(parser, id, address, None).await;
             },
             SnifferEvent::Accept { id, listen_on_fd, address } => {
                 tracing::info!(
@@ -163,7 +165,7 @@ impl Parser {
                     address = tracing::field::display(&address),
                     msg = "Syscall Accept",
                 );
-                self.process_connect(parser, id, address, &db, Some(listen_on_fd)).await;
+                self.process_connect(parser, id, address, Some(listen_on_fd)).await;
             },
             SnifferEvent::Close { id } => {
                 tracing::info!(
@@ -210,14 +212,16 @@ impl Parser {
         return false;
     }
 
-    async fn process_connect(
+    async fn process_connect<S>(
         &mut self,
-        parser: &mut p2p::Parser,
+        parser: &mut p2p::Parser<S>,
         id: EventId,
         address: SocketAddr,
-        db: &StoreClient<P2pMessage>,
         listened_on: Option<u32>,
-    ) {
+    )
+    where
+        S: Clone + StoreCollector<Message = P2pMessage> + Send,
+    {
         let source_type = if listened_on.is_some() {
             Initiator::Remote
         } else {
@@ -235,7 +239,7 @@ impl Parser {
             self.send_command(cmd);
         } else {
             if let Some(config) = self.pid_to_config.get(&id.socket_id.pid) {
-                let r = parser.process_connect(&config, id, address, db, source_type).await;
+                let r = parser.process_connect(&config, id, address, source_type).await;
                 if !r.have_identity {
                     tracing::warn!("ignore connection because no identity");
                     let cmd = Command::IgnoreConnection {
@@ -254,17 +258,23 @@ impl Parser {
         }
     }
 
-    async fn process_close(&mut self, parser: &mut p2p::Parser, id: EventId) {
+    async fn process_close<S>(&mut self, parser: &mut p2p::Parser<S>, id: EventId)
+    where
+        S: Clone + StoreCollector<Message = P2pMessage> + Send,
+    {
         parser.process_close(id).await;
     }
 
-    async fn process_data(
+    async fn process_data<S>(
         &mut self,
-        parser: &mut p2p::Parser,
+        parser: &mut p2p::Parser<S>,
         id: EventId,
         payload: Vec<u8>,
         incoming: bool,
-    ) {
+    )
+    where
+        S: Clone + StoreCollector<Message = P2pMessage> + Send,
+    {
         self.counter += 1;
         let message = p2p::Message {
             payload,

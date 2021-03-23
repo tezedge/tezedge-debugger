@@ -6,7 +6,10 @@ use tokio::{
 use futures::future::Either;
 
 use super::{connection_parser::Parser, parser::{Command, Message}, report::ConnectionReport};
-use crate::{storage_::indices::Initiator, system::utils::ReceiverStream};
+use crate::{
+    storage_::{StoreCollector, p2p::Message as P2pMessage, indices::Initiator},
+    system::utils::ReceiverStream,
+};
 
 pub struct Connection {
     state: ConnectionState,
@@ -29,10 +32,13 @@ enum ConnectionState {
 }
 
 impl Connection {
-    pub fn spawn(
+    pub fn spawn<S>(
         tx_report: mpsc::Sender<ConnectionReport>,
-        parser: Parser,
-    ) -> Self {
+        parser: Parser<S>,
+    ) -> Self
+    where
+        S: StoreCollector<Message = P2pMessage> + Send + 'static,
+    {
         let (tx, rx) = mpsc::channel(0x10);
         let source_type = parser.source_type.clone();
         let remote_address = parser.remote_address.clone();

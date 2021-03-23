@@ -9,7 +9,7 @@ use tezos_conversation::Identity;
 use bpf_common::{EventId, SocketId};
 
 use crate::{
-    storage_::{StoreClient, p2p::Message as P2pMessage, indices::Initiator},
+    storage_::{StoreCollector, p2p::Message as P2pMessage, indices::Initiator},
     system::NodeConfig,
 };
 use super::{
@@ -35,17 +35,24 @@ pub struct ProcessingConnectionResult {
     pub have_identity: bool,
 }
 
-pub struct Parser {
+pub struct Parser<S>
+where
+    S: Clone + StoreCollector<Message = P2pMessage> + Send + 'static,
+{
     identity_cache: Option<Identity>,
     tx_report: mpsc::Sender<Report>,
     rx_connection_report: mpsc::Receiver<ConnectionReport>,
     tx_connection_report: mpsc::Sender<ConnectionReport>,
     working_connections: HashMap<SocketId, Connection>,
     closed_connections: Vec<ConnectionReport>,
+    db: S,
 }
 
-impl Parser {
-    pub fn new(tx_report: mpsc::Sender<Report>) -> Self {
+impl<S> Parser<S>
+where
+    S: Clone + StoreCollector<Message = P2pMessage> + Send + 'static,
+{
+    pub fn new(tx_report: mpsc::Sender<Report>, db: S) -> Self {
         let (tx_connection_report, rx_connection_report) = mpsc::channel(0x1000);
         Parser {
             identity_cache: None,
@@ -54,6 +61,7 @@ impl Parser {
             tx_connection_report,
             working_connections: HashMap::new(),
             closed_connections: Vec::new(),
+            db,
         }
     }
 
@@ -137,7 +145,6 @@ impl Parser {
         config: &NodeConfig,
         id: EventId,
         remote_address: SocketAddr,
-        db: &StoreClient<P2pMessage>,
         source_type: Initiator,
     ) -> ProcessingConnectionResult {
         let have_identity = if let Some(identity) = self.try_load_identity(&config.identity_path) {
@@ -147,7 +154,7 @@ impl Parser {
                 source_type,
                 remote_address,
                 id: id.socket_id.clone(),
-                db: db.clone(),
+                db: self.db.clone(),
             };
             let connection = Connection::spawn(self.tx_connection_report.clone(), parser);
             if let Some(old) = self.working_connections.insert(id.socket_id, connection) {

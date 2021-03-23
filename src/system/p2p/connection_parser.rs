@@ -27,7 +27,7 @@ use super::{
 use crate::{
     system::NodeConfig,
     storage_::{
-        StoreClient,
+        StoreCollector,
         p2p::{
             Message as P2pMessage,
             TezosPeerMessage,
@@ -38,13 +38,16 @@ use crate::{
     },
 };
 
-pub struct Parser {
+pub struct Parser<S>
+where
+    S: StoreCollector<Message = P2pMessage> + 'static,
+{
     pub identity: Identity,
     pub config: NodeConfig,
     pub source_type: Initiator,
     pub remote_address: SocketAddr,
     pub id: SocketId,
-    pub db: StoreClient<P2pMessage>,
+    pub db: S,
 }
 
 struct State {
@@ -77,12 +80,15 @@ impl fmt::Display for ErrorContext {
     }
 }
 
-impl Parser {
+impl<S> Parser<S>
+where
+    S: StoreCollector<Message = P2pMessage> + 'static,
+ {
     const DEFAULT_POW_TARGET: f64 = 26.0;
 
-    pub async fn run<S>(self, events: S, tx_report: mpsc::Sender<ConnectionReport>) -> ConnectionReport
+    pub async fn run<E>(self, events: E, tx_report: mpsc::Sender<ConnectionReport>) -> ConnectionReport
     where
-        S: Unpin + StreamExt<Item = Either<Message, Command>>,
+        E: Unpin + StreamExt<Item = Either<Message, Command>>,
     {
         match self.run_inner(events, tx_report).await {
             Ok(report) => report,
@@ -91,9 +97,9 @@ impl Parser {
     }
 
     // TODO: split
-    async fn run_inner<S>(self, mut events: S, tx_report: mpsc::Sender<ConnectionReport>) -> Result<ConnectionReport, ConnectionReport>
+    async fn run_inner<E>(self, mut events: E, tx_report: mpsc::Sender<ConnectionReport>) -> Result<ConnectionReport, ConnectionReport>
     where
-        S: Unpin + StreamExt<Item = Either<Message, Command>>,
+        E: Unpin + StreamExt<Item = Either<Message, Command>>,
     {
         let mut state = State {
             conversation: Conversation::new(Self::DEFAULT_POW_TARGET),
@@ -284,15 +290,17 @@ impl Parser {
     }
 
     fn store_db(&self, state: &mut State, message: P2pMessage, error_context: DisplayValue<ErrorContext>) -> Result<(), ConnectionReport> {
-        self.db.send(message)
-            .map_err(|_| {
+        self.db.store_message(message)
+            .map_err(|error| {
                 tracing::error!(
+                    error = tracing::field::debug(&error),
                     context = error_context,
-                    msg = "db channel closed abruptly",
+                    msg = "db error",
                 );
                 state.report_error(ParserError::FailedToWriteInDatabase);
                 state.statistics.clone()
             })
+            .map(|_| ())
     }
 }
 
