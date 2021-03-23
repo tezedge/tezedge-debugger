@@ -18,6 +18,8 @@ where
 {
     fn store_message(&self, msg: Message) -> Result<u64, StorageError>;
 
+    fn store_at(&self, index: u64, msg: Message) -> Result<(), StorageError>;
+
     /// Deletes the message and corresponding secondary indices.
     fn delete_message(&self, index: u64) -> Result<(), StorageError>;
 }
@@ -98,6 +100,24 @@ where
         self.kv.get(&index).map_err(Into::into)
     }
 
+    pub fn get_all(&self) -> Result<Vec<Message<Indices>>, StorageError> {
+        Ok(self.inner().iterator(IteratorMode::Start)?
+            .filter_map(|(k, v)| {
+                match (k, v) {
+                    (Ok(_), Ok(v)) => Some(v),
+                    (Ok(index), Err(err)) => {
+                        tracing::warn!("Failed to load value at index {}: {}", index, err);
+                        None
+                    },
+                    (Err(err), _) => {
+                        tracing::warn!("Failed to load index: {}", err);
+                        None
+                    },
+                }
+            })
+            .collect())
+    }
+
     /// Create iterator ending on given index. If no value is provided
     /// start at the end
     pub fn get_cursor(
@@ -166,6 +186,12 @@ where
         self.kv.put(&index, &msg)?;
         self.indices.store_indices(&index, &msg)?;
         Ok(index)
+    }
+
+    fn store_at(&self, index: u64, msg: M) -> Result<(), StorageError> {
+        let _ = self.kv.delete(&index);
+        self.kv.put(&index, &msg)?;
+        Ok(())
     }
 
     fn delete_message(&self, index: u64) -> Result<(), StorageError> {

@@ -10,6 +10,8 @@ pub use self::store::{Store, StoreCollector};
 mod secondary_index;
 pub use self::secondary_index::SecondaryIndices;
 
+pub mod perf;
+
 #[cfg(unix)]
 pub mod remote;
 
@@ -25,3 +27,6 @@ pub type LogStore = Store<log::Indices<local::LocalDb>>;
 pub type P2pStoreClient = Store<p2p::Indices<remote::DbClient>>;
 #[cfg(unix)]
 pub type LogStoreClient = Store<log::Indices<remote::DbClient>>;
+
+use std::marker::PhantomData;
+pub type PerfStore = Store<PhantomData<(local::LocalDb, perf::Schema)>>;

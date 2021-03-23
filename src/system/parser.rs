@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     net::{SocketAddr, IpAddr},
+    sync::{Arc, Mutex, atomic::{Ordering, AtomicU64}},
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_stream::StreamExt;
@@ -16,6 +17,8 @@ pub struct Parser {
     sniffer: BpfModuleClient,
     pid_to_config: HashMap<u32, NodeConfig>,
     counter: u64,
+    bytes_counter: Arc<AtomicU64>,
+    counters: Arc<Mutex<Vec<Arc<AtomicU64>>>>,
 }
 
 enum Event {
@@ -31,17 +34,22 @@ impl Parser {
         config: &DebuggerConfig,
         rx_p2p_command: mpsc::Receiver<p2p::Command>,
         tx_p2p_report: mpsc::Sender<p2p::Report>,
+        counters: Arc<Mutex<Vec<Arc<AtomicU64>>>>,
     ) -> Option<JoinHandle<()>>
     where
         S: Clone + StoreCollector<P2pMessage> + Send + 'static,
     {
         match BpfModuleClient::new(&config.bpf_sniffer) {
             Ok((sniffer, ring_buffer)) => {
+                let bytes_counter = Arc::new(AtomicU64::new(0));
+                counters.lock().unwrap().push(bytes_counter.clone());
                 let s = Parser {
                     config: config.clone(),
                     sniffer,
                     pid_to_config: HashMap::new(),
                     counter: 0,
+                    bytes_counter,
+                    counters,
                 };
                 Some(tokio::spawn(s.run(storage, ring_buffer, rx_p2p_command, tx_p2p_report)))
             },
@@ -243,7 +251,9 @@ impl Parser {
         } else {
             if let Some(config) = self.pid_to_config.get(&id.socket_id.pid) {
                 let r = parser.process_connect(&config, id, address, source_type).await;
-                if !r.have_identity {
+                if let Some(bytes_counter) = r.bytes_counter {
+                    let _ = self.counters.lock().unwrap().push(bytes_counter);
+                } else {
                     tracing::warn!("ignore connection because no identity");
                     let cmd = Command::IgnoreConnection {
                         pid: socket_id.pid,
@@ -279,6 +289,7 @@ impl Parser {
         S: Clone + StoreCollector<P2pMessage> + Send,
     {
         self.counter += 1;
+        self.bytes_counter.fetch_add(payload.len() as u64, Ordering::SeqCst);
         let message = p2p::Message {
             payload,
             incoming,

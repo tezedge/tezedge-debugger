@@ -175,3 +175,55 @@ pub trait SecondaryIndices {
         filter: &Self::Filter,
     ) -> Result<Option<Vec<<Self::PrimarySchema as KeyValueSchema>::Key>>, StorageError>;
 }
+
+impl<KvStorage, PrimarySchema> SecondaryIndices for PhantomData<(KvStorage, PrimarySchema)>
+where
+    KvStorage: AsRef<DB>,
+    PrimarySchema: KeyValueSchema,
+{
+    type KvStorage = KvStorage;
+    type PrimarySchema = PrimarySchema;
+    type Filter = ();
+
+    fn new(kv: &Arc<Self::KvStorage>) -> Self {
+        let _ = kv;
+        PhantomData
+    }
+
+    fn schemas(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
+        let _ = cache;
+        vec![]
+    }
+
+    fn schemas_ext() -> Vec<ColumnFamilyDescriptorExt> {
+        vec![]
+    }
+
+    fn store_indices(
+        &self,
+        primary_key: &<Self::PrimarySchema as KeyValueSchema>::Key,
+        value: &<Self::PrimarySchema as KeyValueSchema>::Value,
+    ) -> Result<(), StorageError> {
+        let _ = (primary_key, value);
+        Ok(())
+    }
+
+    fn delete_indices(
+        &self,
+        primary_key: &<Self::PrimarySchema as KeyValueSchema>::Key,
+        value: &<Self::PrimarySchema as KeyValueSchema>::Value,
+    ) -> Result<(), StorageError> {
+        let _ = (primary_key, value);
+        Ok(())
+    }
+
+    fn filter_iterator(
+        &self,
+        primary_key: &<Self::PrimarySchema as KeyValueSchema>::Key,
+        limit: usize,
+        filter: &Self::Filter,
+    ) -> Result<Option<Vec<<Self::PrimarySchema as KeyValueSchema>::Key>>, StorageError> {
+        let _ = (primary_key, limit, filter);
+        Ok(None)
+    }
+}

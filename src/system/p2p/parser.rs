@@ -3,6 +3,7 @@ use std::{
     net::SocketAddr,
     collections::HashMap,
     time::Duration,
+    sync::{Arc, atomic::AtomicU64},
 };
 use tokio::{sync::mpsc, time};
 use tezos_conversation::Identity;
@@ -33,7 +34,7 @@ pub enum Command {
 }
 
 pub struct ProcessingConnectionResult {
-    pub have_identity: bool,
+    pub bytes_counter: Option<Arc<AtomicU64>>,
 }
 
 pub struct Parser<S>
@@ -149,7 +150,8 @@ where
         remote_address: SocketAddr,
         source_type: Initiator,
     ) -> ProcessingConnectionResult {
-        let have_identity = if let Some(identity) = self.try_load_identity(&config.identity_path) {
+        if let Some(identity) = self.try_load_identity(&config.identity_path) {
+            let bytes_counter = Arc::new(AtomicU64::new(0));
             let parser = connection_parser::Parser {
                 identity,
                 config: config.clone(),
@@ -157,6 +159,7 @@ where
                 remote_address,
                 id: id.socket_id.clone(),
                 db: self.db.clone(),
+                bytes_counter: bytes_counter.clone(),
             };
             let connection = Connection::spawn(self.tx_connection_report.clone(), parser);
             if let Some(old) = self.working_connections.insert(id.socket_id, connection) {
@@ -164,11 +167,10 @@ where
                     self.closed_connections.push(report)
                 }
             }
-            true
+            ProcessingConnectionResult { bytes_counter: Some(bytes_counter) }
         } else {
-            false
-        };
-        ProcessingConnectionResult { have_identity }
+            ProcessingConnectionResult { bytes_counter: None }
+        }
     }
 
     pub async fn process_close(&mut self, event_id: EventId) {

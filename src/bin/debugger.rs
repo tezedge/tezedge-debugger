@@ -8,25 +8,22 @@ static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 use std::{fs, io::Read, path::Path, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}};
 use rocksdb::Cache;
 use storage::persistent::{open_kv, DbConfiguration};
-use tezedge_debugger::{
-    system::{DebuggerConfig, syslog_producer},
-    endpoints::routes,
-    storage_::{P2pStore, p2p, LogStore, log, SecondaryIndices, local::LocalDb},
-};
+use tezedge_debugger::{endpoints::routes, storage_::{LogStore, P2pStore, PerfStore, SecondaryIndices, local::LocalDb, log, p2p}, system::{DebuggerConfig, syslog_producer}};
 use tezedge_debugger::system::Reporter;
 
 /// Create new message store, from well defined path
-fn open_database(config: &DebuggerConfig) -> Result<(P2pStore, LogStore), failure::Error> {
+fn open_database(config: &DebuggerConfig) -> Result<(P2pStore, LogStore, PerfStore), failure::Error> {
     let path = Path::new(&config.db_path);
     if path.exists() && !config.keep_db {
         let _ = fs::remove_dir_all(path);
     }
     let cache = Cache::new_lru_cache(1)?;
-    let schemas = P2pStore::schemas(&cache).chain(LogStore::schemas(&cache));
+    let schemas = P2pStore::schemas(&cache).chain(LogStore::schemas(&cache)).chain(PerfStore::schemas(&cache));
     let rocksdb = Arc::new(LocalDb::new(open_kv(&path, schemas, &DbConfiguration::default())?));
     Ok((
         P2pStore::new(&rocksdb, p2p::Indices::new(&rocksdb), config.p2p_message_limit),
         LogStore::new(&rocksdb, log::Indices::new(&rocksdb), config.log_message_limit),
+        PerfStore::new(&rocksdb, SecondaryIndices::new(&rocksdb), u64::MAX),
     ))
 }
 
@@ -48,7 +45,7 @@ async fn main() -> Result<(), failure::Error> {
     let config = load_config()?;
 
     // Initialize storage for messages
-    let (p2p_db, log_db) = open_database(&config)?;
+    let (p2p_db, log_db, perf_db) = open_database(&config)?;
 
     let running = Arc::new(AtomicBool::new(true));
 
@@ -60,8 +57,12 @@ async fn main() -> Result<(), failure::Error> {
 
     // Create and spawn bpf sniffing system
     let reporter = Arc::new(Mutex::new(Reporter::new()));
-    let parser = reporter.lock().unwrap().spawn_parser(p2p_db.clone(), &config);
-    tokio::spawn(warp::serve(routes(p2p_db, log_db, reporter.clone())).run(([0, 0, 0, 0], config.rpc_port)));
+    let parser = {
+        let mut reporter_locked = reporter.lock().unwrap();
+        reporter_locked.spawn_perf_reporter(perf_db.clone());
+        reporter_locked.spawn_parser(p2p_db.clone(), &config)
+    };
+    tokio::spawn(warp::serve(routes(p2p_db, log_db, perf_db, reporter.clone())).run(([0, 0, 0, 0], config.rpc_port)));
 
     // Wait for SIGTERM signal
     tokio::signal::ctrl_c().await?;

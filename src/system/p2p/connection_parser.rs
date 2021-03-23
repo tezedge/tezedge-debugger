@@ -1,7 +1,11 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{fmt, net::SocketAddr};
+use std::{
+    fmt,
+    net::SocketAddr,
+    sync::{Arc, atomic::{Ordering, AtomicU64}},
+};
 use futures::future::Either;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
@@ -48,6 +52,7 @@ where
     pub remote_address: SocketAddr,
     pub id: SocketId,
     pub db: S,
+    pub bytes_counter: Arc<AtomicU64>,
 }
 
 struct State {
@@ -271,6 +276,7 @@ where
                     state.report_error(ParserError::Unknown);
                 },
             }
+            self.bytes_counter.fetch_add(packet.payload.len() as u64, Ordering::SeqCst);
         }
 
         let metadata = state.metadata;
