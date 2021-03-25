@@ -107,12 +107,7 @@ where
 
     fn handle_data(&mut self, id: EventId, payload: Vec<u8>, incoming: bool) {
         if let Some(connection) = self.connections.get_mut(&id.socket_id) {
-            match connection.handle_data(&payload, incoming) {
-                Ok(()) => (),
-                Err(error) => {
-                    log::error!("failed to handle data id: {}, error: {:?}", id, error);
-                }
-            }
+            connection.handle_data(&payload, incoming);
         } else {
             log::debug!("failed to handle data, connection does not exist: {}", id);
         }

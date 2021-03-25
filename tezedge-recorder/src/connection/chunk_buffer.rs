@@ -2,12 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 pub struct Buffer {
+    counter: u64,
     buffer: Vec<u8>,
 }
 
 impl Default for Buffer {
     fn default() -> Self {
-        Buffer { buffer: Vec::with_capacity(0x10000) }
+        Buffer {
+            counter: 0,
+            buffer: Vec::with_capacity(0x10000),
+        }
     }
 }
 
@@ -26,10 +30,19 @@ impl Buffer {
     pub fn have_chunk(&self) -> bool {
         self.buffer.len() >= 2 + self.len().unwrap_or(0)
     }
+
+    #[allow(dead_code)]
+    pub fn cleanup(&mut self) -> (u64, Vec<u8>) {
+        use std::mem;
+
+        let counter = self.counter;
+        self.counter += 1;
+        (counter, mem::replace(&mut self.buffer, Vec::new()))
+    }
 }
 
 impl Iterator for Buffer {
-    type Item = Vec<u8>;
+    type Item = (u64, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
         use std::mem;
@@ -38,10 +51,14 @@ impl Iterator for Buffer {
         if self.buffer.len() < 2 + len {
             None
         } else if self.buffer.len() == 2 + len {
-            Some(mem::replace(&mut self.buffer, Vec::new()))
+            let counter = self.counter;
+            self.counter += 1;
+            Some((counter, mem::replace(&mut self.buffer, Vec::new())))
         } else {
+            let counter = self.counter;
+            self.counter += 1;
             let remaining = self.buffer.split_off(2 + len);
-            Some(mem::replace(&mut self.buffer, remaining))
+            Some((counter, mem::replace(&mut self.buffer, remaining)))
         }
     }
 }

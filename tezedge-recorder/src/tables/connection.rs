@@ -8,51 +8,54 @@ use super::common::Initiator;
 
 #[derive(Debug, Clone)]
 pub struct Item {
-    timestamp: u128,
+    id: u128,
     initiator: Initiator,
     remote_addr: SocketAddr,
     peer_id: Option<String>,
+    comments: Vec<String>,
 }
 
 impl Item {
-    pub fn new(incoming: bool, remote_addr: SocketAddr, peer_id: Option<String>) -> Self {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-
+    pub fn new(id: u128, incoming: bool, remote_addr: SocketAddr) -> Self {
         Item {
-            timestamp,
+            id,
             initiator: if incoming { Initiator::Remote } else { Initiator::Local },
             remote_addr,
-            peer_id,
+            peer_id: None,
+            comments: Vec::new(),
         }
     }
 
+    pub fn set_peer_id(&mut self, peer_id: String) {
+        self.peer_id = Some(peer_id);
+    }
+
+    pub fn add_comment(&mut self, comment: String) {
+        self.comments.push(comment);
+    }
+
     pub fn split(self) -> (Key, Value) {
-        (
-            Key {
-                timestamp: self.timestamp,
-                initiator: self.initiator,
-            },
-            Value {
-                remote_addr: self.remote_addr,
-                peer_id: self.peer_id,
-            },
-        )
+        match self {
+            Item { id, initiator, remote_addr, peer_id, comments } => {
+                (Key { id }, Value { initiator, remote_addr, peer_id, comments })
+            }
+        }
     }
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Key {
-    timestamp: u128,
-    initiator: Initiator,
+    id: u128,
 }
 
 impl BincodeEncoded for Key {}
 
 #[derive(Serialize, Deserialize)]
 pub struct Value {
+    initiator: Initiator,
     remote_addr: SocketAddr,
     peer_id: Option<String>,
+    comments: Vec<String>,
 }
 
 impl BincodeEncoded for Value {}

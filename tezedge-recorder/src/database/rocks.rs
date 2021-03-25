@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{path::Path, sync::Arc, iter};
+use std::{path::Path, sync::Arc};
 use rocksdb::{DB, Cache};
 use storage::persistent::{self, DBError, DbConfiguration, KeyValueSchema, KeyValueStoreWithSchema};
 use thiserror::Error;
@@ -34,7 +34,10 @@ impl DatabaseNew for Db {
     {
         let cache = Cache::new_lru_cache(1).map_err(Into::into).map_err(DbError)?;
 
-        let cfs = iter::once(connection::Schema::descriptor(&cache));
+        let cfs = vec![
+            connection::Schema::descriptor(&cache),
+            chunk::Schema::descriptor(&cache),
+        ];
         let inner = persistent::open_kv(path, cfs, &DbConfiguration::default()).map_err(DbError)?;
 
         Ok(Arc::new(Db { _cache: cache, inner }))
@@ -43,16 +46,18 @@ impl DatabaseNew for Db {
 
 impl Database for Db {
     fn store_connection(&self, item: connection::Item) {
-        log::info!("connection: {:?}", item);
-
         let (key, value) = item.split();
         if let Err(error) = self.as_kv::<connection::Schema>().put(&key, &value) {
-            log::error!("database error {}", error);
+            // TODO: is it fatal?
+            log::error!("database error: {}", error);
         }
     }
 
     fn store_chunk(&self, item: chunk::Item) {
-        log::debug!("unimplemented {}", item.len());
+        let (key, value) = item.split();
+        if let Err(error) = self.as_kv::<chunk::Schema>().put(&key, &value) {
+            log::error!("database error: {}", error);
+        }
     }
 
     fn store_message(&self, item: message::Item) {

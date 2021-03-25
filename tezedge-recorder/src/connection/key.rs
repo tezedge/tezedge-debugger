@@ -1,7 +1,11 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use crypto::{crypto_box::PrecomputedKey, CryptoError, nonce::{NoncePair, Nonce, generate_nonces}};
+use crypto::{
+    crypto_box::PrecomputedKey,
+    CryptoError,
+    nonce::{NoncePair, Nonce, generate_nonces},
+};
 use super::Identity;
 
 #[derive(Clone)]
@@ -34,17 +38,17 @@ impl Key {
         Ok(Key {
             key: PrecomputedKey::precompute(&pk, &sk),
             local,
-            remote
+            remote,
         })
     }
 
     pub fn decrypt(&mut self, payload: &[u8], incoming: bool) -> Result<Vec<u8>, CryptoError> {
         if incoming {
-            let plain = self.key.decrypt(&payload, &self.remote)?;
+            let plain = self.key.decrypt(&payload[2..], &self.remote)?;
             self.remote = self.remote.increment();
             Ok(plain)
         } else {
-            let plain = self.key.decrypt(&payload, &self.local)?;
+            let plain = self.key.decrypt(&payload[2..], &self.local)?;
             self.local = self.local.increment();
             Ok(plain)
         }
