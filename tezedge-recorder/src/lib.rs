@@ -12,3 +12,5 @@ mod connection;
 pub mod main_loop;
 
 pub mod database;
+
+mod server;

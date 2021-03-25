@@ -1,9 +1,5 @@
-rpc_port = 17732
 # debugger will run syslog server on this port
 syslog_port = 0
-p2p_chunk_limit = 100_000
-p2p_message_limit = 100_000
-log_message_limit = 100_000
 bpf_sniffer_path = "/tmp/bpf-sniffer.sock"
 
 [[nodes]]
@@ -14,3 +10,4 @@ identity_path = "../tezedge/light_node/etc/tezedge/identity.json"
 # which process earliest will bind a socket on this port, will be considered as the node
 # this is an inner port inside docker's virtual network of the node's container
 p2p_port = 9732
+rpc_port = 17732

@@ -13,8 +13,15 @@ pub trait Database {
     fn store_message(&self, item: message::Item);
 }
 
-pub trait DatabaseFetch {
-    fn fetch_connections(&self, cursor: u64, limit: u64) -> Vec<connection::Item>;
+pub trait DatabaseFetch
+where
+    Self: DatabaseNew,
+{
+    fn fetch_connections(
+        &self,
+        cursor: Option<connection::Key>,
+        limit: u64,
+    ) -> Result<Vec<connection::Item>, Self::Error>;
 }
 
 pub trait DatabaseNew {

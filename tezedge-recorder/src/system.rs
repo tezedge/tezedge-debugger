@@ -4,22 +4,20 @@
 use std::{collections::HashMap, sync::Arc, net::SocketAddr};
 use serde::Deserialize;
 use anyhow::Result;
-use super::database::DatabaseNew;
+use tokio::runtime::Runtime;
+use super::{database::{DatabaseNew, DatabaseFetch}, server};
 
 #[derive(Clone, Deserialize)]
 pub struct NodeConfig {
     pub db_path: String,
     pub identity_path: String,
     pub p2p_port: u16,
+    pub rpc_port: u16,
 }
 
 #[derive(Clone, Deserialize)]
 struct Config {
-    pub rpc_port: u16,
     pub syslog_port: u16,
-    pub p2p_chunk_limit: u64,
-    pub p2p_message_limit: u64,
-    pub log_message_limit: u64,
     pub bpf_sniffer_path: String,
     pub nodes: Vec<NodeConfig>,
 }
@@ -39,13 +37,14 @@ pub struct NodeInfo<Db> {
 pub struct System<Db> {
     config: Config,
     node_info: HashMap<u32, NodeInfo<Db>>,
+    tokio_rt: Runtime,
 }
 
 impl<Db> NodeInfo<Db>
 where
-    Db: DatabaseNew,
+    Db: DatabaseNew + DatabaseFetch + Sync + Send + 'static,
 {
-    pub fn new(identity_path: &str, db_path: &str) -> Result<Self> {
+    pub fn new(identity_path: &str, db_path: &str, rpc_port: u16, rt: &Runtime) -> Result<Self> {
         use std::fs::File;
 
         #[derive(Deserialize)]
@@ -67,6 +66,7 @@ where
         };
 
         let db = Db::open(db_path)?;
+        rt.spawn(warp::serve(server::routes(db.clone())).run(([0, 0, 0, 0], rpc_port)));
 
         Ok(NodeInfo { identity, db })
     }
@@ -92,6 +92,7 @@ impl<Db> System<Db> {
         Ok(System {
             config,
             node_info: HashMap::new(),
+            tokio_rt: Runtime::new().unwrap(),
         })
     }
 
@@ -140,11 +141,11 @@ impl<Db> System<Db> {
 
 impl<Db> System<Db>
 where
-    Db: DatabaseNew,
+    Db: DatabaseNew + DatabaseFetch + Sync + Send + 'static,
 {
     pub fn handle_bind(&mut self, pid: u32, port: u16) -> Result<()> {
         let node_config = self.node_configs().iter().find(|c| c.p2p_port == port).unwrap();
-        let info = NodeInfo::new(&node_config.identity_path, &node_config.db_path)?;
+        let info = NodeInfo::new(&node_config.identity_path, &node_config.db_path, node_config.rpc_port, &self.tokio_rt)?;
         self.node_info.insert(pid, info);
 
         Ok(())

@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 use storage::persistent::{KeyValueSchema, BincodeEncoded};
 use super::common::Initiator;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Item {
     pub id: u128,
     initiator: Initiator,
@@ -41,9 +41,17 @@ impl Item {
             }
         }
     }
+
+    pub fn unite(key: Key, value: Value) -> Self {
+        match (key, value) {
+            (Key { id }, Value { initiator, remote_addr, peer_id, comments }) => {
+                Item { id, initiator, remote_addr, peer_id, comments }
+            }
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Key {
     id: u128,
 }

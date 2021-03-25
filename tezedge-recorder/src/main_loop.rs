@@ -10,11 +10,11 @@ use std::{
 use anyhow::Result;
 use bpf_common::{BpfModuleClient, SnifferEvent, Command, EventId, SocketId};
 
-use super::{connection::Connection, database::{Database, DatabaseNew}, system::System};
+use super::{connection::Connection, database::{Database, DatabaseNew, DatabaseFetch}, system::System};
 
 pub fn run<Db>(system: System<Db>, running: Arc<AtomicBool>) -> Result<()>
 where
-    Db: 'static + Database + DatabaseNew,
+    Db: Database + DatabaseNew + DatabaseFetch + Sync + Send + 'static,
 {
     let (client, mut rb) = BpfModuleClient::new_sync(system.sniffer_path())?;
     let mut list = ConnectionList::new(client, system);
@@ -66,7 +66,7 @@ struct ConnectionList<Db> {
 
 impl<Db> ConnectionList<Db>
 where
-    Db: 'static + Database + DatabaseNew,
+    Db: Database + DatabaseNew + DatabaseFetch + Sync + Send + 'static,
 {
     fn new(client: BpfModuleClient, system: System<Db>) -> Self {
         ConnectionList {

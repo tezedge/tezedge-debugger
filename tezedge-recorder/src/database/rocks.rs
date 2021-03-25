@@ -2,17 +2,27 @@
 // SPDX-License-Identifier: MIT
 
 use std::{path::Path, sync::{Arc, atomic::{Ordering, AtomicU64}}};
-use rocksdb::{DB, Cache};
-use storage::persistent::{self, DBError, DbConfiguration, KeyValueSchema, KeyValueStoreWithSchema};
+use rocksdb::{Cache, DB};
+use storage::{
+    persistent::{self, DBError, DbConfiguration, KeyValueSchema, KeyValueStoreWithSchema},
+    IteratorMode,
+    Direction,
+};
 use thiserror::Error;
-use super::{Database, DatabaseNew, connection, chunk, message};
+use super::{Database, DatabaseNew, DatabaseFetch, connection, chunk, message};
 
 #[derive(Error, Debug)]
 #[error("{}", _0)]
 pub struct DbError(DBError);
 
+impl From<DBError> for DbError {
+    fn from(v: DBError) -> Self {
+        DbError(v)
+    }
+}
+
 pub struct Db {
-    _cache: Cache,
+    //_cache: Cache,
     message_counter: AtomicU64,
     inner: DB,
 }
@@ -37,17 +47,18 @@ impl DatabaseNew for Db {
     where
         P: AsRef<Path>,
     {
-        let cache = Cache::new_lru_cache(1).map_err(Into::into).map_err(DbError)?;
+        let cache = Cache::new_lru_cache(1)
+            .map_err(|error| DBError::RocksDBError { error })?;
 
         let cfs = vec![
             connection::Schema::descriptor(&cache),
             chunk::Schema::descriptor(&cache),
             message::Schema::descriptor(&cache),
         ];
-        let inner = persistent::open_kv(path, cfs, &DbConfiguration::default()).map_err(DbError)?;
+        let inner = persistent::open_kv(path, cfs, &DbConfiguration::default())?;
 
         Ok(Arc::new(Db {
-            _cache: cache,
+            //_cache: cache,
             message_counter: AtomicU64::new(0),
             inner,
         }))
@@ -75,5 +86,36 @@ impl Database for Db {
         if let Err(error) = self.as_kv::<message::Schema>().put(&index, &item) {
             log::error!("database error: {}", error);
         }
+    }
+}
+
+impl DatabaseFetch for Db {
+    fn fetch_connections(
+        &self,
+        cursor: Option<connection::Key>,
+        limit: u64,
+    ) -> Result<Vec<connection::Item>, Self::Error> {
+        let mode = if let Some(cursor) = &cursor {
+            IteratorMode::From(cursor, Direction::Reverse)
+        } else {
+            IteratorMode::End
+        };
+        let vec = self.as_kv::<connection::Schema>().iterator(mode)?
+            .filter_map(|(k, v)| {
+                match (k, v) {
+                    (Ok(key), Ok(value)) => Some(connection::Item::unite(key, value)),
+                    (Ok(index), Err(err)) => {
+                        log::warn!("Failed to load value at {:?}: {}", index, err);
+                        None
+                    },
+                    (Err(err), _) => {
+                        log::warn!("Failed to load index: {}", err);
+                        None
+                    },
+                }
+            })
+            .take(limit as usize)
+            .collect();
+        Ok(vec)
     }
 }
