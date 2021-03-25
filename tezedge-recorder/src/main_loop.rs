@@ -125,6 +125,9 @@ where
     }
 
     fn handle_data(&mut self, id: EventId, payload: Vec<u8>, incoming: bool) {
+        if payload.len() > 0x1000000 {
+            log::warn!("receiver from ring buffer big payload {}", payload.len());
+        }
         if let Some(connection) = self.connections.get_mut(&id.socket_id) {
             connection.handle_data(&payload, incoming);
         } else {

@@ -45,16 +45,29 @@ impl Iterator for Buffer {
     type Item = (u64, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        use std::mem;
-
-        let len = self.len()?;
-        if self.buffer.len() < 2 + len {
+        let len = self.len()? + 2;
+        if self.buffer.len() < len {
             None
         } else {
             let counter = self.counter;
             self.counter += 1;
-            let remaining = self.buffer.split_off(2 + len);
-            Some((counter, mem::replace(&mut self.buffer, remaining)))
+            //let remaining = self.buffer.split_off(len);
+            //Some((counter, mem::replace(&mut self.buffer, remaining)))
+
+            let mut new = vec![0; len];
+            new.copy_from_slice(&self.buffer[..len]);
+            assert!(self.buffer.as_ptr() as usize != new.as_ptr() as usize);
+
+            if self.buffer.len() > len {
+                let mut remaining = vec![0; self.buffer.len() - len];
+                remaining.copy_from_slice(&self.buffer[len..]);
+                self.buffer.clear();
+                self.buffer = remaining;
+            } else {
+                self.buffer = Vec::with_capacity(0x10000);
+            }
+
+            Some((counter, new))
         }
     }
 }
