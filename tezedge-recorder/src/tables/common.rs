@@ -33,26 +33,71 @@ impl Sender {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MessageKind {
+    // 0x0X
     Disconnect,
+    Bootstrap,
     Advertise,
     SwapRequest,
     SwapAck,
-    Bootstrap,
+    // 0x1X
     GetCurrentBranch,
     CurrentBranch,
     Deactivate,
     GetCurrentHead,
     CurrentHead,
+    // 0x2X
     GetBlockHeaders,
     BlockHeader,
+    // 0x3X
     GetOperations,
     Operation,
+    // 0x4X
     GetProtocols,
     Protocol,
+    // 0x5X
     GetOperationHashesForBlocks,
-    OperationHashesForBlock,
+    OperationHashesForBlocks,
+    // 0x6X
     GetOperationsForBlocks,
     OperationsForBlocks,
+    // 0xXXXX
+    Unknown,
+    None,
+}
+
+impl MessageKind {
+    pub fn from_tag(tag: u16) -> Self {
+        match tag {
+            0x01 => MessageKind::Disconnect,
+            0x02 => MessageKind::Bootstrap,
+            0x03 => MessageKind::Advertise,
+            0x04 => MessageKind::SwapRequest,
+            0x05 => MessageKind::SwapAck,
+
+            0x10 => MessageKind::GetCurrentBranch,
+            0x11 => MessageKind::CurrentBranch,
+            0x12 => MessageKind::Deactivate,
+            0x13 => MessageKind::GetCurrentHead,
+            0x14 => MessageKind::CurrentHead,
+
+            0x20 => MessageKind::GetBlockHeaders,
+            0x21 => MessageKind::BlockHeader,
+
+            0x30 => MessageKind::GetOperations,
+            0x31 => MessageKind::Operation,
+
+            0x40 => MessageKind::GetProtocols,
+            0x41 => MessageKind::Protocol,
+
+            0x50 => MessageKind::GetOperationHashesForBlocks,
+            0x51 => MessageKind::OperationHashesForBlocks,
+
+            0x60 => MessageKind::GetOperationsForBlocks,
+            0x61 => MessageKind::OperationsForBlocks,
+
+            _ => MessageKind::Unknown,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

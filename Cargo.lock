@@ -3075,7 +3075,6 @@ dependencies = [
  "bpf-common",
  "crypto 1.1.4",
  "ctrlc",
- "either",
  "hex",
  "jemallocator",
  "log",

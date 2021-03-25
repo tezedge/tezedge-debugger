@@ -8,9 +8,9 @@ use super::common::Initiator;
 
 #[derive(Debug, Clone)]
 pub struct Item {
-    id: u128,
+    pub id: u128,
     initiator: Initiator,
-    remote_addr: SocketAddr,
+    pub remote_addr: SocketAddr,
     peer_id: Option<String>,
     comments: Vec<String>,
 }

@@ -1,27 +1,41 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, convert::TryFrom};
 use anyhow::Result;
 use thiserror::Error;
-use either::Either;
 use crypto::{
     CryptoError,
     proof_of_work,
     blake2b::Blake2bError,
     hash::FromBytesError,
 };
-use super::{key::Key, chunk_buffer::Buffer, Identity, Database, tables::{connection, chunk}};
+use super::{key::Key, chunk_buffer::Buffer, Identity, Database, tables::{connection, chunk, message}};
 
 pub struct Connection<Db> {
     incoming: bool,
-    handshake: Either<(Identity, connection::Item), Result<Key, CryptoError>>,
+    handshake: Handshake,
     input_state: Buffer,
     input_bad_counter: u64,
+    input_message_builder: Option<message::MessageBuilder>,
     output_state: Buffer,
     output_bad_counter: u64,
+    output_message_builder: Option<message::MessageBuilder>,
     id: u128,
     db: Arc<Db>,
+}
+
+enum Handshake {
+    Buffering {
+        identity: Identity,
+        db_item: connection::Item,
+    },
+    HaveKey {
+        connection_id: u128,
+        remote_addr: SocketAddr,
+        key: Key,
+    },
+    Error(CryptoError),
 }
 
 #[derive(Error, Debug)]
@@ -41,7 +55,7 @@ where
     Db: Database,
 {
     pub fn new(
-        address: SocketAddr,
+        remote_addr: SocketAddr,
         incoming: bool,
         identity: Identity,
         db: Arc<Db>,
@@ -49,14 +63,16 @@ where
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let db_item = connection::Item::new(timestamp, incoming, address);
+        let db_item = connection::Item::new(timestamp, incoming, remote_addr);
         Connection {
             incoming,
-            handshake: Either::Left((identity, db_item)),
+            handshake: Handshake::Buffering { identity, db_item },
             input_state: Buffer::default(),
             input_bad_counter: 0,
+            input_message_builder: None,
             output_state: Buffer::default(),
             output_bad_counter: 0,
+            output_message_builder: None,
             id: timestamp,
             db,
         }
@@ -71,6 +87,9 @@ where
     }
 
     pub fn handle_data(&mut self, payload: &[u8], incoming: bool) {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        use self::message::MessageBuilder;
+
         let check = |payload: &[u8]| -> Result<String, HandshakeWarning> {
             use crypto::{blake2b, hash::HashType};
 
@@ -89,7 +108,7 @@ where
         };
 
         match &self.handshake {
-            Either::Left((identity, db_item)) => {
+            Handshake::Buffering { identity, db_item } => {
                 let identity = identity.clone();
                 let mut db_item = db_item.clone();
                 self.buffer_mut(incoming).handle_data(&payload);
@@ -111,33 +130,117 @@ where
                     } else {
                         (&outgoing_chunk, &incoming_chunk)
                     };
-                    let key = Key::new(&identity, initiator, responder);
-                    if let Err(error) = &key {
-                        db_item.add_comment(format!("Key calculate error: {}", error));
+
+                    match Key::new(&identity, initiator, responder) {
+                        Ok(key) => {
+                            let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+
+                            let length = (incoming_chunk.len() - 2) as u16;
+                            let builder = MessageBuilder::connection_message(length);
+                            let message = builder
+                                .link_chunk(length as usize)
+                                .ok()
+                                .unwrap()
+                                .build(db_item.id, ts, db_item.remote_addr, self.incoming, true);
+                            self.db.store_message(message);
+
+                            let length = (outgoing_chunk.len() - 2) as u16;
+                            let builder = MessageBuilder::connection_message(length);
+                            let message = builder
+                                .link_chunk(length as usize)
+                                .ok()
+                                .unwrap()
+                                .build(db_item.id, ts, db_item.remote_addr, self.incoming, false);
+                            self.db.store_message(message);
+
+                            self.handshake = Handshake::HaveKey {
+                                connection_id: db_item.id,
+                                remote_addr: db_item.remote_addr,
+                                key,
+                            };
+                        },
+                        Err(error) => {
+                            db_item.add_comment(format!("Key calculate error: {}", error));
+                            self.handshake = Handshake::Error(error);
+                        },
                     }
+
                     self.db.store_connection(db_item);
                     let c = chunk::Item::new(self.id, 0, true, incoming_chunk.clone(), incoming_chunk);
                     self.db.store_chunk(c);
                     let c = chunk::Item::new(self.id, 0, false, outgoing_chunk.clone(), outgoing_chunk);
                     self.db.store_chunk(c);
-                    self.handshake = Either::Right(key);
                 }
             },
-            Either::Right(Ok(key)) => {
+            Handshake::HaveKey { connection_id, remote_addr, key } => {
                 let mut key = key.clone();
+                let connection_id = connection_id.clone();
+                let remote_addr = remote_addr.clone();
+                let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+
                 self.buffer_mut(incoming).handle_data(&payload);
 
                 let db = self.db.clone();
                 let id = self.id;
+                let mut builder = if incoming {
+                    self.input_message_builder.take()
+                } else {
+                    self.output_message_builder.take()
+                };
+                let source_remote = self.incoming;
+
                 let it = self.buffer_mut(incoming);
                 for (counter, payload) in it {
+                    // TODO: do not crash
                     let plain = key.decrypt(&payload, incoming).unwrap();
+
+                    // TODO: do not crash
+                    match counter {
+                        0 => panic!(),
+                        1 => {
+                            let message = MessageBuilder::metadata_message(plain.len())
+                                .link_chunk(plain.len())
+                                .ok()
+                                .unwrap()
+                                .build(connection_id, ts, remote_addr.clone(), source_remote, incoming);
+                            db.store_message(message);
+                        },
+                        2 => {
+                            let message = MessageBuilder::acknowledge_message(plain.len())
+                                .link_chunk(plain.len())
+                                .ok()
+                                .unwrap()
+                                .build(connection_id, ts, remote_addr.clone(), source_remote, incoming);
+                            db.store_message(message);
+                        },
+                        chunk_number => {
+                            let six_bytes = <[u8; 6]>::try_from(&plain[0..6]).unwrap();
+                            let b = builder
+                                .unwrap_or(MessageBuilder::peer_message(six_bytes, chunk_number))
+                                .link_chunk(plain.len());
+                            builder = match b {
+                                Ok(builder_full) => {
+                                    let message = builder_full
+                                        .build(connection_id, ts, remote_addr.clone(), source_remote, incoming);
+                                    db.store_message(message);
+                                    None
+                                },
+                                Err(b) => Some(b),
+                            }
+                        },
+                    }
+
                     let c = chunk::Item::new(id, counter, incoming, payload, plain);
                     db.store_chunk(c);
                 }
-                self.handshake = Either::Right(Ok(key));
+                if incoming {
+                    self.input_message_builder = builder;
+                } else {
+                    self.output_message_builder = builder;
+                }
+                self.handshake = Handshake::HaveKey { connection_id, remote_addr, key };
             },
-            Either::Right(Err(_error)) => {
+            Handshake::Error(_error) => {
                 let counter;
                 if incoming {
                     counter = self.input_bad_counter;

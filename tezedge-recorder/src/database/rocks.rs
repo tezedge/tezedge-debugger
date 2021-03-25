@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::{Arc, atomic::{Ordering, AtomicU64}}};
 use rocksdb::{DB, Cache};
 use storage::persistent::{self, DBError, DbConfiguration, KeyValueSchema, KeyValueStoreWithSchema};
 use thiserror::Error;
@@ -13,6 +13,7 @@ pub struct DbError(DBError);
 
 pub struct Db {
     _cache: Cache,
+    message_counter: AtomicU64,
     inner: DB,
 }
 
@@ -22,6 +23,10 @@ impl Db {
         S: KeyValueSchema,
     {
         &self.inner
+    }
+
+    fn reserve_message_counter(&self) -> u64 {
+        self.message_counter.fetch_add(1, Ordering::SeqCst)
     }
 }
 
@@ -37,10 +42,15 @@ impl DatabaseNew for Db {
         let cfs = vec![
             connection::Schema::descriptor(&cache),
             chunk::Schema::descriptor(&cache),
+            message::Schema::descriptor(&cache),
         ];
         let inner = persistent::open_kv(path, cfs, &DbConfiguration::default()).map_err(DbError)?;
 
-        Ok(Arc::new(Db { _cache: cache, inner }))
+        Ok(Arc::new(Db {
+            _cache: cache,
+            message_counter: AtomicU64::new(0),
+            inner,
+        }))
     }
 }
 
@@ -48,7 +58,7 @@ impl Database for Db {
     fn store_connection(&self, item: connection::Item) {
         let (key, value) = item.split();
         if let Err(error) = self.as_kv::<connection::Schema>().put(&key, &value) {
-            // TODO: is it fatal?
+            // TODO: should panic/stop here?
             log::error!("database error: {}", error);
         }
     }
@@ -61,6 +71,9 @@ impl Database for Db {
     }
 
     fn store_message(&self, item: message::Item) {
-        let _ = item;
+        let index = self.reserve_message_counter();
+        if let Err(error) = self.as_kv::<message::Schema>().put(&index, &item) {
+            log::error!("database error: {}", error);
+        }
     }
 }
