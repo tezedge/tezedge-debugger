@@ -24,8 +24,8 @@ pub enum Sender {
 impl Sender {
     pub fn incoming(&self) -> bool {
         match self {
-            &Sender::Local => false,
-            &Sender::Remote => true,
+            Sender::Local => false,
+            Sender::Remote => true,
         }
     }
 }

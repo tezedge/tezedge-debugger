@@ -24,10 +24,6 @@ path = "src/bin/debugger_db.rs"
 name = "tezedge-debugger-parser"
 path = "src/bin/debugger_parser.rs"
 
-[[bin]]
-name = "tezedge-debugger-new"
-path = "src/bin/debugger_new.rs"
-
 [[bench]]
 name = "database"
 harness = false

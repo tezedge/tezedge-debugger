@@ -35,19 +35,13 @@ impl Item {
     }
 
     pub fn split(self) -> (Key, Value) {
-        match self {
-            Item { id, initiator, remote_addr, peer_id, comments } => {
-                (Key { id }, Value { initiator, remote_addr, peer_id, comments })
-            }
-        }
+        let Item { id, initiator, remote_addr, peer_id, comments } = self;
+        (Key { id }, Value { initiator, remote_addr, peer_id, comments })
     }
 
     pub fn unite(key: Key, value: Value) -> Self {
-        match (key, value) {
-            (Key { id }, Value { initiator, remote_addr, peer_id, comments }) => {
-                Item { id, initiator, remote_addr, peer_id, comments }
-            }
-        }
+        let (Key { id }, Value { initiator, remote_addr, peer_id, comments }) = (key, value);
+        Item { id, initiator, remote_addr, peer_id, comments }
     }
 }
 

@@ -50,10 +50,6 @@ impl Iterator for Buffer {
         let len = self.len()?;
         if self.buffer.len() < 2 + len {
             None
-        } else if self.buffer.len() == 2 + len {
-            let counter = self.counter;
-            self.counter += 1;
-            Some((counter, mem::replace(&mut self.buffer, Vec::new())))
         } else {
             let counter = self.counter;
             self.counter += 1;

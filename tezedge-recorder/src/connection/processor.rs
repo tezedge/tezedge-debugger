@@ -174,8 +174,8 @@ where
             },
             Handshake::HaveKey { connection_id, remote_addr, key } => {
                 let mut key = key.clone();
-                let connection_id = connection_id.clone();
-                let remote_addr = remote_addr.clone();
+                let connection_id = *connection_id;
+                let remote_addr = *remote_addr;
                 let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
 
                 self.buffer_mut(incoming).handle_data(&payload);
@@ -191,18 +191,22 @@ where
 
                 let it = self.buffer_mut(incoming);
                 for (counter, payload) in it {
-                    // TODO: do not crash
-                    let plain = key.decrypt(&payload, incoming).unwrap();
+                    let plain = match key.decrypt(&payload, incoming) {
+                        Ok(p) => p,
+                        Err(error) => {
+                            self.handshake = Handshake::Error(error);
+                            return;
+                        },
+                    };
 
-                    // TODO: do not crash
                     match counter {
-                        0 => panic!(),
+                        0 => log::warn!("connection message should not be here"),
                         1 => {
                             let message = MessageBuilder::metadata_message(plain.len())
                                 .link_chunk(plain.len())
                                 .ok()
                                 .unwrap()
-                                .build(connection_id, ts, remote_addr.clone(), source_remote, incoming);
+                                .build(connection_id, ts, remote_addr, source_remote, incoming);
                             db.store_message(message);
                         },
                         2 => {
@@ -210,18 +214,18 @@ where
                                 .link_chunk(plain.len())
                                 .ok()
                                 .unwrap()
-                                .build(connection_id, ts, remote_addr.clone(), source_remote, incoming);
+                                .build(connection_id, ts, remote_addr, source_remote, incoming);
                             db.store_message(message);
                         },
                         chunk_number => {
                             let six_bytes = <[u8; 6]>::try_from(&plain[0..6]).unwrap();
                             let b = builder
-                                .unwrap_or(MessageBuilder::peer_message(six_bytes, chunk_number))
+                                .unwrap_or_else(|| MessageBuilder::peer_message(six_bytes, chunk_number))
                                 .link_chunk(plain.len());
                             builder = match b {
                                 Ok(builder_full) => {
                                     let message = builder_full
-                                        .build(connection_id, ts, remote_addr.clone(), source_remote, incoming);
+                                        .build(connection_id, ts, remote_addr, source_remote, incoming);
                                     db.store_message(message);
                                     None
                                 },

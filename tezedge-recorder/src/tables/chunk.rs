@@ -26,16 +26,9 @@ impl Item {
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.bytes.len()
-    }
-
     pub fn split(self) -> (Key, Value) {
-        match self {
-            Item { connection_id, number, sender, bytes, plain } => {
-                (Key { connection_id, number, sender }, Value { bytes, plain })
-            }
-        }
+        let Item { connection_id, number, sender, bytes, plain } = self;
+        (Key { connection_id, number, sender }, Value { bytes, plain })
     }
 }
 

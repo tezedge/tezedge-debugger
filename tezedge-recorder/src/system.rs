@@ -131,7 +131,7 @@ impl<Db> System<Db> {
             return true;
         }
     
-        return false;
+        false
     }
 
     pub fn get_mut(&mut self, pid: u32) -> Option<&mut NodeInfo<Db>> {
