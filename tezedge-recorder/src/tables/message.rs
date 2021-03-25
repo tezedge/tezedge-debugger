@@ -80,7 +80,7 @@ impl MessageBuilder {
         }
     }
 
-    // chunk_number >= 3 
+    // chunk_number >= 3
     pub fn peer_message(bytes: [u8; 6], chunk_number: u64) -> Self {
         MessageBuilder {
             category: MessageCategory::P2p,
@@ -122,8 +122,16 @@ impl MessageBuilderFull {
             connection_id,
             timestamp,
             remote_addr,
-            initiator: if source_remote { Initiator::Remote } else { Initiator::Local },
-            sender: if incoming { Sender::Remote } else { Sender::Local },
+            initiator: if source_remote {
+                Initiator::Remote
+            } else {
+                Initiator::Local
+            },
+            sender: if incoming {
+                Sender::Remote
+            } else {
+                Sender::Local
+            },
             category: self.0.category,
             kind: self.0.kind,
             chunks: self.0.chunks,

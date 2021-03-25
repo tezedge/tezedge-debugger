@@ -6,10 +6,15 @@
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 fn main() -> anyhow::Result<()> {
-    use std::sync::{Arc, atomic::{Ordering, AtomicBool}};
+    use std::sync::{
+        Arc,
+        atomic::{Ordering, AtomicBool},
+    };
     use tezedge_recorder::{System, database::rocks, main_loop};
 
-    simple_logger::SimpleLogger::new().with_level(log::LevelFilter::Info).init()?;
+    simple_logger::SimpleLogger::new()
+        .with_level(log::LevelFilter::Info)
+        .init()?;
 
     let system = System::<rocks::Db>::load_config()?;
     let running = Arc::new(AtomicBool::new(true));

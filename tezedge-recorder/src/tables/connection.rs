@@ -19,7 +19,11 @@ impl Item {
     pub fn new(id: u128, incoming: bool, remote_addr: SocketAddr) -> Self {
         Item {
             id,
-            initiator: if incoming { Initiator::Remote } else { Initiator::Local },
+            initiator: if incoming {
+                Initiator::Remote
+            } else {
+                Initiator::Local
+            },
             remote_addr,
             peer_id: None,
             comments: Vec::new(),
@@ -34,11 +38,13 @@ impl Item {
         self.comments.push(comment);
     }
 
+    #[rustfmt::skip]
     pub fn split(self) -> (Key, Value) {
         let Item { id, initiator, remote_addr, peer_id, comments } = self;
         (Key { id }, Value { initiator, remote_addr, peer_id, comments })
     }
 
+    #[rustfmt::skip]
     pub fn unite(key: Key, value: Value) -> Self {
         let (Key { id }, Value { initiator, remote_addr, peer_id, comments }) = (key, value);
         Item { id, initiator, remote_addr, peer_id, comments }

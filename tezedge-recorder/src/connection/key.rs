@@ -16,7 +16,11 @@ pub struct Key {
 }
 
 impl Key {
-    pub fn new(identity: &Identity, initiator: &[u8], responder: &[u8]) -> Result<Self, CryptoError> {
+    pub fn new(
+        identity: &Identity,
+        initiator: &[u8],
+        responder: &[u8],
+    ) -> Result<Self, CryptoError> {
         use crypto::crypto_box::CryptoKey;
 
         // check if the identity belong to one of the parties

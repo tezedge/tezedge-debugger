@@ -1,16 +1,22 @@
-
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::{Arc, atomic::{Ordering, AtomicBool}},
+    sync::{
+        Arc,
+        atomic::{Ordering, AtomicBool},
+    },
 };
 use anyhow::Result;
 use bpf_common::{BpfModuleClient, SnifferEvent, Command, EventId, SocketId};
 
-use super::{connection::Connection, database::{Database, DatabaseNew, DatabaseFetch}, system::System};
+use super::{
+    connection::Connection,
+    database::{Database, DatabaseNew, DatabaseFetch},
+    system::System,
+};
 
 pub fn run<Db>(system: System<Db>, running: Arc<AtomicBool>) -> Result<()>
 where
@@ -35,7 +41,11 @@ where
                 SnifferEvent::Connect { id, address } => {
                     list.handle_connection(id, address, false);
                 },
-                SnifferEvent::Accept { id, address, listen_on_fd } => {
+                SnifferEvent::Accept {
+                    id,
+                    address,
+                    listen_on_fd,
+                } => {
                     let _ = listen_on_fd;
                     list.handle_connection(id, address, true);
                 },
@@ -78,7 +88,9 @@ where
 
     fn watching(&mut self) -> Result<()> {
         for node_config in self.system.node_configs() {
-            self.client.send_command(Command::WatchPort { port: node_config.p2p_port })?;
+            self.client.send_command(Command::WatchPort {
+                port: node_config.p2p_port,
+            })?;
         }
 
         Ok(())
@@ -97,11 +109,18 @@ where
                 return;
             }
         }
-        match self.client.send_command(Command::IgnoreConnection { pid, fd }) {
+        match self
+            .client
+            .send_command(Command::IgnoreConnection { pid, fd })
+        {
             Ok(()) => (),
             Err(error) => {
-                log::error!("cannot ignore connection id: {}, error: {}", socket_id, error)
-            }
+                log::error!(
+                    "cannot ignore connection id: {}, error: {}",
+                    socket_id,
+                    error
+                )
+            },
         }
     }
 

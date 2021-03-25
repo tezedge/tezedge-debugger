@@ -1,15 +1,23 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{path::Path, sync::{Arc, atomic::{Ordering, AtomicU64}}};
+use std::{
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{Ordering, AtomicU64},
+    },
+};
 use rocksdb::{Cache, DB};
 use storage::{
     persistent::{self, DBError, DbConfiguration, KeyValueSchema, KeyValueStoreWithSchema},
-    IteratorMode,
-    Direction,
+    IteratorMode, Direction,
 };
 use thiserror::Error;
-use super::{Database, DatabaseNew, DatabaseFetch, ConnectionsFilter, MessagesFilter, connection, chunk, message};
+use super::{
+    Database, DatabaseNew, DatabaseFetch, ConnectionsFilter, MessagesFilter, connection, chunk,
+    message,
+};
 
 #[derive(Error, Debug)]
 #[error("{}", _0)]
@@ -47,8 +55,7 @@ impl DatabaseNew for Db {
     where
         P: AsRef<Path>,
     {
-        let cache = Cache::new_lru_cache(1)
-            .map_err(|error| DBError::RocksDBError { error })?;
+        let cache = Cache::new_lru_cache(1).map_err(|error| DBError::RocksDBError { error })?;
 
         let cfs = vec![
             connection::Schema::descriptor(&cache),
@@ -100,19 +107,19 @@ impl DatabaseFetch for Db {
         } else {
             IteratorMode::End
         };
-        let vec = self.as_kv::<connection::Schema>().iterator(mode)?
-            .filter_map(|(k, v)| {
-                match (k, v) {
-                    (Ok(key), Ok(value)) => Some(connection::Item::unite(key, value)),
-                    (Ok(index), Err(err)) => {
-                        log::warn!("Failed to load value at {:?}: {}", index, err);
-                        None
-                    },
-                    (Err(err), _) => {
-                        log::warn!("Failed to load index: {}", err);
-                        None
-                    },
-                }
+        let vec = self
+            .as_kv::<connection::Schema>()
+            .iterator(mode)?
+            .filter_map(|(k, v)| match (k, v) {
+                (Ok(key), Ok(value)) => Some(connection::Item::unite(key, value)),
+                (Ok(index), Err(err)) => {
+                    log::warn!("Failed to load value at {:?}: {}", index, err);
+                    None
+                },
+                (Err(err), _) => {
+                    log::warn!("Failed to load index: {}", err);
+                    None
+                },
             })
             .take(limit)
             .collect();
@@ -129,19 +136,19 @@ impl DatabaseFetch for Db {
         } else {
             IteratorMode::End
         };
-        let vec = self.as_kv::<message::Schema>().iterator(mode)?
-            .filter_map(|(k, v)| {
-                match (k, v) {
-                    (Ok(key), Ok(value)) => Some(message::MessageFrontend::new(value, key)),
-                    (Ok(index), Err(err)) => {
-                        log::warn!("Failed to load value at {:?}: {}", index, err);
-                        None
-                    },
-                    (Err(err), _) => {
-                        log::warn!("Failed to load index: {}", err);
-                        None
-                    },
-                }
+        let vec = self
+            .as_kv::<message::Schema>()
+            .iterator(mode)?
+            .filter_map(|(k, v)| match (k, v) {
+                (Ok(key), Ok(value)) => Some(message::MessageFrontend::new(value, key)),
+                (Ok(index), Err(err)) => {
+                    log::warn!("Failed to load value at {:?}: {}", index, err);
+                    None
+                },
+                (Err(err), _) => {
+                    log::warn!("Failed to load index: {}", err);
+                    None
+                },
             })
             .take(limit)
             .collect();

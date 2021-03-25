@@ -5,7 +5,10 @@ use std::{collections::HashMap, sync::Arc, net::SocketAddr};
 use serde::Deserialize;
 use anyhow::Result;
 use tokio::runtime::Runtime;
-use super::{database::{DatabaseNew, DatabaseFetch}, server};
+use super::{
+    database::{DatabaseNew, DatabaseFetch},
+    server,
+};
 
 #[derive(Clone, Deserialize)]
 pub struct NodeConfig {
@@ -48,16 +51,21 @@ where
         use std::fs::File;
 
         #[derive(Deserialize)]
-        pub struct IdentityInner {
+        pub struct Inner {
             peer_id: String,
             public_key: String,
             secret_key: String,
             #[allow(dead_code)]
             proof_of_work_stamp: String,
         }
-        
+
         let file = File::open(identity_path)?;
-        let IdentityInner { peer_id, public_key, secret_key, .. } = serde_json::from_reader(file)?;
+        let Inner {
+            peer_id,
+            public_key,
+            secret_key,
+            ..
+        } = serde_json::from_reader(file)?;
 
         let identity = Identity {
             peer_id,
@@ -88,7 +96,7 @@ impl<Db> System<Db> {
         let mut settings_toml = String::new();
         settings_file.read_to_string(&mut settings_toml)?;
         let config = toml::from_str(&settings_toml)?;
-    
+
         Ok(System {
             config,
             node_info: HashMap::new(),
@@ -130,7 +138,7 @@ impl<Db> System<Db> {
         if address.ip() == "127.0.0.1".parse::<IpAddr>().unwrap() {
             return true;
         }
-    
+
         false
     }
 
@@ -144,8 +152,17 @@ where
     Db: DatabaseNew + DatabaseFetch + Sync + Send + 'static,
 {
     pub fn handle_bind(&mut self, pid: u32, port: u16) -> Result<()> {
-        let node_config = self.node_configs().iter().find(|c| c.p2p_port == port).unwrap();
-        let info = NodeInfo::new(&node_config.identity_path, &node_config.db_path, node_config.rpc_port, &self.tokio_rt)?;
+        let node_config = self
+            .node_configs()
+            .iter()
+            .find(|c| c.p2p_port == port)
+            .unwrap();
+        let info = NodeInfo::new(
+            &node_config.identity_path,
+            &node_config.db_path,
+            node_config.rpc_port,
+            &self.tokio_rt,
+        )?;
         self.node_info.insert(pid, info);
 
         Ok(())

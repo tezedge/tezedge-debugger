@@ -16,16 +16,27 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn new(connection_id: u128, number: u64, incoming: bool, bytes: Vec<u8>, plain: Vec<u8>) -> Self {
+    pub fn new(
+        connection_id: u128,
+        number: u64,
+        incoming: bool,
+        bytes: Vec<u8>,
+        plain: Vec<u8>,
+    ) -> Self {
         Item {
             connection_id,
             number,
-            sender: if incoming { Sender::Remote } else { Sender::Local },
+            sender: if incoming {
+                Sender::Remote
+            } else {
+                Sender::Local
+            },
             bytes,
             plain,
         }
     }
 
+    #[rustfmt::skip]
     pub fn split(self) -> (Key, Value) {
         let Item { connection_id, number, sender, bytes, plain } = self;
         (Key { connection_id, number, sender }, Value { bytes, plain })
