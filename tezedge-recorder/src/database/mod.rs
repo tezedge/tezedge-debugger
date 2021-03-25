@@ -4,7 +4,7 @@
 pub mod rocks;
 
 use std::{path::Path, sync::Arc, error::Error};
-
+use serde::Deserialize;
 use super::tables::{connection, chunk, message};
 
 pub trait Database {
@@ -13,15 +13,31 @@ pub trait Database {
     fn store_message(&self, item: message::Item);
 }
 
+#[derive(Deserialize)]
+pub struct ConnectionsFilter {
+    pub cursor: Option<connection::Key>,
+}
+
+#[derive(Deserialize)]
+pub struct MessagesFilter {
+    pub cursor: Option<u64>,
+}
+
 pub trait DatabaseFetch
 where
     Self: DatabaseNew,
 {
     fn fetch_connections(
         &self,
-        cursor: Option<connection::Key>,
-        limit: u64,
+        filter: &ConnectionsFilter,
+        limit: usize,
     ) -> Result<Vec<connection::Item>, Self::Error>;
+
+    fn fetch_messages(
+        &self,
+        filter: &MessagesFilter,
+        limit: usize,
+    ) -> Result<Vec<message::MessageFrontend>, Self::Error>;
 }
 
 pub trait DatabaseNew {

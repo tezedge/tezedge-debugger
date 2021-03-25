@@ -20,6 +20,7 @@ pub struct Item {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MessageFrontend {
+    id: u64,
     timestamp: u128,
     remote_addr: SocketAddr,
     source_type: Initiator,
@@ -29,8 +30,9 @@ pub struct MessageFrontend {
 }
 
 impl MessageFrontend {
-    pub fn new(item: Item) -> Self {
+    pub fn new(item: Item, id: u64) -> Self {
         MessageFrontend {
+            id,
             timestamp: item.timestamp,
             remote_addr: item.remote_addr,
             source_type: item.initiator,

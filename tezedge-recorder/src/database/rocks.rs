@@ -9,7 +9,7 @@ use storage::{
     Direction,
 };
 use thiserror::Error;
-use super::{Database, DatabaseNew, DatabaseFetch, connection, chunk, message};
+use super::{Database, DatabaseNew, DatabaseFetch, ConnectionsFilter, MessagesFilter, connection, chunk, message};
 
 #[derive(Error, Debug)]
 #[error("{}", _0)]
@@ -92,10 +92,10 @@ impl Database for Db {
 impl DatabaseFetch for Db {
     fn fetch_connections(
         &self,
-        cursor: Option<connection::Key>,
-        limit: u64,
+        filter: &ConnectionsFilter,
+        limit: usize,
     ) -> Result<Vec<connection::Item>, Self::Error> {
-        let mode = if let Some(cursor) = &cursor {
+        let mode = if let Some(cursor) = &filter.cursor {
             IteratorMode::From(cursor, Direction::Reverse)
         } else {
             IteratorMode::End
@@ -114,7 +114,36 @@ impl DatabaseFetch for Db {
                     },
                 }
             })
-            .take(limit as usize)
+            .take(limit)
+            .collect();
+        Ok(vec)
+    }
+
+    fn fetch_messages(
+        &self,
+        filter: &MessagesFilter,
+        limit: usize,
+    ) -> Result<Vec<message::MessageFrontend>, Self::Error> {
+        let mode = if let Some(cursor) = &filter.cursor {
+            IteratorMode::From(cursor, Direction::Reverse)
+        } else {
+            IteratorMode::End
+        };
+        let vec = self.as_kv::<message::Schema>().iterator(mode)?
+            .filter_map(|(k, v)| {
+                match (k, v) {
+                    (Ok(key), Ok(value)) => Some(message::MessageFrontend::new(value, key)),
+                    (Ok(index), Err(err)) => {
+                        log::warn!("Failed to load value at {:?}: {}", index, err);
+                        None
+                    },
+                    (Err(err), _) => {
+                        log::warn!("Failed to load index: {}", err);
+                        None
+                    },
+                }
+            })
+            .take(limit)
             .collect();
         Ok(vec)
     }
