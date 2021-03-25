@@ -215,8 +215,10 @@ impl RingBufferSync {
         const BUSY_BIT: usize = 1 << 31;
         const DISCARD_BIT: usize = 1 << 30;
         const HEADER_SIZE: usize = 8;
+        const TOTAL_READ_THRESHOLD: usize = 0x1000000; // 16MiB
 
         let mut vec = SmallVec::new();
+        let mut read_total = 0;
 
         // try read something
         loop {
@@ -274,15 +276,21 @@ impl RingBufferSync {
                     )
                 };
                 match D::from_rb_slice(s) {
-                    Ok(data) => vec.push(data),
+                    Ok(data) => {
+                        vec.push(data);
+                        read_total += s.len();
+                    },
                     Err(error) => log::error!("rb parse data: {:?}", error),
                 }
             }
+            // if kernel decide to discard this slice, go to the next iteration
 
             // store our position to tell kernel it can overwrite memory behind our position
             self.observer.consumer_pos.store(self.consumer_pos_value, Ordering::Release);
 
-            // if kernel decide to discard this slice, go to the next iteration
+            if read_total > TOTAL_READ_THRESHOLD {
+                break;
+            }
         };
 
         if vec.is_empty() {
