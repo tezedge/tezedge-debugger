@@ -9,7 +9,7 @@ bpf_sniffer_path = "/tmp/bpf-sniffer.sock"
 [[nodes]]
 db_path = "./target/debugger_db"
 # path to search identity at
-identity_path = "./target/tezedge/identity.json"
+identity_path = "../tezedge/light_node/etc/tezedge/identity.json"
 # debugger expect the node will listen its p2p incoming connections on this port
 # which process earliest will bind a socket on this port, will be considered as the node
 # this is an inner port inside docker's virtual network of the node's container
