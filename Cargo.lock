@@ -3077,7 +3077,6 @@ dependencies = [
  "ctrlc",
  "hex",
  "jemallocator",
- "libc",
  "log",
  "rocksdb",
  "serde 1.0.125",

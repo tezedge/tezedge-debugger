@@ -270,18 +270,36 @@ where
                 };
             },
             Handshake::Error(_error) => {
-                let counter;
-                if incoming {
-                    counter = self.input_bad_counter;
-                    self.input_bad_counter += 1;
-                } else {
-                    counter = self.output_bad_counter;
-                    self.output_bad_counter += 1;
-                };
+                let (counter, p) = self.input_state.cleanup();
+                if !p.is_empty() {
+                    self.input_bad_counter = counter;
+                    let c = chunk::Item::new(self.id, counter, true, p, Vec::new());
+                    self.db.store_chunk(c);
+                }
+                let (counter, p) = self.output_state.cleanup();
+                if !p.is_empty() {
+                    self.output_bad_counter = counter;
+                    let c = chunk::Item::new(self.id, counter, false, p, Vec::new());
+                    self.db.store_chunk(c);
+                }
+
+                let counter = self.inc_bad_counter(incoming);
                 let c = chunk::Item::new(self.id, counter, incoming, payload.to_vec(), Vec::new());
                 self.db.store_chunk(c);
             },
         };
+    }
+
+    fn inc_bad_counter(&mut self, incoming: bool) -> u64 {
+        let counter;
+        if incoming {
+            counter = self.input_bad_counter;
+            self.input_bad_counter += 1;
+        } else {
+            counter = self.output_bad_counter;
+            self.output_bad_counter += 1;
+        };
+        counter
     }
 
     pub fn join(self) {}

@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-//#![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 
 pub mod tables;
 
