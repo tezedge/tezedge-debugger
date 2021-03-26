@@ -3,41 +3,52 @@
 
 pub struct Buffer {
     counter: u64,
-    buffer: Vec<u8>,
+    ptr: *mut libc::c_void,
+    len: usize,
 }
 
 impl Default for Buffer {
     fn default() -> Self {
         Buffer {
             counter: 0,
-            buffer: Vec::with_capacity(0x10000),
+            ptr: std::ptr::null_mut(),
+            len: 0,
         }
     }
 }
 
 impl Buffer {
     pub fn handle_data(&mut self, payload: &[u8]) {
-        self.buffer.extend_from_slice(payload);
+        unsafe {
+            if self.ptr.is_null() {
+                assert_eq!(self.len, 0);
+                self.ptr = libc::malloc(payload.len());
+            } else {
+                self.ptr = libc::realloc(self.ptr, self.len + payload.len());
+            }
+            libc::memcpy(
+                self.ptr.offset(self.len as isize),
+                payload.as_ptr() as *mut _,
+                payload.len(),
+            );
+            self.len += payload.len()
+        }
     }
 
     fn len(&self) -> Option<usize> {
-        if self.buffer.len() < 2 {
+        if self.len < 2 {
             return None;
         }
-        Some((self.buffer[0] as usize) * 256 + (self.buffer[1] as usize))
+        assert!(!self.ptr.is_null());
+        unsafe {
+            let b0 = *(self.ptr as *mut u8);
+            let b1 = *((self.ptr as *mut u8).offset(1));
+            Some((b0 as usize) * 256 + (b1 as usize))
+        }
     }
 
     pub fn have_chunk(&self) -> bool {
-        self.buffer.len() >= 2 + self.len().unwrap_or(0)
-    }
-
-    #[allow(dead_code)]
-    pub fn cleanup(&mut self) -> (u64, Vec<u8>) {
-        use std::mem;
-
-        let counter = self.counter;
-        self.counter += 1;
-        (counter, mem::replace(&mut self.buffer, Vec::new()))
+        self.len >= 2 + self.len().unwrap_or(0)
     }
 }
 
@@ -46,25 +57,34 @@ impl Iterator for Buffer {
 
     fn next(&mut self) -> Option<Self::Item> {
         let len = self.len()? + 2;
-        if self.buffer.len() < len {
+        if self.len < len {
             None
         } else {
             let counter = self.counter;
             self.counter += 1;
-            //let remaining = self.buffer.split_off(len);
-            //Some((counter, mem::replace(&mut self.buffer, remaining)))
 
             let mut new = vec![0; len];
-            new.copy_from_slice(&self.buffer[..len]);
-            assert!(self.buffer.as_ptr() as usize != new.as_ptr() as usize);
+            unsafe {
+                libc::memcpy(
+                    new.as_mut_ptr() as *mut _,
+                    self.ptr as *const _,
+                    len,
+                );
 
-            if self.buffer.len() > len {
-                let mut remaining = vec![0; self.buffer.len() - len];
-                remaining.copy_from_slice(&self.buffer[len..]);
-                self.buffer.clear();
-                self.buffer = remaining;
-            } else {
-                self.buffer = Vec::with_capacity(0x10000);
+                self.len -= len;
+                if self.len > len {
+                    let remaining = libc::malloc(self.len);
+                    libc::memcpy(
+                        remaining,
+                        self.ptr.offset(len as isize) as *const _,
+                        self.len,
+                    );
+                    libc::free(self.ptr);
+                    self.ptr = remaining;
+                } else {
+                    libc::free(self.ptr);
+                    self.ptr = std::ptr::null_mut();
+                }
             }
 
             Some((counter, new))
