@@ -11,7 +11,6 @@ use super::{
 };
 
 pub struct Handshake {
-    cn: connection::Item,
     id: Identity,
     local: Either<Initial<Local>, HaveCm<Local>>,
     remote: Either<Initial<Remote>, HaveCm<Remote>>,
@@ -40,36 +39,32 @@ impl From<MakeKeyOutput> for HandshakeOutput {
 impl Handshake {
     pub fn new(cn: connection::Item, id: Identity) -> Self {
         let local = Either::Left(Initial::new(cn.clone()));
-        let remote = Either::Left(Initial::new(cn.clone()));
+        let remote = Either::Left(Initial::new(cn));
         Handshake {
-            cn,
             id,
             local,
             remote,
         }
     }
 
-    fn initial(cn: connection::Item, id: Identity, l: Initial<Local>, r: Initial<Remote>) -> Self {
+    fn initial(id: Identity, l: Initial<Local>, r: Initial<Remote>) -> Self {
         Handshake {
-            cn,
             id,
             local: Either::Left(l),
             remote: Either::Left(r),
         }
     }
 
-    fn local_cm(cn: connection::Item, id: Identity, l: HaveCm<Local>, r: Initial<Remote>) -> Self {
+    fn local_cm(id: Identity, l: HaveCm<Local>, r: Initial<Remote>) -> Self {
         Handshake {
-            cn,
             id,
             local: Either::Right(l),
             remote: Either::Left(r),
         }
     }
 
-    fn remote_cm(cn: connection::Item, id: Identity, l: Initial<Local>, r: HaveCm<Remote>) -> Self {
+    fn remote_cm(id: Identity, l: Initial<Local>, r: HaveCm<Remote>) -> Self {
         Handshake {
-            cn,
             id,
             local: Either::Left(l),
             remote: Either::Right(r),
@@ -79,50 +74,47 @@ impl Handshake {
     pub fn handle_data(self, payload: &[u8], incoming: bool) -> Either<Self, HandshakeOutput> {
         match self {
             Handshake {
-                cn,
                 id,
                 local: Either::Left(l),
                 remote: Either::Left(r),
             } => {
                 if !incoming {
                     match l.handle_data(payload) {
-                        Either::Left(l) => Either::Left(Handshake::initial(cn, id, l, r)),
-                        Either::Right(l) => Either::Left(Handshake::local_cm(cn, id, l, r)),
+                        Either::Left(l) => Either::Left(Handshake::initial(id, l, r)),
+                        Either::Right(l) => Either::Left(Handshake::local_cm(id, l, r)),
                     }
                 } else {
                     match r.handle_data(payload) {
-                        Either::Left(r) => Either::Left(Handshake::initial(cn, id, l, r)),
-                        Either::Right(r) => Either::Left(Handshake::remote_cm(cn, id, l, r)),
+                        Either::Left(r) => Either::Left(Handshake::initial(id, l, r)),
+                        Either::Right(r) => Either::Left(Handshake::remote_cm(id, l, r)),
                     }
                 }
             },
             Handshake {
-                cn,
                 id,
                 local: Either::Right(l),
                 remote: Either::Left(r),
             } => {
                 if !incoming {
-                    Either::Left(Handshake::local_cm(cn, id, l.handle_data(payload), r))
+                    Either::Left(Handshake::local_cm(id, l.handle_data(payload), r))
                 } else {
                     match r.handle_data(payload) {
-                        Either::Left(r) => Either::Left(Handshake::local_cm(cn, id, l, r)),
-                        Either::Right(r) => Either::Right(l.make_key(r, &id, cn).into()),
+                        Either::Left(r) => Either::Left(Handshake::local_cm(id, l, r)),
+                        Either::Right(r) => Either::Right(l.make_key(r, &id).into()),
                     }
                 }
             },
             Handshake {
-                cn,
                 id,
                 local: Either::Left(l),
                 remote: Either::Right(r),
             } => {
                 if incoming {
-                    Either::Left(Handshake::remote_cm(cn, id, l, r.handle_data(payload)))
+                    Either::Left(Handshake::remote_cm(id, l, r.handle_data(payload)))
                 } else {
                     match l.handle_data(payload) {
-                        Either::Left(l) => Either::Left(Handshake::remote_cm(cn, id, l, r)),
-                        Either::Right(l) => Either::Right(l.make_key(r, &id, cn).into()),
+                        Either::Left(l) => Either::Left(Handshake::remote_cm(id, l, r)),
+                        Either::Right(l) => Either::Right(l.make_key(r, &id).into()),
                     }
                 }
             },

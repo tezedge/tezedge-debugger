@@ -9,6 +9,7 @@ use typenum::{self, Bit};
 use super::{
     buffer::Buffer,
     key::{Keys, Key},
+    dump::Dump,
     tables::{connection, chunk},
     common::{Sender, Local, Remote},
     Identity,
@@ -35,7 +36,7 @@ where
     }
 
     pub fn handle_data(&mut self, payload: &[u8]) {
-        self.buffer.handle_data(payload, &self.cn);
+        self.buffer.handle_data(payload);
     }
 }
 
@@ -52,11 +53,9 @@ pub struct Initial<S> {
     inner: Inner<S>,
 }
 
-pub struct HaveCm<S>
-where
-    S: Bit,
-{
+pub struct HaveCm<S> {
     inner: Inner<S>,
+    dump: Option<Dump>,
 }
 
 pub struct HaveKey<S> {
@@ -95,7 +94,7 @@ where
     pub fn handle_data(mut self, payload: &[u8]) -> Either<Self, HaveCm<S>> {
         self.inner.handle_data(payload);
         if self.inner.buffer.have_chunk().is_some() {
-            Either::Right(HaveCm { inner: self.inner })
+            Either::Right(HaveCm { inner: self.inner, dump: None })
         } else {
             Either::Left(self)
         }
@@ -108,7 +107,19 @@ where
 {
     /// Should not need to call
     pub fn handle_data(mut self, payload: &[u8]) -> Self {
-        self.inner.handle_data(payload);
+        // 1 MiB
+        if self.inner.buffer.remaining() > 0x100000 && self.dump.is_none() {
+            let mut dump = Dump::new(self.inner.cn.clone());
+            let (_, data) = self.inner.buffer.cleanup();
+            dump.write(&data);
+            self.dump = Some(dump);
+        }
+
+        if let Some(dump) = &mut self.dump {
+            dump.write(payload);
+        } else {
+            self.inner.handle_data(payload);
+        }
         self
     }
 
@@ -152,7 +163,6 @@ impl HaveCm<Local> {
         self,
         peer: HaveCm<Remote>,
         identity: &Identity,
-        mut cn: connection::Item,
     ) -> MakeKeyOutput {
         #[derive(Error, Debug)]
         pub enum HandshakeWarning {
@@ -186,7 +196,8 @@ impl HaveCm<Local> {
 
         let local_chunk = self.inner.buffer.have_chunk().unwrap();
         let remote_chunk = peer.inner.buffer.have_chunk().unwrap();
-        match Keys::new(identity, local_chunk, remote_chunk, cn.initiator.clone()) {
+        let mut cn = self.inner.cn.clone();
+        match Keys::new(identity, local_chunk, remote_chunk, self.inner.cn.initiator.clone()) {
             Ok(Keys { local, remote }) => {
                 let (l, l_chunk) = self.have_key(local);
                 let (r, r_chunk) = peer.have_key(remote);

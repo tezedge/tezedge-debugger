@@ -1,13 +1,9 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{fs, io::Write};
-use super::tables::connection;
-
 pub struct Buffer {
     counter: u64,
     buffer: Vec<u8>,
-    broken: Option<fs::File>,
 }
 
 impl Default for Buffer {
@@ -15,33 +11,20 @@ impl Default for Buffer {
         Buffer {
             counter: 0,
             buffer: Vec::with_capacity(0x10000),
-            broken: None,
         }
     }
 }
 
 impl Buffer {
-    pub fn handle_data(&mut self, payload: &[u8], cn: &connection::Item) {
-        if self.have_chunk().is_some() && self.broken.is_none() {
+    pub fn handle_data(&mut self, payload: &[u8]) {
+        if self.have_chunk().is_some() {
             log::warn!(
                 "append new data while not consumed chunk, buffer len: {}, counter: {}",
                 self.buffer.len(),
                 self.counter,
             );
-            
-            let _ = fs::create_dir("target");
-            let mut f = fs::File::create(format!("target/{}.ron", cn.id)).unwrap();
-            f.write_fmt(format_args!("{:?}\n", cn)).unwrap();
-            let mut f = fs::File::create(format!("target/{}", cn.id)).unwrap();
-            f.write_all(&self.buffer).unwrap();
-            self.buffer.clear();
-            self.broken = Some(f);
         }
-        if let Some(f) = &mut self.broken {
-            f.write_all(payload).unwrap();
-        } else {
-            self.buffer.extend_from_slice(payload);
-        }
+        self.buffer.extend_from_slice(payload);
     }
 
     pub fn remaining(&self) -> usize {

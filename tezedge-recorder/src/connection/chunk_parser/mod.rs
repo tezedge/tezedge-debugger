@@ -6,6 +6,7 @@ use super::{common, tables, Identity};
 mod buffer;
 mod key;
 mod state;
+mod dump;
 mod parser;
 
 pub use self::parser::{Handshake, HandshakeOutput, HandshakeDone, ChunkHandler};
