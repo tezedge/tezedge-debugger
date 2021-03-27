@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: MIT
 
 use std::marker::PhantomData;
-use crypto::CryptoError;
 use either::Either;
+use thiserror::Error;
+use crypto::{proof_of_work, blake2b::Blake2bError, hash::FromBytesError};
 use typenum::{self, Bit};
 use super::{
     buffer::Buffer,
     key::{Keys, Key},
-    tables::chunk,
-    common::{Sender, Initiator, Local, Remote},
+    tables::{connection, chunk},
+    common::{Sender, Local, Remote},
     Identity,
 };
 
@@ -151,25 +152,75 @@ where
     }
 }
 
-pub type HaveKeyPair = ((HaveKey<Local>, chunk::Item), (HaveKey<Remote>, chunk::Item));
-pub type HaveNotKeyPair = (
-    (HaveNotKey<Local>, chunk::Item),
-    (HaveNotKey<Remote>, chunk::Item),
-    CryptoError,
-);
+pub struct MakeKeyOutput {
+    pub cn: connection::Item,
+    pub local: Result<HaveKey<Local>, HaveNotKey<Local>>,
+    pub l_chunk: chunk::Item,
+    pub remote: Result<HaveKey<Remote>, HaveNotKey<Remote>>,
+    pub r_chunk: chunk::Item,
+}
 
 impl HaveCm<Local> {
     pub fn make_key(
         self,
         peer: HaveCm<Remote>,
         identity: &Identity,
-        initiator: &Initiator,
-    ) -> Result<HaveKeyPair, HaveNotKeyPair> {
+        mut cn: connection::Item,
+    ) -> MakeKeyOutput {
+        #[derive(Error, Debug)]
+        pub enum HandshakeWarning {
+            #[error("connection message is too short {}", _0)]
+            ConnectionMessageTooShort(usize),
+            #[error("proof-of-work check failed")]
+            PowInvalid(f64),
+            #[error("cannot calc peer_id: black2b hashing error {}", _0)]
+            Blake2b(Blake2bError),
+            #[error("cannot calc peer_id: from bytes error {}", _0)]
+            FromBytes(FromBytesError),
+        }
+
+        let check = |payload: &[u8]| -> Result<String, HandshakeWarning> {
+            use crypto::{blake2b, hash::HashType};
+
+            if payload.len() <= 88 {
+                return Err(HandshakeWarning::ConnectionMessageTooShort(payload.len()));
+            }
+            // TODO: move to config
+            let target = 26.0;
+            if proof_of_work::check_proof_of_work(&payload[4..60], target).is_err() {
+                return Err(HandshakeWarning::PowInvalid(target));
+            }
+
+            let hash = blake2b::digest_128(&payload[4..36]).map_err(HandshakeWarning::Blake2b)?;
+            HashType::CryptoboxPublicKeyHash
+                .hash_to_b58check(&hash)
+                .map_err(HandshakeWarning::FromBytes)
+        };
+
         let local_chunk = self.inner.buffer.have_chunk().unwrap();
         let remote_chunk = peer.inner.buffer.have_chunk().unwrap();
-        match Keys::new(identity, local_chunk, remote_chunk, initiator) {
-            Ok(Keys { local, remote }) => Ok((self.have_key(local), peer.have_key(remote))),
-            Err(error) => Err((self.have_not_key(), peer.have_not_key(), error)),
+        match Keys::new(identity, local_chunk, remote_chunk, cn.initiator.clone()) {
+            Ok(Keys { local, remote }) => {
+                let (l, l_chunk) = self.have_key(local);
+                let (r, r_chunk) = peer.have_key(remote);
+                match check(&l_chunk.bytes) {
+                    Ok(peer_id) => if peer_id != identity.peer_id {
+                        cn.add_comment("local peer id does not match".to_string())
+                    },
+                    Err(warning) => cn.add_comment(format!("Outgoing: {}", warning)),
+                }
+                match check(&r_chunk.bytes) {
+                    Ok(peer_id) => cn.set_peer_id(peer_id),
+                    Err(warning) => cn.add_comment(format!("Incoming: {}", warning)),
+                }
+                MakeKeyOutput { cn, local: Ok(l), l_chunk, remote: Ok(r), r_chunk }
+            },
+            Err(error) => {
+                let (l, l_chunk) = self.have_not_key();
+                let (r, r_chunk) = peer.have_not_key();
+                cn.add_comment(format!("Key calculate error: {}", error));
+                MakeKeyOutput { cn, local: Err(l), l_chunk, remote: Err(r), r_chunk }
+            },
         }
     }
 }

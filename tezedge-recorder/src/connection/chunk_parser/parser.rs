@@ -3,10 +3,8 @@
 
 use typenum::Bit;
 use either::Either;
-use thiserror::Error;
-use crypto::{proof_of_work, blake2b::Blake2bError, hash::FromBytesError};
 use super::{
-    state::{Initial, HaveCm, HaveKey, HaveNotKey, CannotDecrypt},
+    state::{Initial, HaveCm, HaveKey, HaveNotKey, CannotDecrypt, MakeKeyOutput},
     tables::{connection, chunk},
     common::{Local, Remote},
     Identity,
@@ -25,6 +23,18 @@ pub struct HandshakeOutput {
     pub l_chunk: chunk::Item,
     pub remote: HandshakeDone<Remote>,
     pub r_chunk: chunk::Item,
+}
+
+impl From<MakeKeyOutput> for HandshakeOutput {
+    fn from(v: MakeKeyOutput) -> Self {
+        HandshakeOutput {
+            cn: v.cn,
+            local: v.local.into(),
+            l_chunk: v.l_chunk,
+            remote: v.remote.into(),
+            r_chunk: v.r_chunk,
+        }
+    }
 }
 
 impl Handshake {
@@ -66,36 +76,6 @@ impl Handshake {
         payload: &[u8],
         incoming: bool,
     ) -> Either<Self, HandshakeOutput> {
-        #[derive(Error, Debug)]
-        pub enum HandshakeWarning {
-            #[error("connection message is too short {}", _0)]
-            ConnectionMessageTooShort(usize),
-            #[error("proof-of-work check failed")]
-            PowInvalid(f64),
-            #[error("cannot calc peer_id: black2b hashing error {}", _0)]
-            Blake2b(Blake2bError),
-            #[error("cannot calc peer_id: from bytes error {}", _0)]
-            FromBytes(FromBytesError),
-        }
-
-        let check = |payload: &[u8]| -> Result<String, HandshakeWarning> {
-            use crypto::{blake2b, hash::HashType};
-
-            if payload.len() <= 88 {
-                return Err(HandshakeWarning::ConnectionMessageTooShort(payload.len()));
-            }
-            // TODO: move to config
-            let target = 26.0;
-            if proof_of_work::check_proof_of_work(&payload[4..60], target).is_err() {
-                return Err(HandshakeWarning::PowInvalid(target));
-            }
-
-            let hash = blake2b::digest_128(&payload[4..36]).map_err(HandshakeWarning::Blake2b)?;
-            HashType::CryptoboxPublicKeyHash
-                .hash_to_b58check(&hash)
-                .map_err(HandshakeWarning::FromBytes)
-        };
-
         match self {
             Handshake { cn, id, local: Either::Left(l), remote: Either::Left(r) } => {
                 if !incoming {
@@ -110,87 +90,23 @@ impl Handshake {
                     }
                 }
             },
-            Handshake { mut cn, id, local: Either::Right(l), remote: Either::Left(r) } => {
+            Handshake { cn, id, local: Either::Right(l), remote: Either::Left(r) } => {
                 if !incoming {
                     Either::Left(Handshake::local_cm(cn, id, l.handle_data(payload), r))
                 } else {
                     match r.handle_data(payload) {
                         Either::Left(r) => Either::Left(Handshake::local_cm(cn, id, l, r)),
-                        Either::Right(r) => {
-                            match l.make_key(r, &id, &cn.initiator) {
-                                Ok(((ls, l_chunk), (rs, r_chunk))) => {
-                                    match check(&l_chunk.bytes) {
-                                        Ok(peer_id) => if peer_id != id.peer_id {
-                                            cn.add_comment("local peer id does not match".to_string())
-                                        },
-                                        Err(warning) => cn.add_comment(format!("Outgoing: {}", warning)),
-                                    }
-                                    match check(&r_chunk.bytes) {
-                                        Ok(peer_id) => cn.set_peer_id(peer_id),
-                                        Err(warning) => cn.add_comment(format!("Incoming: {}", warning)),
-                                    }
-                                    Either::Right(HandshakeOutput {
-                                        cn,
-                                        local: HandshakeDone::HaveKey(ls),
-                                        l_chunk,
-                                        remote: HandshakeDone::HaveKey(rs),
-                                        r_chunk,
-                                    })
-                                },
-                                Err(((ls, l_chunk), (rs, r_chunk), error)) => {
-                                    cn.add_comment(format!("Key calculate error: {}", error));
-                                    Either::Right(HandshakeOutput {
-                                        cn,
-                                        local: HandshakeDone::HaveNotKey(ls),
-                                        l_chunk,
-                                        remote: HandshakeDone::HaveNotKey(rs),
-                                        r_chunk,
-                                    })
-                                },
-                            }
-                        },
+                        Either::Right(r) => Either::Right(l.make_key(r, &id, cn).into()),
                     }
                 }
             },
-            Handshake { mut cn, id, local: Either::Left(l), remote: Either::Right(r) } => {
+            Handshake { cn, id, local: Either::Left(l), remote: Either::Right(r) } => {
                 if incoming {
                     Either::Left(Handshake::remote_cm(cn, id, l, r.handle_data(payload)))
                 } else {
                     match l.handle_data(payload) {
                         Either::Left(l) => Either::Left(Handshake::remote_cm(cn, id, l, r)),
-                        Either::Right(l) => {
-                            match l.make_key(r, &id, &cn.initiator) {
-                                Ok(((ls, l_chunk), (rs, r_chunk))) => {
-                                    match check(&l_chunk.bytes) {
-                                        Ok(peer_id) => if peer_id != id.peer_id {
-                                            cn.add_comment("local peer id does not match".to_string())
-                                        },
-                                        Err(warning) => cn.add_comment(format!("Outgoing: {}", warning)),
-                                    }
-                                    match check(&r_chunk.bytes) {
-                                        Ok(peer_id) => cn.set_peer_id(peer_id),
-                                        Err(warning) => cn.add_comment(format!("Incoming: {}", warning)),
-                                    }
-                                    Either::Right(HandshakeOutput {
-                                        cn,
-                                        local: HandshakeDone::HaveKey(ls),
-                                        l_chunk,
-                                        remote: HandshakeDone::HaveKey(rs),
-                                        r_chunk,
-                                    })
-                                },
-                                Err(((ls, l_chunk), (rs, r_chunk), error)) => {
-                                    cn.add_comment(format!("Key calculate error: {}", error));
-                                    Either::Right(HandshakeOutput {
-                                        cn,
-                                        local: HandshakeDone::HaveNotKey(ls),
-                                        l_chunk,
-                                        remote: HandshakeDone::HaveNotKey(rs),
-                                        r_chunk,
-                                    })
-                                },
-                            }
-                        },
+                        Either::Right(l) => Either::Right(l.make_key(r, &id, cn).into()),
                     }
                 }
             },
@@ -206,6 +122,18 @@ where
     HaveKey(HaveKey<S>),
     HaveNotKey(HaveNotKey<S>),
     CannotDecrypt(CannotDecrypt<S>),
+}
+
+impl<S> From<Result<HaveKey<S>, HaveNotKey<S>>> for HandshakeDone<S>
+where
+    S: Bit,
+{
+    fn from(v: Result<HaveKey<S>, HaveNotKey<S>>) -> Self {
+        match v {
+            Ok(x) => HandshakeDone::HaveKey(x),
+            Err(x) => HandshakeDone::HaveNotKey(x),
+        }
+    }
 }
 
 impl<S> HandshakeDone<S>

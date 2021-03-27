@@ -25,7 +25,7 @@ impl Keys {
         identity: &Identity,
         local: &[u8],
         remote: &[u8],
-        initiator: &Initiator,
+        initiator: Initiator,
     ) -> Result<Self, CryptoError> {
         use crypto::crypto_box::CryptoKey;
 
