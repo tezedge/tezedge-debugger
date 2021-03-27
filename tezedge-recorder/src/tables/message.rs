@@ -4,7 +4,10 @@
 use std::{net::SocketAddr, ops::Range, convert::TryFrom};
 use serde::{Serialize, Deserialize};
 use storage::persistent::{KeyValueSchema, BincodeEncoded};
-use super::common::{Initiator, Sender, MessageCategory, MessageKind};
+use super::{
+    common::{Initiator, Sender, MessageCategory, MessageKind},
+    connection,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
@@ -112,26 +115,16 @@ impl MessageBuilder {
 impl MessageBuilderFull {
     pub fn build(
         self,
-        connection_id: u128,
+        sender: &Sender,
+        connection: &connection::Item,
         timestamp: u128,
-        remote_addr: SocketAddr,
-        source_remote: bool,
-        incoming: bool,
     ) -> Item {
         Item {
-            connection_id,
+            connection_id: connection.id,
             timestamp,
-            remote_addr,
-            initiator: if source_remote {
-                Initiator::Remote
-            } else {
-                Initiator::Local
-            },
-            sender: if incoming {
-                Sender::Remote
-            } else {
-                Sender::Local
-            },
+            remote_addr: connection.remote_addr,
+            initiator: connection.initiator.clone(),
+            sender: sender.clone(),
             category: self.0.category,
             kind: self.0.kind,
             chunks: self.0.chunks,

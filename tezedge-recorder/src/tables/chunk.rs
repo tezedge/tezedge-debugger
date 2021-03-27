@@ -9,10 +9,10 @@ use super::common::Sender;
 #[derive(Clone)]
 pub struct Item {
     connection_id: u128,
-    sender: Sender,
-    counter: u64,
+    pub sender: Sender,
+    pub counter: u64,
     pub bytes: Vec<u8>,
-    plain: Vec<u8>,
+    pub plain: Vec<u8>,
 }
 
 impl Item {
