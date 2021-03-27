@@ -113,12 +113,7 @@ impl MessageBuilder {
 }
 
 impl MessageBuilderFull {
-    pub fn build(
-        self,
-        sender: &Sender,
-        connection: &connection::Item,
-        timestamp: u128,
-    ) -> Item {
+    pub fn build(self, sender: &Sender, connection: &connection::Item, timestamp: u128) -> Item {
         Item {
             connection_id: connection.id,
             timestamp,

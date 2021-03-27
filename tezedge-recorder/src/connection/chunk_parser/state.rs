@@ -14,10 +14,7 @@ use super::{
     Identity,
 };
 
-struct Inner<S>
-where
-    S: Bit,
-{
+struct Inner<S> {
     connection_id: u128,
     buffer: Buffer,
     incoming: PhantomData<S>,
@@ -28,7 +25,13 @@ where
     S: Bit,
 {
     fn chunk(&self, counter: u64, bytes: Vec<u8>, plain: Vec<u8>) -> chunk::Item {
-        chunk::Item::new(self.connection_id, Sender::new(S::BOOL), counter, bytes, plain)
+        chunk::Item::new(
+            self.connection_id,
+            Sender::new(S::BOOL),
+            counter,
+            bytes,
+            plain,
+        )
     }
 }
 
@@ -41,10 +44,7 @@ where
 ///                         CannotDecrypt   HaveKey   HaveData
 ///                       CannotDecrypt
 
-pub struct Initial<S>
-where
-    S: Bit,
-{
+pub struct Initial<S> {
     inner: Inner<S>,
 }
 
@@ -55,34 +55,22 @@ where
     inner: Inner<S>,
 }
 
-pub struct HaveKey<S>
-where
-    S: Bit,
-{
+pub struct HaveKey<S> {
     inner: Inner<S>,
     key: Key,
 }
 
-pub struct HaveNotKey<S>
-where
-    S: Bit,
-{
+pub struct HaveNotKey<S> {
     inner: Inner<S>,
 }
 
-pub struct HaveData<S>
-where
-    S: Bit,
-{
+pub struct HaveData<S> {
     inner: Inner<S>,
     key: Key,
     error: bool,
 }
 
-pub struct CannotDecrypt<S>
-where
-    S: Bit,
-{
+pub struct CannotDecrypt<S> {
     inner: Inner<S>,
 }
 
@@ -96,7 +84,7 @@ where
                 connection_id,
                 buffer: Buffer::default(),
                 incoming: PhantomData,
-            },    
+            },
         }
     }
 
@@ -143,12 +131,7 @@ where
     fn have_not_key(mut self) -> (HaveNotKey<S>, chunk::Item) {
         let (counter, bytes) = self.inner.buffer.cleanup();
         let c = self.inner.chunk(counter, bytes, Vec::new());
-        (
-            HaveNotKey {
-                inner: self.inner,
-            },
-            c,
-        )
+        (HaveNotKey { inner: self.inner }, c)
     }
 }
 
@@ -204,8 +187,10 @@ impl HaveCm<Local> {
                 let (l, l_chunk) = self.have_key(local);
                 let (r, r_chunk) = peer.have_key(remote);
                 match check(&l_chunk.bytes) {
-                    Ok(peer_id) => if peer_id != identity.peer_id {
-                        cn.add_comment("local peer id does not match".to_string())
+                    Ok(peer_id) => {
+                        if peer_id != identity.peer_id {
+                            cn.add_comment("local peer id does not match".to_string())
+                        }
                     },
                     Err(warning) => cn.add_comment(format!("Outgoing: {}", warning)),
                 }
@@ -213,13 +198,25 @@ impl HaveCm<Local> {
                     Ok(peer_id) => cn.set_peer_id(peer_id),
                     Err(warning) => cn.add_comment(format!("Incoming: {}", warning)),
                 }
-                MakeKeyOutput { cn, local: Ok(l), l_chunk, remote: Ok(r), r_chunk }
+                MakeKeyOutput {
+                    cn,
+                    local: Ok(l),
+                    l_chunk,
+                    remote: Ok(r),
+                    r_chunk,
+                }
             },
             Err(error) => {
                 let (l, l_chunk) = self.have_not_key();
                 let (r, r_chunk) = peer.have_not_key();
                 cn.add_comment(format!("Key calculate error: {}", error));
-                MakeKeyOutput { cn, local: Err(l), l_chunk, remote: Err(r), r_chunk }
+                MakeKeyOutput {
+                    cn,
+                    local: Err(l),
+                    l_chunk,
+                    remote: Err(r),
+                    r_chunk,
+                }
             },
         }
     }
@@ -263,13 +260,16 @@ where
         let _ = self.inner.buffer.have_chunk()?;
         let (counter, bytes) = self.inner.buffer.next().unwrap();
         match self.key.decrypt(&bytes) {
-            Ok(plain) => {
-                Some(self.inner.chunk(counter, bytes, plain))
-            },
+            Ok(plain) => Some(self.inner.chunk(counter, bytes, plain)),
             Err(_) => {
                 self.error = true;
                 let id = self.inner.connection_id;
-                log::warn!("cannot decrypt: {}, {}, {:?}", id, counter, Sender::new(S::BOOL));
+                log::warn!(
+                    "cannot decrypt: {}, {}, {:?}",
+                    id,
+                    counter,
+                    Sender::new(S::BOOL)
+                );
                 let (counter, bytes) = self.inner.buffer.cleanup();
                 Some(self.inner.chunk(counter, bytes, Vec::new()))
             },
@@ -283,9 +283,7 @@ where
 {
     pub fn over(self) -> Result<HaveKey<S>, CannotDecrypt<S>> {
         if self.error {
-            Err(CannotDecrypt {
-                inner: self.inner,
-            })
+            Err(CannotDecrypt { inner: self.inner })
         } else {
             Ok(HaveKey {
                 inner: self.inner,

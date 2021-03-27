@@ -39,17 +39,15 @@ impl Keys {
         let pk = CryptoKey::from_bytes(&remote[4..36])?;
         let sk = CryptoKey::from_bytes(&identity.secret_key)?;
 
-        let NoncePair { local, remote } = generate_nonces(local, remote, initiator.incoming()).unwrap();
+        let NoncePair { local, remote } =
+            generate_nonces(local, remote, initiator.incoming()).unwrap();
         let key = PrecomputedKey::precompute(&pk, &sk);
         Ok(Keys {
             local: Key {
                 key: key.clone(),
                 nonce: local,
             },
-            remote: Key {
-                key,
-                nonce: remote,
-            },
+            remote: Key { key, nonce: remote },
         })
     }
 }

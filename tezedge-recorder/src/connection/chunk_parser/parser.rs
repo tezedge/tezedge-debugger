@@ -41,7 +41,12 @@ impl Handshake {
     pub fn new(cn: connection::Item, id: Identity) -> Self {
         let local = Either::Left(Initial::new(cn.id));
         let remote = Either::Left(Initial::new(cn.id));
-        Handshake { cn, id, local, remote }
+        Handshake {
+            cn,
+            id,
+            local,
+            remote,
+        }
     }
 
     fn initial(cn: connection::Item, id: Identity, l: Initial<Local>, r: Initial<Remote>) -> Self {
@@ -71,13 +76,14 @@ impl Handshake {
         }
     }
 
-    pub fn handle_data(
-        self,
-        payload: &[u8],
-        incoming: bool,
-    ) -> Either<Self, HandshakeOutput> {
+    pub fn handle_data(self, payload: &[u8], incoming: bool) -> Either<Self, HandshakeOutput> {
         match self {
-            Handshake { cn, id, local: Either::Left(l), remote: Either::Left(r) } => {
+            Handshake {
+                cn,
+                id,
+                local: Either::Left(l),
+                remote: Either::Left(r),
+            } => {
                 if !incoming {
                     match l.handle_data(payload) {
                         Either::Left(l) => Either::Left(Handshake::initial(cn, id, l, r)),
@@ -90,7 +96,12 @@ impl Handshake {
                     }
                 }
             },
-            Handshake { cn, id, local: Either::Right(l), remote: Either::Left(r) } => {
+            Handshake {
+                cn,
+                id,
+                local: Either::Right(l),
+                remote: Either::Left(r),
+            } => {
                 if !incoming {
                     Either::Left(Handshake::local_cm(cn, id, l.handle_data(payload), r))
                 } else {
@@ -100,7 +111,12 @@ impl Handshake {
                     }
                 }
             },
-            Handshake { cn, id, local: Either::Left(l), remote: Either::Right(r) } => {
+            Handshake {
+                cn,
+                id,
+                local: Either::Left(l),
+                remote: Either::Right(r),
+            } => {
                 if incoming {
                     Either::Left(Handshake::remote_cm(cn, id, l, r.handle_data(payload)))
                 } else {
@@ -110,7 +126,11 @@ impl Handshake {
                     }
                 }
             },
-            Handshake { local: Either::Right(_), remote: Either::Right(_), .. } => panic!(),
+            Handshake {
+                local: Either::Right(_),
+                remote: Either::Right(_),
+                ..
+            } => panic!(),
         }
     }
 }
@@ -162,7 +182,7 @@ where
             HandshakeDone::CannotDecrypt(mut state) => {
                 handler.handle_chunk(state.handle_data(payload));
                 HandshakeDone::CannotDecrypt(state)
-            }
+            },
         }
     }
 }

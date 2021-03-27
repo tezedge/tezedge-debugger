@@ -16,6 +16,7 @@ pub struct Connection<Db> {
     db: Arc<Db>,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum ChunkParser<Db> {
     Invalid,
     Handshake(Handshake),
@@ -53,16 +54,32 @@ where
             ChunkParser::Invalid => ChunkParser::Invalid,
             ChunkParser::Handshake(h) => match h.handle_data(payload, incoming) {
                 Either::Left(h) => ChunkParser::Handshake(h),
-                Either::Right(HandshakeOutput { cn , local, l_chunk, remote, r_chunk }) => {
+                Either::Right(HandshakeOutput {
+                    cn,
+                    local,
+                    l_chunk,
+                    remote,
+                    r_chunk,
+                }) => {
                     let mut local_mp = MessageParser::new(cn.clone(), self.db.clone());
                     let mut remote_mp = MessageParser::new(cn.clone(), self.db.clone());
                     self.db.store_connection(cn);
                     local_mp.handle_chunk(l_chunk);
                     remote_mp.handle_chunk(r_chunk);
-                    ChunkParser::HandshakeDone { local, local_mp, remote, remote_mp }
+                    ChunkParser::HandshakeDone {
+                        local,
+                        local_mp,
+                        remote,
+                        remote_mp,
+                    }
                 },
-            }
-            ChunkParser::HandshakeDone { local, mut local_mp, remote, mut remote_mp } => {
+            },
+            ChunkParser::HandshakeDone {
+                local,
+                mut local_mp,
+                remote,
+                mut remote_mp,
+            } => {
                 if !incoming {
                     ChunkParser::HandshakeDone {
                         local: local.handle_data(payload, &mut local_mp),

@@ -32,7 +32,10 @@ where
     Db: Database,
 {
     fn handle_chunk(&mut self, chunk: chunk::Item) {
-        use std::{time::{SystemTime, UNIX_EPOCH}, convert::TryFrom};
+        use std::{
+            time::{SystemTime, UNIX_EPOCH},
+            convert::TryFrom,
+        };
         use self::message::MessageBuilder;
 
         let sender = &chunk.sender;
@@ -68,7 +71,9 @@ where
                 self.db.store_message(message);
             },
             _ => {
-                let b = self.builder.take()
+                let b = self
+                    .builder
+                    .take()
                     .unwrap_or_else(|| {
                         let six_bytes = <[u8; 6]>::try_from(&chunk.plain[0..6]).unwrap();
                         MessageBuilder::peer_message(six_bytes, chunk.counter)
@@ -76,17 +81,13 @@ where
                     .link_chunk(chunk.plain.len());
                 self.builder = match b {
                     Ok(builder_full) => {
-                        let message = builder_full.build(
-                            &sender,
-                            &self.cn,
-                            timestamp,
-                        );
+                        let message = builder_full.build(&sender, &self.cn, timestamp);
                         self.db.store_message(message);
                         None
                     },
                     Err(b) => Some(b),
                 }
-            }
+            },
         }
     }
 }
