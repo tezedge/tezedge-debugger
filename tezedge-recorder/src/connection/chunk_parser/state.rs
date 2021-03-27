@@ -263,13 +263,7 @@ where
             Ok(plain) => Some(self.inner.chunk(counter, bytes, plain)),
             Err(_) => {
                 self.error = true;
-                let id = self.inner.connection_id;
-                log::warn!(
-                    "cannot decrypt: {}, {}, {:?}",
-                    id,
-                    counter,
-                    Sender::new(S::BOOL)
-                );
+                log::warn!("cannot decrypt: {}, {:?}", counter, Sender::new(S::BOOL));
                 let (counter, bytes) = self.inner.buffer.cleanup();
                 Some(self.inner.chunk(counter, bytes, Vec::new()))
             },

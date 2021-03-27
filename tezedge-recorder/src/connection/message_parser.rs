@@ -10,6 +10,7 @@ use super::{
 
 pub struct MessageParser<Db> {
     builder: Option<message::MessageBuilder>,
+    error: bool,
     cn: connection::Item,
     db: Arc<Db>,
 }
@@ -21,6 +22,7 @@ where
     pub fn new(cn: connection::Item, db: Arc<Db>) -> Self {
         MessageParser {
             builder: None,
+            error: false,
             cn,
             db,
         }
@@ -37,6 +39,21 @@ where
             convert::TryFrom,
         };
         use self::message::MessageBuilder;
+
+        let too_small = match chunk.counter {
+            0 => chunk.plain.len() < 82,
+            1 => chunk.plain.len() < 2,
+            2 => chunk.plain.is_empty(),
+            _ => chunk.plain.len() < 6,
+        };
+
+        if self.error || too_small {
+            if !self.error {
+                log::warn!("cannot parse message, connection: {:?}", self.cn);
+            }
+            self.error = true;
+            return;
+        }
 
         let sender = &chunk.sender;
 
