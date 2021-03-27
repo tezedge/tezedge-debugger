@@ -1,53 +1,29 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, sync::Arc, convert::TryFrom};
-use anyhow::Result;
-use thiserror::Error;
-use crypto::{CryptoError, proof_of_work, blake2b::Blake2bError, hash::FromBytesError};
+use std::{net::SocketAddr, sync::Arc};
+use either::Either;
 use super::{
-    key::Key,
-    chunk_buffer::Buffer,
+    chunk_parser::{Handshake, HandshakeOutput, HandshakeDone},
     Identity, Database,
-    tables::{connection, chunk, message},
+    common::{Local, Remote, Initiator},
+    tables::{connection, message},
 };
 
 pub struct Connection<Db> {
-    incoming: bool,
-    handshake: Handshake,
-    input_state: Buffer,
-    input_bad_counter: u64,
+    chunk_parser: ChunkParser,
     input_message_builder: Option<message::MessageBuilder>,
-    output_state: Buffer,
-    output_bad_counter: u64,
     output_message_builder: Option<message::MessageBuilder>,
-    id: u128,
     db: Arc<Db>,
 }
 
-enum Handshake {
-    Buffering {
-        identity: Identity,
-        db_item: connection::Item,
+enum ChunkParser {
+    Invalid,
+    Handshake(Handshake),
+    HandshakeDone {
+        local: HandshakeDone<Local>,
+        remote: HandshakeDone<Remote>,    
     },
-    HaveKey {
-        connection_id: u128,
-        remote_addr: SocketAddr,
-        key: Key,
-    },
-    Error(CryptoError),
-}
-
-#[derive(Error, Debug)]
-pub enum HandshakeWarning {
-    #[error("connection message is too short {}", _0)]
-    ConnectionMessageTooShort(usize),
-    #[error("proof-of-work check failed")]
-    PowInvalid(f64),
-    #[error("cannot calc peer_id: black2b hashing error {}", _0)]
-    Blake2b(Blake2bError),
-    #[error("cannot calc peer_id: from bytes error {}", _0)]
-    FromBytes(FromBytesError),
 }
 
 impl<Db> Connection<Db>
@@ -57,56 +33,52 @@ where
     pub fn new(remote_addr: SocketAddr, incoming: bool, identity: Identity, db: Arc<Db>) -> Self {
         use std::time::{SystemTime, UNIX_EPOCH};
 
-        let timestamp = SystemTime::now()
+        let connection_id = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let db_item = connection::Item::new(timestamp, incoming, remote_addr);
+        let db_item = connection::Item::new(connection_id, Initiator::new(incoming), remote_addr);
         Connection {
-            incoming,
-            handshake: Handshake::Buffering { identity, db_item },
-            input_state: Buffer::default(),
-            input_bad_counter: 0,
+            chunk_parser: ChunkParser::Handshake(Handshake::new(db_item, identity)),
             input_message_builder: None,
-            output_state: Buffer::default(),
-            output_bad_counter: 0,
             output_message_builder: None,
-            id: timestamp,
             db,
         }
     }
 
-    fn buffer_mut(&mut self, incoming: bool) -> &mut Buffer {
-        if incoming {
-            &mut self.input_state
-        } else {
-            &mut self.output_state
-        }
-    }
-
     pub fn handle_data(&mut self, payload: &[u8], incoming: bool) {
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::{time::{SystemTime, UNIX_EPOCH}, mem};
         use self::message::MessageBuilder;
 
-        let check = |payload: &[u8]| -> Result<String, HandshakeWarning> {
-            use crypto::{blake2b, hash::HashType};
-
-            if payload.len() <= 88 {
-                return Err(HandshakeWarning::ConnectionMessageTooShort(payload.len()));
+        let parser = mem::replace(&mut self.chunk_parser, ChunkParser::Invalid);
+        let parser = match parser {
+            ChunkParser::Invalid => ChunkParser::Invalid,
+            ChunkParser::Handshake(h) => match h.handle_data(payload, incoming) {
+                Either::Left(h) => ChunkParser::Handshake(h),
+                Either::Right(HandshakeOutput { cn , local, l_chunk, remote, r_chunk }) => {
+                    self.db.store_chunk(l_chunk);
+                    self.db.store_chunk(r_chunk);
+                    self.db.store_connection(cn);
+                    ChunkParser::HandshakeDone { local, remote }
+                },
             }
-            // TODO: move to config
-            let target = 26.0;
-            if proof_of_work::check_proof_of_work(&payload[4..60], target).is_err() {
-                return Err(HandshakeWarning::PowInvalid(target));
-            }
-
-            let hash = blake2b::digest_128(&payload[4..36]).map_err(HandshakeWarning::Blake2b)?;
-            HashType::CryptoboxPublicKeyHash
-                .hash_to_b58check(&hash)
-                .map_err(HandshakeWarning::FromBytes)
+            ChunkParser::HandshakeDone { local, remote } => {
+                if !incoming {
+                    ChunkParser::HandshakeDone {
+                        local: local.handle_data(payload, &mut |c| self.db.store_chunk(c)),
+                        remote,
+                    }
+                } else {
+                    ChunkParser::HandshakeDone {
+                        local,
+                        remote: remote.handle_data(payload, &mut |c| self.db.store_chunk(c)),
+                    }
+                }
+            },
         };
+        let _ = mem::replace(&mut self.chunk_parser, parser);
 
-        match &self.handshake {
+        /*match &self.handshake {
             Handshake::Buffering { identity, db_item } => {
                 let identity = identity.clone();
                 let mut db_item = db_item.clone();
@@ -287,19 +259,7 @@ where
                 let c = chunk::Item::new(self.id, counter, incoming, payload.to_vec(), Vec::new());
                 self.db.store_chunk(c);
             },
-        };
-    }
-
-    fn inc_bad_counter(&mut self, incoming: bool) -> u64 {
-        let counter;
-        if incoming {
-            counter = self.input_bad_counter;
-            self.input_bad_counter += 1;
-        } else {
-            counter = self.output_bad_counter;
-            self.output_bad_counter += 1;
-        };
-        counter
+        };*/
     }
 
     pub fn join(self) {}

@@ -9,21 +9,17 @@ use super::common::Initiator;
 #[derive(Debug, Clone, Serialize)]
 pub struct Item {
     pub id: u128,
-    initiator: Initiator,
+    pub initiator: Initiator,
     pub remote_addr: SocketAddr,
     peer_id: Option<String>,
     comments: Vec<String>,
 }
 
 impl Item {
-    pub fn new(id: u128, incoming: bool, remote_addr: SocketAddr) -> Self {
+    pub fn new(id: u128, initiator: Initiator, remote_addr: SocketAddr) -> Self {
         Item {
             id,
-            initiator: if incoming {
-                Initiator::Remote
-            } else {
-                Initiator::Local
-            },
+            initiator,
             remote_addr,
             peer_id: None,
             comments: Vec::new(),

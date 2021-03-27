@@ -3,6 +3,7 @@
 
 #![forbid(unsafe_code)]
 
+mod common;
 pub mod tables;
 
 mod system;

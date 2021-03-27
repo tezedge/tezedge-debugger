@@ -3075,6 +3075,7 @@ dependencies = [
  "bpf-common",
  "crypto 1.1.4",
  "ctrlc",
+ "either",
  "hex",
  "jemallocator",
  "log",
@@ -3086,6 +3087,7 @@ dependencies = [
  "thiserror",
  "tokio 1.4.0",
  "toml",
+ "typenum",
  "warp",
 ]
 

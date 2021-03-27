@@ -9,28 +9,24 @@ use super::common::Sender;
 #[derive(Clone)]
 pub struct Item {
     connection_id: u128,
-    number: u64,
     sender: Sender,
-    bytes: Vec<u8>,
+    counter: u64,
+    pub bytes: Vec<u8>,
     plain: Vec<u8>,
 }
 
 impl Item {
     pub fn new(
         connection_id: u128,
-        number: u64,
-        incoming: bool,
+        sender: Sender,
+        counter: u64,
         bytes: Vec<u8>,
         plain: Vec<u8>,
     ) -> Self {
         Item {
             connection_id,
-            number,
-            sender: if incoming {
-                Sender::Remote
-            } else {
-                Sender::Local
-            },
+            sender,
+            counter,
             bytes,
             plain,
         }
@@ -38,8 +34,8 @@ impl Item {
 
     #[rustfmt::skip]
     pub fn split(self) -> (Key, Value) {
-        let Item { connection_id, number, sender, bytes, plain } = self;
-        (Key { connection_id, number, sender }, Value { bytes, plain })
+        let Item { connection_id, counter, sender, bytes, plain } = self;
+        (Key { connection_id, counter, sender }, Value { bytes, plain })
     }
 }
 
@@ -47,8 +43,8 @@ impl fmt::Debug for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Item")
             .field("connection_id", &self.connection_id)
-            .field("number", &self.number)
             .field("sender", &self.sender)
+            .field("counter", &self.counter)
             .field("bytes", &hex::encode(&self.bytes))
             .field("plain", &hex::encode(&self.plain))
             .finish()
@@ -58,7 +54,7 @@ impl fmt::Debug for Item {
 #[derive(Serialize, Deserialize)]
 pub struct Key {
     connection_id: u128,
-    number: u64,
+    counter: u64,
     sender: Sender,
 }
 

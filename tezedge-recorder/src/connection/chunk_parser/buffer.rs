@@ -17,19 +17,39 @@ impl Default for Buffer {
 
 impl Buffer {
     pub fn handle_data(&mut self, payload: &[u8]) {
-        assert!(self.buffer.len() <= 0x10000);
+        if self.have_chunk().is_some() {
+            log::warn!(
+                "append new data while not consumed chunk, buffer len: {}, counter: {}",
+                self.buffer.len(),
+                self.counter,
+            );
+        }
         self.buffer.extend_from_slice(payload);
     }
 
-    fn len(&self) -> Option<usize> {
-        if self.buffer.len() < 2 {
-            return None;
-        }
-        Some((self.buffer[0] as usize) * 256 + (self.buffer[1] as usize))
+    pub fn remaining(&self) -> usize {
+        self.buffer.len()
     }
 
-    pub fn have_chunk(&self) -> bool {
-        self.buffer.len() >= 2 + self.len().unwrap_or(0)
+    // length (including 2 bytes header) of the chunk at offset
+    fn len(&self, offset: usize) -> Option<usize> {
+        use std::convert::TryFrom;
+
+        if self.buffer.len() >= offset + 2 {
+            let b = <[u8; 2]>::try_from(&self.buffer[offset..2]).unwrap();
+            Some(u16::from_be_bytes(b) as usize + 2)
+        } else {
+            None
+        }
+    }
+
+    pub fn have_chunk(&self) -> Option<&[u8]> {
+        let len = self.len(0)?;
+        if self.buffer.len() >= len {
+            Some(&self.buffer[..len])
+        } else {
+            None
+        }
     }
 
     pub fn cleanup(&mut self) -> (u64, Vec<u8>) {
@@ -45,7 +65,7 @@ impl Iterator for Buffer {
     type Item = (u64, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let len = self.len()? + 2;
+        let len = self.len(0)?;
         if self.buffer.len() < len {
             None
         } else {

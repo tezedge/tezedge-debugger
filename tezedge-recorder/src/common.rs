@@ -3,6 +3,9 @@
 
 use serde::{Serialize, Deserialize};
 
+pub type Local = typenum::B0;
+pub type Remote = typenum::B1;
+
 /// Determines, if message belongs to communication originated
 /// from remote or local node
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -10,6 +13,23 @@ use serde::{Serialize, Deserialize};
 pub enum Initiator {
     Local,
     Remote,
+}
+
+impl Initiator {
+    pub fn new(incoming: bool) -> Self {
+        if incoming {
+            Initiator::Remote
+        } else {
+            Initiator::Local
+        }
+    }
+
+    pub fn incoming(&self) -> bool {
+        match self {
+            Initiator::Local => false,
+            Initiator::Remote => true,
+        }
+    }
 }
 
 /// Determines, if message itself originated
@@ -22,6 +42,14 @@ pub enum Sender {
 }
 
 impl Sender {
+    pub fn new(incoming: bool) -> Self {
+        if incoming {
+            Sender::Remote
+        } else {
+            Sender::Local
+        }
+    }
+
     pub fn incoming(&self) -> bool {
         match self {
             Sender::Local => false,

@@ -49,6 +49,7 @@
         "reqwest",
         "ringbuf",
         "rocksdb",
+        "rustfmt",
         "sendmsg",
         "sendto",
         "simplestakingcom",
