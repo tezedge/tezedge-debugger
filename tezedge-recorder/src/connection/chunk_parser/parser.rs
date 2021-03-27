@@ -39,8 +39,8 @@ impl From<MakeKeyOutput> for HandshakeOutput {
 
 impl Handshake {
     pub fn new(cn: connection::Item, id: Identity) -> Self {
-        let local = Either::Left(Initial::new(cn.id));
-        let remote = Either::Left(Initial::new(cn.id));
+        let local = Either::Left(Initial::new(cn.clone()));
+        let remote = Either::Left(Initial::new(cn.clone()));
         Handshake {
             cn,
             id,

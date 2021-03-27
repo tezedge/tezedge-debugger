@@ -15,7 +15,7 @@ use super::{
 };
 
 struct Inner<S> {
-    connection_id: u128,
+    cn: connection::Item,
     buffer: Buffer,
     incoming: PhantomData<S>,
 }
@@ -26,12 +26,16 @@ where
 {
     fn chunk(&self, counter: u64, bytes: Vec<u8>, plain: Vec<u8>) -> chunk::Item {
         chunk::Item::new(
-            self.connection_id,
+            self.cn.id,
             Sender::new(S::BOOL),
             counter,
             bytes,
             plain,
         )
+    }
+
+    pub fn handle_data(&mut self, payload: &[u8]) {
+        self.buffer.handle_data(payload, &self.cn);
     }
 }
 
@@ -78,10 +82,10 @@ impl<S> Initial<S>
 where
     S: Bit,
 {
-    pub fn new(connection_id: u128) -> Self {
+    pub fn new(cn: connection::Item) -> Self {
         Initial {
             inner: Inner {
-                connection_id,
+                cn,
                 buffer: Buffer::default(),
                 incoming: PhantomData,
             },
@@ -89,7 +93,7 @@ where
     }
 
     pub fn handle_data(mut self, payload: &[u8]) -> Either<Self, HaveCm<S>> {
-        self.inner.buffer.handle_data(payload);
+        self.inner.handle_data(payload);
         if self.inner.buffer.have_chunk().is_some() {
             Either::Right(HaveCm { inner: self.inner })
         } else {
@@ -104,7 +108,7 @@ where
 {
     /// Should not need to call
     pub fn handle_data(mut self, payload: &[u8]) -> Self {
-        self.inner.buffer.handle_data(payload);
+        self.inner.handle_data(payload);
         self
     }
 
@@ -227,7 +231,7 @@ where
     S: Bit,
 {
     pub fn handle_data(&mut self, payload: &[u8]) -> chunk::Item {
-        self.inner.buffer.handle_data(payload);
+        self.inner.handle_data(payload);
         let (counter, bytes) = self.inner.buffer.cleanup();
         self.inner.chunk(counter, bytes, Vec::new())
     }
@@ -238,7 +242,7 @@ where
     S: Bit,
 {
     pub fn handle_data(mut self, payload: &[u8]) -> HaveData<S> {
-        self.inner.buffer.handle_data(payload);
+        self.inner.handle_data(payload);
         HaveData {
             inner: self.inner,
             key: self.key,
@@ -292,7 +296,7 @@ where
     S: Bit,
 {
     pub fn handle_data(&mut self, payload: &[u8]) -> chunk::Item {
-        self.inner.buffer.handle_data(payload);
+        self.inner.handle_data(payload);
         let (counter, bytes) = self.inner.buffer.cleanup();
         self.inner.chunk(counter, bytes, Vec::new())
     }
