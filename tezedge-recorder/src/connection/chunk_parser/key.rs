@@ -30,9 +30,9 @@ impl Keys {
         use crypto::crypto_box::CryptoKey;
 
         // check if the identity belong to one of the parties
-        if local[4..36] != identity.public_key {
+        if identity.public_key.as_ref() != local[4..36].as_ref() {
             return Err(CryptoError::InvalidKey {
-                reason: format!("The communication does not belong to {}", identity.peer_id),
+                reason: format!("The communication does not belong to the local node"),
             });
         };
 

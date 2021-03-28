@@ -4,16 +4,21 @@
 use typenum::Bit;
 use either::Either;
 use super::{
-    state::{Initial, HaveCm, HaveKey, HaveNotKey, CannotDecrypt, MakeKeyOutput},
+    state::{Initial, HaveCm, Broken, HaveKey, HaveNotKey, CannotDecrypt, MakeKeyOutput},
     tables::{connection, chunk},
     common::{Local, Remote},
     Identity,
 };
 
 pub struct Handshake {
-    id: Identity,
-    local: Either<Initial<Local>, HaveCm<Local>>,
-    remote: Either<Initial<Remote>, HaveCm<Remote>>,
+    local: Half<Local>,
+    remote: Half<Remote>,
+}
+
+enum Half<S> {
+    Initial(Initial<S>),
+    HaveCm(HaveCm<S>),
+    Broken(Broken<S>),
 }
 
 pub struct HandshakeOutput {
@@ -38,91 +43,103 @@ impl From<MakeKeyOutput> for HandshakeOutput {
 
 impl Handshake {
     pub fn new(cn: connection::Item, id: Identity) -> Self {
-        let local = Either::Left(Initial::new(cn.clone()));
-        let remote = Either::Left(Initial::new(cn));
+        let local = Half::Initial(Initial::new(cn.clone(), id.clone()));
+        let remote = Half::Initial(Initial::new(cn, id));
         Handshake {
-            id,
             local,
             remote,
         }
     }
 
-    fn initial(id: Identity, l: Initial<Local>, r: Initial<Remote>) -> Self {
+    fn initial(l: Initial<Local>, r: Initial<Remote>) -> Self {
         Handshake {
-            id,
-            local: Either::Left(l),
-            remote: Either::Left(r),
+            local: Half::Initial(l),
+            remote: Half::Initial(r),
         }
     }
 
-    fn local_cm(id: Identity, l: HaveCm<Local>, r: Initial<Remote>) -> Self {
+    fn local_cm(l: HaveCm<Local>, r: Initial<Remote>) -> Self {
         Handshake {
-            id,
-            local: Either::Right(l),
-            remote: Either::Left(r),
+            local: Half::HaveCm(l),
+            remote: Half::Initial(r),
         }
     }
 
-    fn remote_cm(id: Identity, l: Initial<Local>, r: HaveCm<Remote>) -> Self {
+    fn remote_cm(l: Initial<Local>, r: HaveCm<Remote>) -> Self {
         Handshake {
-            id,
-            local: Either::Left(l),
-            remote: Either::Right(r),
+            local: Half::Initial(l),
+            remote: Half::HaveCm(r),
+        }
+    }
+
+    fn broken(l: Broken<Local>, r: Broken<Remote>) -> Self {
+        Handshake {
+            local: Half::Broken(l),
+            remote: Half::Broken(r),
         }
     }
 
     pub fn handle_data(self, payload: &[u8], incoming: bool) -> Either<Self, HandshakeOutput> {
         match self {
             Handshake {
-                id,
-                local: Either::Left(l),
-                remote: Either::Left(r),
+                local: Half::Initial(l),
+                remote: Half::Initial(r),
             } => {
                 if !incoming {
                     match l.handle_data(payload) {
-                        Either::Left(l) => Either::Left(Handshake::initial(id, l, r)),
-                        Either::Right(l) => Either::Left(Handshake::local_cm(id, l, r)),
+                        Either::Left(l) => Either::Left(Handshake::initial(l, r)),
+                        Either::Right(l) => Either::Left(Handshake::local_cm(l, r)),
                     }
                 } else {
                     match r.handle_data(payload) {
-                        Either::Left(r) => Either::Left(Handshake::initial(id, l, r)),
-                        Either::Right(r) => Either::Left(Handshake::remote_cm(id, l, r)),
+                        Either::Left(r) => Either::Left(Handshake::initial(l, r)),
+                        Either::Right(r) => Either::Left(Handshake::remote_cm(l, r)),
                     }
                 }
             },
             Handshake {
-                id,
-                local: Either::Right(l),
-                remote: Either::Left(r),
+                local: Half::HaveCm(l),
+                remote: Half::Initial(r),
             } => {
                 if !incoming {
-                    Either::Left(Handshake::local_cm(id, l.handle_data(payload), r))
+                    match l.handle_data(payload) {
+                        Ok(l) => Either::Left(Handshake::local_cm(l, r)),
+                        Err(l) => Either::Left(Handshake::broken(l, r.broken())),
+                    }
                 } else {
                     match r.handle_data(payload) {
-                        Either::Left(r) => Either::Left(Handshake::local_cm(id, l, r)),
-                        Either::Right(r) => Either::Right(l.make_key(r, &id).into()),
+                        Either::Left(r) => Either::Left(Handshake::local_cm(l, r)),
+                        Either::Right(r) => Either::Right(l.make_key(r).into()),
                     }
                 }
             },
             Handshake {
-                id,
-                local: Either::Left(l),
-                remote: Either::Right(r),
+                local: Half::Initial(l),
+                remote: Half::HaveCm(r),
             } => {
                 if incoming {
-                    Either::Left(Handshake::remote_cm(id, l, r.handle_data(payload)))
+                    match r.handle_data(payload) {
+                        Ok(r) => Either::Left(Handshake::remote_cm(l, r)),
+                        Err(r) => Either::Left(Handshake::broken(l.broken(), r)),
+                    }
                 } else {
                     match l.handle_data(payload) {
-                        Either::Left(l) => Either::Left(Handshake::remote_cm(id, l, r)),
-                        Either::Right(l) => Either::Right(l.make_key(r, &id).into()),
+                        Either::Left(l) => Either::Left(Handshake::remote_cm(l, r)),
+                        Either::Right(l) => Either::Right(l.make_key(r).into()),
                     }
                 }
             },
             Handshake {
-                local: Either::Right(_),
-                remote: Either::Right(_),
-                ..
-            } => panic!(),
+                local: Half::Broken(l),
+                remote: Half::Broken(r),
+            } => {
+                if !incoming {
+                    Either::Left(Handshake::broken(l.handle_data(payload), r))
+                } else {
+                    Either::Left(Handshake::broken(l, r.handle_data(payload)))
+                }
+            },
+            _ => panic!(),
         }
     }
 }

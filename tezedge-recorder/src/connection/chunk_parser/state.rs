@@ -17,6 +17,7 @@ use super::{
 
 struct Inner<S> {
     cn: connection::Item,
+    id: Identity,
     buffer: Buffer,
     incoming: PhantomData<S>,
 }
@@ -42,12 +43,12 @@ where
 
 /// State machine:
 ///
-///               Handshake
-///     Handshake             HaveCm
-///                 HaveNotKey      HaveKey
-///            HaveNotKey                  HaveData
+///                  Handshake
+///     Handshake                         HaveCm           Broken
+///                     HaveNotKey         HaveKey         Broken
+///               HaveNotKey               HaveData
 ///                         CannotDecrypt   HaveKey   HaveData
-///                       CannotDecrypt
+///                           CannotDecrypt
 
 pub struct Initial<S> {
     inner: Inner<S>,
@@ -55,7 +56,10 @@ pub struct Initial<S> {
 
 pub struct HaveCm<S> {
     inner: Inner<S>,
-    dump: Option<Dump>,
+}
+
+pub struct Broken<S> {
+    dump: Dump<S>,
 }
 
 pub struct HaveKey<S> {
@@ -81,20 +85,29 @@ impl<S> Initial<S>
 where
     S: Bit,
 {
-    pub fn new(cn: connection::Item) -> Self {
+    pub fn new(cn: connection::Item, id: Identity) -> Self {
         Initial {
             inner: Inner {
                 cn,
+                id,
                 buffer: Buffer::default(),
                 incoming: PhantomData,
             },
         }
     }
 
+    pub fn broken(mut self) -> Broken<S> {
+        let mut dump = Dump::new(self.inner.cn.clone());
+        let (_, data) = self.inner.buffer.cleanup();
+        dump.write(&data);
+
+        Broken { dump }
+    }
+
     pub fn handle_data(mut self, payload: &[u8]) -> Either<Self, HaveCm<S>> {
         self.inner.handle_data(payload);
         if self.inner.buffer.have_chunk().is_some() {
-            Either::Right(HaveCm { inner: self.inner, dump: None })
+            Either::Right(HaveCm { inner: self.inner })
         } else {
             Either::Left(self)
         }
@@ -105,22 +118,23 @@ impl<S> HaveCm<S>
 where
     S: Bit,
 {
-    /// Should not need to call
-    pub fn handle_data(mut self, payload: &[u8]) -> Self {
-        // 1 MiB
-        if self.inner.buffer.remaining() > 0x100000 && self.dump.is_none() {
-            let mut dump = Dump::new(self.inner.cn.clone());
-            let (_, data) = self.inner.buffer.cleanup();
-            dump.write(&data);
-            self.dump = Some(dump);
-        }
+    pub fn broken(mut self) -> Broken<S> {
+        let mut dump = Dump::new(self.inner.cn.clone());
+        let (_, data) = self.inner.buffer.cleanup();
+        dump.write(&data);
 
-        if let Some(dump) = &mut self.dump {
-            dump.write(payload);
+        Broken { dump }
+    }
+
+    /// Should not need to call
+    pub fn handle_data(mut self, payload: &[u8]) -> Result<Self, Broken<S>> {
+        // 1 MiB
+        if self.inner.buffer.remaining() > 0x100000 {
+            Err(self.broken())
         } else {
             self.inner.handle_data(payload);
+            Ok(self)
         }
-        self
     }
 
     fn have_key(mut self, key: Key) -> (HaveKey<S>, chunk::Item) {
@@ -150,6 +164,16 @@ where
     }
 }
 
+impl<S> Broken<S>
+where
+    S: Bit,
+{
+    pub fn handle_data(mut self, payload: &[u8]) -> Self {
+        self.dump.write(payload);
+        self
+    }
+}
+
 pub struct MakeKeyOutput {
     pub cn: connection::Item,
     pub local: Result<HaveKey<Local>, HaveNotKey<Local>>,
@@ -159,11 +183,7 @@ pub struct MakeKeyOutput {
 }
 
 impl HaveCm<Local> {
-    pub fn make_key(
-        self,
-        peer: HaveCm<Remote>,
-        identity: &Identity,
-    ) -> MakeKeyOutput {
+    pub fn make_key(self, peer: HaveCm<Remote>) -> MakeKeyOutput {
         #[derive(Error, Debug)]
         pub enum HandshakeWarning {
             #[error("connection message is too short {}", _0)]
@@ -197,16 +217,13 @@ impl HaveCm<Local> {
         let local_chunk = self.inner.buffer.have_chunk().unwrap();
         let remote_chunk = peer.inner.buffer.have_chunk().unwrap();
         let mut cn = self.inner.cn.clone();
+        let identity = &self.inner.id;
         match Keys::new(identity, local_chunk, remote_chunk, self.inner.cn.initiator.clone()) {
             Ok(Keys { local, remote }) => {
                 let (l, l_chunk) = self.have_key(local);
                 let (r, r_chunk) = peer.have_key(remote);
                 match check(&l_chunk.bytes) {
-                    Ok(peer_id) => {
-                        if peer_id != identity.peer_id {
-                            cn.add_comment("local peer id does not match".to_string())
-                        }
-                    },
+                    Ok(_) => (),
                     Err(warning) => cn.add_comment(format!("Outgoing: {}", warning)),
                 }
                 match check(&r_chunk.bytes) {

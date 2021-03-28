@@ -27,9 +27,8 @@ struct Config {
 
 #[derive(Clone)]
 pub struct Identity {
-    pub peer_id: String,
-    pub public_key: Vec<u8>,
-    pub secret_key: Vec<u8>,
+    pub public_key: Box<[u8]>,
+    pub secret_key: Box<[u8]>,
 }
 
 pub struct NodeInfo<Db> {
@@ -52,6 +51,7 @@ where
 
         #[derive(Deserialize)]
         pub struct Inner {
+            #[allow(dead_code)]
             peer_id: String,
             public_key: String,
             secret_key: String,
@@ -61,16 +61,14 @@ where
 
         let file = File::open(identity_path)?;
         let Inner {
-            peer_id,
             public_key,
             secret_key,
             ..
         } = serde_json::from_reader(file)?;
 
         let identity = Identity {
-            peer_id,
-            public_key: hex::decode(public_key)?,
-            secret_key: hex::decode(secret_key)?,
+            public_key: hex::decode(public_key)?.into_boxed_slice(),
+            secret_key: hex::decode(secret_key)?.into_boxed_slice(),
         };
 
         let db = Db::open(db_path)?;
