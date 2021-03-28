@@ -55,12 +55,15 @@ where
             return;
         }
 
-        let sender = &chunk.sender;
+        let mut chunk = chunk;
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
+        chunk.set_timestamp(timestamp);
+
+        let sender = &chunk.sender;
 
         match chunk.counter {
             0 => {

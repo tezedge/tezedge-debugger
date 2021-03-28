@@ -9,7 +9,6 @@ use typenum::{self, Bit};
 use super::{
     buffer::Buffer,
     key::{Keys, Key},
-    dump::Dump,
     tables::{connection, chunk},
     common::{Sender, Local, Remote},
     Identity,
@@ -58,8 +57,8 @@ pub struct HaveCm<S> {
     inner: Inner<S>,
 }
 
-pub struct Broken<S> {
-    dump: Dump<S>,
+pub struct Uncertain<S> {
+    inner: Inner<S>,
 }
 
 pub struct HaveKey<S> {
@@ -96,12 +95,8 @@ where
         }
     }
 
-    pub fn broken(mut self) -> Broken<S> {
-        let mut dump = Dump::new(self.inner.cn.clone());
-        let (_, data) = self.inner.buffer.cleanup();
-        dump.write(&data);
-
-        Broken { dump }
+    pub fn uncertain(self) -> (Uncertain<S>, chunk::Item) {
+        Uncertain::new(self.inner)
     }
 
     pub fn handle_data(mut self, payload: &[u8]) -> Either<Self, HaveCm<S>> {
@@ -118,19 +113,11 @@ impl<S> HaveCm<S>
 where
     S: Bit,
 {
-    pub fn broken(mut self) -> Broken<S> {
-        let mut dump = Dump::new(self.inner.cn.clone());
-        let (_, data) = self.inner.buffer.cleanup();
-        dump.write(&data);
-
-        Broken { dump }
-    }
-
     /// Should not need to call
-    pub fn handle_data(mut self, payload: &[u8]) -> Result<Self, Broken<S>> {
-        // 1 MiB
-        if self.inner.buffer.remaining() > 0x100000 {
-            Err(self.broken())
+    pub fn handle_data(mut self, payload: &[u8]) -> Result<Self, (Uncertain<S>, chunk::Item)> {
+        // 128 kiB
+        if self.inner.buffer.remaining() > 0x20000 {
+            Err(Uncertain::new(self.inner))
         } else {
             self.inner.handle_data(payload);
             Ok(self)
@@ -161,16 +148,6 @@ where
         let (counter, bytes) = self.inner.buffer.cleanup();
         let c = self.inner.chunk(counter, bytes, Vec::new());
         (HaveNotKey { inner: self.inner }, c)
-    }
-}
-
-impl<S> Broken<S>
-where
-    S: Bit,
-{
-    pub fn handle_data(mut self, payload: &[u8]) -> Self {
-        self.dump.write(payload);
-        self
     }
 }
 
@@ -251,6 +228,28 @@ impl HaveCm<Local> {
                 }
             },
         }
+    }
+}
+
+impl<S> Uncertain<S>
+where
+    S: Bit,
+{
+    fn new(mut inner: Inner<S>) -> (Uncertain<S>, chunk::Item) {
+        let (counter, bytes) = inner.buffer.cleanup();
+        let c = inner.chunk(counter, bytes, Vec::new());
+        inner.cn.add_comment("uncertain".to_string());
+        (Uncertain { inner }, c)
+    }
+
+    pub fn handle_data(&mut self, payload: &[u8]) -> chunk::Item {
+        self.inner.handle_data(payload);
+        let (counter, bytes) = self.inner.buffer.cleanup();
+        self.inner.chunk(counter, bytes, Vec::new())
+    }
+
+    pub fn cn(&self) -> connection::Item {
+        self.inner.cn.clone()
     }
 }
 

@@ -11,6 +11,7 @@ pub struct Item {
     connection_id: u128,
     pub sender: Sender,
     pub counter: u64,
+    timestamp: u128,
     pub bytes: Vec<u8>,
     pub plain: Vec<u8>,
 }
@@ -27,15 +28,20 @@ impl Item {
             connection_id,
             sender,
             counter,
+            timestamp: 0,
             bytes,
             plain,
         }
     }
 
+    pub fn set_timestamp(&mut self, timestamp: u128) {
+        self.timestamp = timestamp;
+    }
+
     #[rustfmt::skip]
     pub fn split(self) -> (Key, Value) {
-        let Item { connection_id, counter, sender, bytes, plain } = self;
-        (Key { connection_id, counter, sender }, Value { bytes, plain })
+        let Item { connection_id, counter, sender, timestamp, bytes, plain } = self;
+        (Key { connection_id, counter, sender }, Value { timestamp, bytes, plain })
     }
 }
 
@@ -45,6 +51,7 @@ impl fmt::Debug for Item {
             .field("connection_id", &self.connection_id)
             .field("sender", &self.sender)
             .field("counter", &self.counter)
+            .field("timestamp", &self.timestamp)
             .field("bytes", &hex::encode(&self.bytes))
             .field("plain", &hex::encode(&self.plain))
             .finish()
@@ -62,6 +69,7 @@ impl BincodeEncoded for Key {}
 
 #[derive(Serialize, Deserialize)]
 pub struct Value {
+    timestamp: u128,
     bytes: Vec<u8>,
     plain: Vec<u8>,
 }

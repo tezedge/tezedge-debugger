@@ -4,7 +4,7 @@
 use typenum::Bit;
 use either::Either;
 use super::{
-    state::{Initial, HaveCm, Broken, HaveKey, HaveNotKey, CannotDecrypt, MakeKeyOutput},
+    state::{Initial, HaveCm, Uncertain, HaveKey, HaveNotKey, CannotDecrypt, MakeKeyOutput},
     tables::{connection, chunk},
     common::{Local, Remote},
     Identity,
@@ -18,7 +18,6 @@ pub struct Handshake {
 enum Half<S> {
     Initial(Initial<S>),
     HaveCm(HaveCm<S>),
-    Broken(Broken<S>),
 }
 
 pub struct HandshakeOutput {
@@ -72,13 +71,6 @@ impl Handshake {
         }
     }
 
-    fn broken(l: Broken<Local>, r: Broken<Remote>) -> Self {
-        Handshake {
-            local: Half::Broken(l),
-            remote: Half::Broken(r),
-        }
-    }
-
     pub fn handle_data(self, payload: &[u8], incoming: bool) -> Either<Self, HandshakeOutput> {
         match self {
             Handshake {
@@ -104,7 +96,16 @@ impl Handshake {
                 if !incoming {
                     match l.handle_data(payload) {
                         Ok(l) => Either::Left(Handshake::local_cm(l, r)),
-                        Err(l) => Either::Left(Handshake::broken(l, r.broken())),
+                        Err((l, l_chunk)) => {
+                            let (r, r_chunk) = r.uncertain();
+                            Either::Right(HandshakeOutput {
+                                cn: l.cn(),
+                                local: HandshakeDone::Uncertain(l),
+                                l_chunk,
+                                remote: HandshakeDone::Uncertain(r),
+                                r_chunk,
+                            })
+                        },
                     }
                 } else {
                     match r.handle_data(payload) {
@@ -120,23 +121,22 @@ impl Handshake {
                 if incoming {
                     match r.handle_data(payload) {
                         Ok(r) => Either::Left(Handshake::remote_cm(l, r)),
-                        Err(r) => Either::Left(Handshake::broken(l.broken(), r)),
+                        Err((r, r_chunk)) => {
+                            let (l, l_chunk) = l.uncertain();
+                            Either::Right(HandshakeOutput {
+                                cn: l.cn(),
+                                local: HandshakeDone::Uncertain(l),
+                                l_chunk,
+                                remote: HandshakeDone::Uncertain(r),
+                                r_chunk,
+                            })
+                        },
                     }
                 } else {
                     match l.handle_data(payload) {
                         Either::Left(l) => Either::Left(Handshake::remote_cm(l, r)),
                         Either::Right(l) => Either::Right(l.make_key(r).into()),
                     }
-                }
-            },
-            Handshake {
-                local: Half::Broken(l),
-                remote: Half::Broken(r),
-            } => {
-                if !incoming {
-                    Either::Left(Handshake::broken(l.handle_data(payload), r))
-                } else {
-                    Either::Left(Handshake::broken(l, r.handle_data(payload)))
                 }
             },
             _ => panic!(),
@@ -148,6 +148,7 @@ pub enum HandshakeDone<S>
 where
     S: Bit,
 {
+    Uncertain(Uncertain<S>),
     HaveKey(HaveKey<S>),
     HaveNotKey(HaveNotKey<S>),
     CannotDecrypt(CannotDecrypt<S>),
@@ -174,6 +175,10 @@ where
         H: ChunkHandler,
     {
         match self {
+            HandshakeDone::Uncertain(mut state) => {
+                handler.handle_chunk(state.handle_data(payload));
+                HandshakeDone::Uncertain(state)
+            },
             HandshakeDone::HaveKey(state) => {
                 let mut temp_state = state.handle_data(payload);
                 while let Some(chunk) = temp_state.next() {
