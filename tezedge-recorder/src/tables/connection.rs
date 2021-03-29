@@ -290,6 +290,9 @@ impl Serialize for Value {
         use crypto::{blake2b, hash::HashType};
 
         let calc_peer_id = || -> Result<String, String> {
+            if self.peer_pk == [0; 32] {
+                return Err("unknown".to_string());
+            }
             let hash = blake2b::digest_128(&self.peer_pk).map_err(|e| e.to_string())?;
             HashType::CryptoboxPublicKeyHash
                 .hash_to_b58check(&hash)
