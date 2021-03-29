@@ -291,10 +291,11 @@ impl Serialize for Value {
             Err(s) => s,
         };
 
-        let mut s = serializer.serialize_struct("Connection", 3)?;
+        let mut s = serializer.serialize_struct("Connection", 4)?;
         s.serialize_field("initiator", &self.initiator)?;
         s.serialize_field("remote_addr", &self.remote_addr)?;
         s.serialize_field("peer_id", &peer_id)?;
+        s.serialize_field("comments", &self.comments)?;
         s.end()
     }
 }
