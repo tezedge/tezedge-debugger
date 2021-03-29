@@ -15,10 +15,12 @@ use tezos_messages::p2p::{
         connection::ConnectionMessage,
         metadata::MetadataMessage,
         ack::AckMessage,
+        peer::PeerMessageResponse,
     },
     binary_message::BinaryMessage,
 };
 use crypto::{hash::HashType, blake2b};
+use tezos_encoding::binary_reader::BinaryReaderErrorKind;
 use tezos_conversation::{Identity, Conversation, Packet, ConsumeResult, ChunkMetadata, ChunkInfoPair, Sender};
 use bpf_common::{SocketId, EventId};
 
@@ -61,6 +63,7 @@ struct State {
     chunk_outgoing_counter: usize,
     statistics: ConnectionReport,
     metadata: PeerMetadata,
+    buffer: Vec<u8>,
 }
 
 struct ErrorContext {
@@ -123,6 +126,7 @@ where
                 metadata: None,
             },
             metadata: PeerMetadata::default(),
+            buffer: vec![],
         };
 
         // the local socket identifier is pair (pid, fd), but `Conversation` requires the packet
@@ -371,7 +375,53 @@ impl State {
                     .map(HandshakeMessage::AckMessage)
                     .map(TezosPeerMessage::HandshakeMessage)
                     .map_err(|error| error.to_string()),
-            _ => Ok(TezosPeerMessage::PartialPeerMessage(PartialPeerMessage::Bootstrap)),
+            _ => self.process_peer_message(content, incoming, error_context),
+        }
+    }
+
+    fn process_peer_message(&mut self, content: &[u8], incoming: bool, error_context: DisplayValue<ErrorContext>) -> Result<TezosPeerMessage, String> {
+        if let Ok(r) = PeerMessageResponse::from_bytes(content) {
+            if !self.buffer.is_empty() {
+                // previous chunk (or chunks) contains incomplete message,
+                // but this chunk is not a continuation, but a new message,
+                // should not happen, maybe it is a bug in ocaml node
+                tracing::warn!(
+                    context = error_context,
+                    msg = "incomplete message dropped",
+                );
+                self.statistics.incomplete_dropped_messages += 1;
+                self.buffer.clear();
+            }
+            let m = r.message();
+            let m = m.clone().into();
+            self.metadata.count_message(&m, incoming);
+            return Ok(TezosPeerMessage::PeerMessage(m));
+        }
+
+        self.buffer.extend_from_slice(content);
+        match PeerMessageResponse::from_bytes(self.buffer.as_slice()) {
+            Err(e) => match &e.kind() {
+                &BinaryReaderErrorKind::Underflow { .. } => {
+                    match PartialPeerMessage::from_bytes(self.buffer.as_slice()) {
+                        Some(p) => Ok(TezosPeerMessage::PartialPeerMessage(p)),
+                        None => {
+                            self.buffer.clear();
+                            Err(e.to_string())
+                        },
+                    }
+                },
+                _ => {
+                    self.buffer.clear();
+                    Err(e.to_string())
+                },
+            },
+            Ok(r) => {
+                self.buffer.clear();
+                let m = r.message();
+                let m = m.clone().into();
+                self.metadata.count_message(&m, incoming);
+                return Ok(TezosPeerMessage::PeerMessage(m));
+            },
         }
     }
 }
