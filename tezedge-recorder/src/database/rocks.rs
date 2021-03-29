@@ -8,11 +8,8 @@ use std::{
         atomic::{Ordering, AtomicU64},
     },
 };
-use rocksdb::{Cache, DB};
-use storage::{
-    persistent::{self, DBError, DbConfiguration, KeyValueSchema, KeyValueStoreWithSchema, SchemaError},
-    IteratorMode, Direction,
-};
+use rocksdb::{Cache, DB, ReadOptions};
+use storage::{Direction, IteratorMode, persistent::{self, DBError, DbConfiguration, Decoder, Encoder, KeyValueSchema, KeyValueStoreWithSchema, SchemaError}};
 use thiserror::Error;
 use super::{
     Database, DatabaseNew, DatabaseFetch, ConnectionsFilter, ChunksFilter, MessagesFilter, connection, chunk,
@@ -132,72 +129,54 @@ impl DatabaseFetch for Db {
         Ok(vec)
     }
 
-    fn fetch_chunks(
-        &self,
-        filter: &ChunksFilter,
-    ) -> Result<Vec<(chunk::Key, chunk::Value)>, Self::Error> {
-        let limit = filter.limit.unwrap_or(100) as usize;
-        let mut k = chunk::Key::default();
-        let mode = if let Some(connection_id) = &filter.connection_id {
-            k.cn_id = connection_id.parse()
-                .map_err(|e: connection::KeyFromStrError| {
-                    DBError::SchemaError { error: SchemaError::DecodeValidationError(e.to_string())}
-                })?;
-            IteratorMode::From(&k, Direction::Reverse)
-        } else {
-            IteratorMode::End
-        };
-        let vec = self
-            .as_kv::<chunk::Schema>()
-            .iterator(mode)?
-            .filter_map(|(k, v)| match (k, v) {
-                (Ok(key), Ok(value)) => Some((key, value)),
-                (Ok(index), Err(err)) => {
-                    log::warn!("Failed to load value at {:?}: {}", index, err);
-                    None
-                },
-                (Err(err), _) => {
-                    log::warn!("Failed to load index: {}", err);
-                    None
-                },
-            })
-            .take(limit)
-            .collect();
-        Ok(vec)
-    }
-
     fn fetch_chunks_truncated(
         &self,
         filter: &ChunksFilter,
     ) -> Result<Vec<(chunk::Key, chunk::ValueTruncated)>, Self::Error> {
+        type ItItem = (Result<chunk::Key, SchemaError>, Result<chunk::Value, SchemaError>);
+
+        fn collect_it(
+            it: impl Iterator<Item = ItItem>,
+            limit: usize,
+        ) -> Vec<(chunk::Key, chunk::ValueTruncated)> {
+            it
+                .filter_map(|(k, v)| match (k, v) {
+                    (Ok(key), Ok(value)) => Some((key, chunk::ValueTruncated(value))),
+                    (Ok(index), Err(err)) => {
+                        log::warn!("Failed to load value at {:?}: {}", index, err);
+                        None
+                    },
+                    (Err(err), _) => {
+                        log::warn!("Failed to load index: {}", err);
+                        None
+                    },
+                })
+                .take(limit)
+                .collect()
+        }
+
         let limit = filter.limit.unwrap_or(100) as usize;
-        let mut k = chunk::Key::default();
-        let mode = if let Some(connection_id) = &filter.connection_id {
-            k.cn_id = connection_id.parse()
+        if let Some(connection_id) = &filter.cn {
+            let cn_id = connection_id.parse()
                 .map_err(|e: connection::KeyFromStrError| {
                     DBError::SchemaError { error: SchemaError::DecodeValidationError(e.to_string())}
                 })?;
-            IteratorMode::From(&k, Direction::Reverse)
+            let k = chunk::Key::end(cn_id);
+            let k_bytes = k.encode().map_err(|error| DBError::SchemaError { error })?;
+            let mode = rocksdb::IteratorMode::From(&k_bytes, rocksdb::Direction::Reverse);
+            let mut opts = ReadOptions::default();
+            opts.set_prefix_same_as_start(true);
+            let cf = self.inner.cf_handle(chunk::Schema::name())
+                .ok_or(DBError::MissingColumnFamily { name: chunk::Schema::name() })?;
+            let it = self.inner.iterator_cf_opt(cf, opts, mode)
+                .map(|(k, v)| (chunk::Key::decode(&k), chunk::Value::decode(&v)));
+            Ok(collect_it(it, limit))
         } else {
-            IteratorMode::End
-        };
-        let vec = self
-            .as_kv::<chunk::Schema>()
-            .iterator(mode)?
-            .filter_map(|(k, v)| match (k, v) {
-                (Ok(key), Ok(value)) => Some((key, chunk::ValueTruncated(value))),
-                (Ok(index), Err(err)) => {
-                    log::warn!("Failed to load value at {:?}: {}", index, err);
-                    None
-                },
-                (Err(err), _) => {
-                    log::warn!("Failed to load index: {}", err);
-                    None
-                },
-            })
-            .take(limit)
-            .collect();
-        Ok(vec)
+            let it = self
+                .as_kv::<chunk::Schema>()
+                .iterator(IteratorMode::End)?;
+            Ok(collect_it(it, limit))
+        }
     }
 
     fn fetch_chunk(&self, key: &chunk::Key) -> Result<Option<chunk::Value>, Self::Error> {

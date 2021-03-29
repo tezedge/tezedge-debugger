@@ -21,7 +21,7 @@ pub struct ConnectionsFilter {
 #[derive(Deserialize)]
 pub struct ChunksFilter {
     pub limit: Option<u64>,
-    pub connection_id: Option<String>,
+    pub cn: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -38,11 +38,6 @@ where
         filter: &ConnectionsFilter,
         limit: usize,
     ) -> Result<Vec<(connection::Key, connection::Value)>, Self::Error>;
-
-    fn fetch_chunks(
-        &self,
-        filter: &ChunksFilter,
-    ) -> Result<Vec<(chunk::Key, chunk::Value)>, Self::Error>;
 
     fn fetch_chunks_truncated(
         &self,

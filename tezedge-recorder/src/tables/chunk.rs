@@ -70,6 +70,16 @@ pub struct Key {
     sender: Sender,
 }
 
+impl Key {
+    pub fn end(cn_id: connection::Key) -> Key {
+        Key {
+            cn_id,
+            counter: u64::MAX / 2,
+            sender: Sender::Remote,
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum KeyFromStrError {
     #[error("wrong formatted chunk key")]
