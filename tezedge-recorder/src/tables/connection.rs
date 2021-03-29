@@ -143,6 +143,15 @@ impl Item {
             ts_nanos: self.ts_nanos,
         }
     }
+
+    pub fn value(&self) -> Value {
+        Value {
+            initiator: self.initiator.clone(),
+            remote_addr: self.remote_addr.clone(),
+            peer_pk: self.peer_pk.clone(),
+            comments: self.comments.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone)]

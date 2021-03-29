@@ -242,6 +242,11 @@ where
     fn new(mut inner: Inner<S>) -> (Uncertain<S>, chunk::Item) {
         let (counter, bytes) = inner.buffer.cleanup();
         let c = inner.chunk(counter, bytes, Vec::new());
+        let cn_value = match serde_json::to_string(&inner.cn.value()) {
+            Ok(s) => s,
+            Err(s) => format!("{:?}", s),
+        };
+        log::warn!("uncertain connection: key: {}, value: {}", inner.cn.key(), cn_value);
         if S::BOOL {
             inner.cn.add_comment().incoming_uncertain = true;
         } else {

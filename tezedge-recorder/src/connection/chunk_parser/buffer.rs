@@ -18,7 +18,7 @@ impl Default for Buffer {
 impl Buffer {
     pub fn handle_data(&mut self, payload: &[u8]) {
         if self.have_chunk().is_some() {
-            log::warn!(
+            log::debug!(
                 "append new data while not consumed chunk, buffer len: {}, counter: {}",
                 self.buffer.len(),
                 self.counter,
