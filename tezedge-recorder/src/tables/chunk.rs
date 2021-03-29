@@ -1,7 +1,8 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{fmt, convert::TryFrom};
+use std::{convert::TryFrom, fmt, str::FromStr, num::ParseIntError};
+use thiserror::Error;
 use serde::{Serialize, ser::{self, SerializeStruct}};
 use rocksdb::{Cache, ColumnFamilyDescriptor};
 use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError};
@@ -62,20 +63,58 @@ impl fmt::Debug for Item {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Default, Clone)]
 pub struct Key {
     pub cn_id: connection::Key,
     counter: u64,
     sender: Sender,
 }
 
-impl Key {
-    pub fn from_cn_id(cn_id: connection::Key) -> Self {
-        Key {
+#[derive(Error, Debug)]
+pub enum KeyFromStrError {
+    #[error("wrong formatted chunk key")]
+    ChunkKey,
+    #[error("wrong formatted connection key {}", _0)]
+    ConnectionKey(connection::KeyFromStrError),
+    #[error("cannot parse decimal: {}", _0)]
+    DecimalParse(ParseIntError),
+}
+
+impl FromStr for Key {
+    type Err = KeyFromStrError;
+
+    // format: [connection-key]-[sender]-[counter]
+    // example: 1617005682.953928051-remote-15
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.split('-');
+        let cn_id = parts.next()
+            .ok_or(KeyFromStrError::ChunkKey)?
+            .parse().map_err(KeyFromStrError::ConnectionKey)?;
+        let sender = parts.next()
+            .ok_or(KeyFromStrError::ChunkKey)?;
+        let counter = parts.next()
+            .ok_or(KeyFromStrError::ChunkKey)?
+            .parse().map_err(KeyFromStrError::DecimalParse)?;
+        Ok(Key {
             cn_id,
-            counter: u64::MAX / 2,
-            sender: Sender::Remote,
-        }
+            counter,
+            sender: Sender::new(sender == "remote"),
+        })
+    }
+}
+
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}-{}-{}", self.cn_id, self.sender.to_string(), self.counter)
+    }
+}
+
+impl Serialize for Key {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
     }
 }
 
@@ -147,8 +186,8 @@ impl Serialize for ValueTruncated {
 
         let mut s = serializer.serialize_struct("Chunk", 3)?;
         s.serialize_field("timestamp", &self.0.timestamp)?;
-        s.serialize_field("bytes", &hex::encode(&truncated_hex(&self.0.bytes)))?;
-        s.serialize_field("plain", &hex::encode(&truncated_hex(&self.0.plain)))?;
+        s.serialize_field("bytes", &truncated_hex(&self.0.bytes))?;
+        s.serialize_field("plain", &truncated_hex(&self.0.plain))?;
         s.end()
     }
 }

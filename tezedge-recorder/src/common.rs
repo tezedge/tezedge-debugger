@@ -1,6 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+use std::fmt;
 use serde::{Serialize, Deserialize};
 
 pub type Local = typenum::B0;
@@ -39,6 +40,21 @@ impl Initiator {
 pub enum Sender {
     Local,
     Remote,
+}
+
+impl fmt::Display for Sender {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Sender::Local => write!(f, "local"),
+            Sender::Remote => write!(f, "remote"),
+        }
+    }
+}
+
+impl Default for Sender {
+    fn default() -> Self {
+        Sender::Remote
+    }
 }
 
 impl Sender {

@@ -10,7 +10,7 @@ use std::{
 };
 use rocksdb::{Cache, DB};
 use storage::{
-    persistent::{self, DBError, DbConfiguration, KeyValueSchema, KeyValueStoreWithSchema},
+    persistent::{self, DBError, DbConfiguration, KeyValueSchema, KeyValueStoreWithSchema, SchemaError},
     IteratorMode, Direction,
 };
 use thiserror::Error;
@@ -103,8 +103,13 @@ impl DatabaseFetch for Db {
         filter: &ConnectionsFilter,
         limit: usize,
     ) -> Result<Vec<(connection::Key, connection::Value)>, Self::Error> {
+        let key;
         let mode = if let Some(cursor) = &filter.cursor {
-            IteratorMode::From(cursor, Direction::Reverse)
+            key = cursor.parse()
+                .map_err(|e: connection::KeyFromStrError| {
+                    DBError::SchemaError { error: SchemaError::DecodeValidationError(e.to_string())}
+                })?;
+            IteratorMode::From(&key, Direction::Reverse)
         } else {
             IteratorMode::End
         };
@@ -132,9 +137,12 @@ impl DatabaseFetch for Db {
         filter: &ChunksFilter,
     ) -> Result<Vec<(chunk::Key, chunk::Value)>, Self::Error> {
         let limit = filter.limit.unwrap_or(100) as usize;
-        let mut k = chunk::Key::from_cn_id(connection::Key { ts: 0, ts_nanos: 0 });
-        let mode = if let (Some(ts), Some(ts_nanos)) = (filter.secs, filter.nanos) {
-            k.cn_id = connection::Key { ts, ts_nanos };
+        let mut k = chunk::Key::default();
+        let mode = if let Some(connection_id) = &filter.connection_id {
+            k.cn_id = connection_id.parse()
+                .map_err(|e: connection::KeyFromStrError| {
+                    DBError::SchemaError { error: SchemaError::DecodeValidationError(e.to_string())}
+                })?;
             IteratorMode::From(&k, Direction::Reverse)
         } else {
             IteratorMode::End
@@ -163,9 +171,12 @@ impl DatabaseFetch for Db {
         filter: &ChunksFilter,
     ) -> Result<Vec<(chunk::Key, chunk::ValueTruncated)>, Self::Error> {
         let limit = filter.limit.unwrap_or(100) as usize;
-        let mut k = chunk::Key::from_cn_id(connection::Key { ts: 0, ts_nanos: 0 });
-        let mode = if let (Some(ts), Some(ts_nanos)) = (filter.secs, filter.nanos) {
-            k.cn_id = connection::Key { ts, ts_nanos };
+        let mut k = chunk::Key::default();
+        let mode = if let Some(connection_id) = &filter.connection_id {
+            k.cn_id = connection_id.parse()
+                .map_err(|e: connection::KeyFromStrError| {
+                    DBError::SchemaError { error: SchemaError::DecodeValidationError(e.to_string())}
+                })?;
             IteratorMode::From(&k, Direction::Reverse)
         } else {
             IteratorMode::End
@@ -187,6 +198,10 @@ impl DatabaseFetch for Db {
             .take(limit)
             .collect();
         Ok(vec)
+    }
+
+    fn fetch_chunk(&self, key: &chunk::Key) -> Result<Option<chunk::Value>, Self::Error> {
+        self.as_kv::<chunk::Schema>().get(&key).map_err(Into::into)
     }
 
     fn fetch_messages(

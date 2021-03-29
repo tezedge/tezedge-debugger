@@ -15,14 +15,13 @@ pub trait Database {
 
 #[derive(Deserialize)]
 pub struct ConnectionsFilter {
-    pub cursor: Option<connection::Key>,
+    pub cursor: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct ChunksFilter {
     pub limit: Option<u64>,
-    pub secs: Option<u64>,
-    pub nanos: Option<u32>,
+    pub connection_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -49,6 +48,8 @@ where
         &self,
         filter: &ChunksFilter,
     ) -> Result<Vec<(chunk::Key, chunk::ValueTruncated)>, Self::Error>;
+
+    fn fetch_chunk(&self, key: &chunk::Key) -> Result<Option<chunk::Value>, Self::Error>;
 
     fn fetch_messages(
         &self,

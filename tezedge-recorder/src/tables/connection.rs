@@ -1,8 +1,9 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, convert::TryFrom};
-use serde::{Deserialize, Serialize, ser::{self, SerializeSeq, SerializeStruct}};
+use std::{convert::TryFrom, net::SocketAddr, num::ParseIntError, str::FromStr, fmt};
+use thiserror::Error;
+use serde::{Serialize, ser::{self, SerializeSeq, SerializeStruct}};
 use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError};
 use super::common::Initiator;
 
@@ -144,10 +145,53 @@ impl Item {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone)]
 pub struct Key {
-    pub ts: u64,
-    pub ts_nanos: u32,
+    ts: u64,
+    ts_nanos: u32,
+}
+
+#[derive(Error, Debug)]
+pub enum KeyFromStrError {
+    #[error("wrong formatted connection key")]
+    ConnectionKey,
+    #[error("cannot parse decimal: {}", _0)]
+    DecimalParse(ParseIntError),
+}
+
+impl FromStr for Key {
+    type Err = KeyFromStrError;
+
+    // format: [seconds].[nanos]
+    // example: 1617005682.953928051
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.split('.');
+        let ts = parts.next()
+            .ok_or(KeyFromStrError::ConnectionKey)?
+            .parse().map_err(KeyFromStrError::DecimalParse)?;
+        let ts_nanos = parts.next()
+            .ok_or(KeyFromStrError::ConnectionKey)?
+            .parse().map_err(KeyFromStrError::DecimalParse)?;
+        Ok(Key {
+            ts,
+            ts_nanos,
+        })
+    }
+}
+
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}", self.ts, self.ts_nanos)
+    }
+}
+
+impl Serialize for Key {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
 }
 
 impl Encoder for Key {
