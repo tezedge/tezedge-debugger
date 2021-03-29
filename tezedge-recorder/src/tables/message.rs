@@ -11,8 +11,9 @@ use super::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
-    connection_id: u128,
-    timestamp: u128,
+    cn_ts: u64,
+    cn_ts_nanos: u32,
+    timestamp: u64,
     remote_addr: SocketAddr,
     initiator: Initiator,
     sender: Sender,
@@ -24,7 +25,7 @@ pub struct Item {
 #[derive(Debug, Clone, Serialize)]
 pub struct MessageFrontend {
     id: u64,
-    timestamp: u128,
+    timestamp: u64,
     remote_addr: SocketAddr,
     source_type: Initiator,
     incoming: bool,
@@ -113,9 +114,17 @@ impl MessageBuilder {
 }
 
 impl MessageBuilderFull {
-    pub fn build(self, sender: &Sender, connection: &connection::Item, timestamp: u128) -> Item {
+    pub fn build(self, sender: &Sender, connection: &connection::Item) -> Item {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
         Item {
-            connection_id: connection.id,
+            cn_ts: connection.ts,
+            cn_ts_nanos: connection.ts_nanos,
             timestamp,
             remote_addr: connection.remote_addr,
             initiator: connection.initiator.clone(),

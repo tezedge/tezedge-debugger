@@ -34,10 +34,7 @@ where
     Db: Database,
 {
     fn handle_chunk(&mut self, chunk: chunk::Item) {
-        use std::{
-            time::{SystemTime, UNIX_EPOCH},
-            convert::TryFrom,
-        };
+        use std::convert::TryFrom;
         use self::message::MessageBuilder;
 
         let too_small = match chunk.counter {
@@ -55,14 +52,6 @@ where
             return;
         }
 
-        let mut chunk = chunk;
-
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        chunk.set_timestamp(timestamp);
-
         let sender = &chunk.sender;
 
         match chunk.counter {
@@ -71,7 +60,7 @@ where
                     .link_chunk(chunk.plain.len())
                     .ok()
                     .unwrap()
-                    .build(&sender, &self.cn, timestamp);
+                    .build(&sender, &self.cn);
                 self.db.store_message(message);
             },
             1 => {
@@ -79,7 +68,7 @@ where
                     .link_chunk(chunk.plain.len())
                     .ok()
                     .unwrap()
-                    .build(&sender, &self.cn, timestamp);
+                    .build(&sender, &self.cn);
                 self.db.store_message(message);
             },
             2 => {
@@ -87,7 +76,7 @@ where
                     .link_chunk(chunk.plain.len())
                     .ok()
                     .unwrap()
-                    .build(&sender, &self.cn, timestamp);
+                    .build(&sender, &self.cn);
                 self.db.store_message(message);
             },
             _ => {
@@ -101,7 +90,7 @@ where
                     .link_chunk(chunk.plain.len());
                 self.builder = match b {
                     Ok(builder_full) => {
-                        let message = builder_full.build(&sender, &self.cn, timestamp);
+                        let message = builder_full.build(&sender, &self.cn);
                         self.db.store_message(message);
                         None
                     },
@@ -109,5 +98,7 @@ where
                 }
             },
         }
+
+        self.db.store_chunk(chunk);
     }
 }

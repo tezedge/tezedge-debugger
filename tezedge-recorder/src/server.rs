@@ -4,7 +4,7 @@ use warp::{
     reply::{WithStatus, Json, self},
     http::StatusCode,
 };
-use super::database::{DatabaseFetch, ConnectionsFilter, MessagesFilter};
+use super::database::{DatabaseFetch, ConnectionsFilter, ChunksFilter, MessagesFilter};
 
 fn connections<Db>(
     db: Arc<Db>,
@@ -17,6 +17,25 @@ where
         .map(move |filter: ConnectionsFilter| -> WithStatus<Json> {
             match db.fetch_connections(&filter, 100) {
                 Ok(connections) => reply::with_status(reply::json(&connections), StatusCode::OK),
+                Err(err) => {
+                    let r = &format!("database error: {}", err);
+                    reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+                },
+            }
+        })
+}
+
+fn chunks<Db>(
+    db: Arc<Db>,
+) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
+where
+    Db: DatabaseFetch + Sync + Send + 'static,
+{
+    warp::path!("v3" / "chunks")
+        .and(warp::query::query())
+        .map(move |filter: ChunksFilter| -> WithStatus<Json> {
+            match db.fetch_chunks(&filter) {
+                Ok(chunks) => reply::with_status(reply::json(&chunks), StatusCode::OK),
                 Err(err) => {
                     let r = &format!("database error: {}", err);
                     reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
@@ -53,7 +72,7 @@ where
     use warp::reply::with;
 
     warp::get()
-        .and(connections(db.clone()).or(messages(db)))
+        .and(connections(db.clone()).or(chunks(db.clone())).or(messages(db)))
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
 }

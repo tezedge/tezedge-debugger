@@ -36,8 +36,8 @@ impl Keys {
             });
         };
 
-        let pk = CryptoKey::from_bytes(&remote[4..36])?;
-        let sk = CryptoKey::from_bytes(&identity.secret_key)?;
+        let pk = CryptoKey::from_bytes(&remote[4..36]).unwrap();
+        let sk = CryptoKey::from_bytes(&identity.secret_key).unwrap();
 
         let NoncePair { local, remote } =
             generate_nonces(local, remote, initiator.incoming()).unwrap();

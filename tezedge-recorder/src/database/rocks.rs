@@ -15,7 +15,7 @@ use storage::{
 };
 use thiserror::Error;
 use super::{
-    Database, DatabaseNew, DatabaseFetch, ConnectionsFilter, MessagesFilter, connection, chunk,
+    Database, DatabaseNew, DatabaseFetch, ConnectionsFilter, ChunksFilter, MessagesFilter, connection, chunk,
     message,
 };
 
@@ -96,12 +96,13 @@ impl Database for Db {
     }
 }
 
+// TODO: duplicated code
 impl DatabaseFetch for Db {
     fn fetch_connections(
         &self,
         filter: &ConnectionsFilter,
         limit: usize,
-    ) -> Result<Vec<connection::Item>, Self::Error> {
+    ) -> Result<Vec<(connection::Key, connection::Value)>, Self::Error> {
         let mode = if let Some(cursor) = &filter.cursor {
             IteratorMode::From(cursor, Direction::Reverse)
         } else {
@@ -111,7 +112,69 @@ impl DatabaseFetch for Db {
             .as_kv::<connection::Schema>()
             .iterator(mode)?
             .filter_map(|(k, v)| match (k, v) {
-                (Ok(key), Ok(value)) => Some(connection::Item::unite(key, value)),
+                (Ok(key), Ok(value)) => Some((key, value)),
+                (Ok(index), Err(err)) => {
+                    log::warn!("Failed to load value at {:?}: {}", index, err);
+                    None
+                },
+                (Err(err), _) => {
+                    log::warn!("Failed to load index: {}", err);
+                    None
+                },
+            })
+            .take(limit)
+            .collect();
+        Ok(vec)
+    }
+
+    fn fetch_chunks(
+        &self,
+        filter: &ChunksFilter,
+    ) -> Result<Vec<(chunk::Key, chunk::Value)>, Self::Error> {
+        let limit = filter.limit.unwrap_or(100) as usize;
+        let mut k = chunk::Key::from_cn_id(connection::Key { ts: 0, ts_nanos: 0 });
+        let mode = if let (Some(ts), Some(ts_nanos)) = (filter.secs, filter.nanos) {
+            k.cn_id = connection::Key { ts, ts_nanos };
+            IteratorMode::From(&k, Direction::Reverse)
+        } else {
+            IteratorMode::End
+        };
+        let vec = self
+            .as_kv::<chunk::Schema>()
+            .iterator(mode)?
+            .filter_map(|(k, v)| match (k, v) {
+                (Ok(key), Ok(value)) => Some((key, value)),
+                (Ok(index), Err(err)) => {
+                    log::warn!("Failed to load value at {:?}: {}", index, err);
+                    None
+                },
+                (Err(err), _) => {
+                    log::warn!("Failed to load index: {}", err);
+                    None
+                },
+            })
+            .take(limit)
+            .collect();
+        Ok(vec)
+    }
+
+    fn fetch_chunks_truncated(
+        &self,
+        filter: &ChunksFilter,
+    ) -> Result<Vec<(chunk::Key, chunk::ValueTruncated)>, Self::Error> {
+        let limit = filter.limit.unwrap_or(100) as usize;
+        let mut k = chunk::Key::from_cn_id(connection::Key { ts: 0, ts_nanos: 0 });
+        let mode = if let (Some(ts), Some(ts_nanos)) = (filter.secs, filter.nanos) {
+            k.cn_id = connection::Key { ts, ts_nanos };
+            IteratorMode::From(&k, Direction::Reverse)
+        } else {
+            IteratorMode::End
+        };
+        let vec = self
+            .as_kv::<chunk::Schema>()
+            .iterator(mode)?
+            .filter_map(|(k, v)| match (k, v) {
+                (Ok(key), Ok(value)) => Some((key, chunk::ValueTruncated(value))),
                 (Ok(index), Err(err)) => {
                     log::warn!("Failed to load value at {:?}: {}", index, err);
                     None

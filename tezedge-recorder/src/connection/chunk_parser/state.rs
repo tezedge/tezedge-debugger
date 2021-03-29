@@ -4,7 +4,6 @@
 use std::marker::PhantomData;
 use either::Either;
 use thiserror::Error;
-use crypto::{proof_of_work, blake2b::Blake2bError, hash::FromBytesError};
 use typenum::{self, Bit};
 use super::{
     buffer::Buffer,
@@ -27,7 +26,7 @@ where
 {
     fn chunk(&self, counter: u64, bytes: Vec<u8>, plain: Vec<u8>) -> chunk::Item {
         chunk::Item::new(
-            self.cn.id,
+            self.cn.key(),
             Sender::new(S::BOOL),
             counter,
             bytes,
@@ -161,21 +160,17 @@ pub struct MakeKeyOutput {
 
 impl HaveCm<Local> {
     pub fn make_key(self, peer: HaveCm<Remote>) -> MakeKeyOutput {
+        use crypto::proof_of_work;
+
         #[derive(Error, Debug)]
         pub enum HandshakeWarning {
             #[error("connection message is too short {}", _0)]
             ConnectionMessageTooShort(usize),
             #[error("proof-of-work check failed")]
             PowInvalid(f64),
-            #[error("cannot calc peer_id: black2b hashing error {}", _0)]
-            Blake2b(Blake2bError),
-            #[error("cannot calc peer_id: from bytes error {}", _0)]
-            FromBytes(FromBytesError),
         }
 
-        let check = |payload: &[u8]| -> Result<String, HandshakeWarning> {
-            use crypto::{blake2b, hash::HashType};
-
+        let check = |payload: &[u8]| -> Result<[u8; 32], HandshakeWarning> {
             if payload.len() <= 88 {
                 return Err(HandshakeWarning::ConnectionMessageTooShort(payload.len()));
             }
@@ -185,10 +180,9 @@ impl HaveCm<Local> {
                 return Err(HandshakeWarning::PowInvalid(target));
             }
 
-            let hash = blake2b::digest_128(&payload[4..36]).map_err(HandshakeWarning::Blake2b)?;
-            HashType::CryptoboxPublicKeyHash
-                .hash_to_b58check(&hash)
-                .map_err(HandshakeWarning::FromBytes)
+            let mut pk = [0; 32];
+            pk.clone_from_slice(&payload[4..36]);
+            Ok(pk)
         };
 
         let local_chunk = self.inner.buffer.have_chunk().unwrap();
@@ -201,11 +195,21 @@ impl HaveCm<Local> {
                 let (r, r_chunk) = peer.have_key(remote);
                 match check(&l_chunk.bytes) {
                     Ok(_) => (),
-                    Err(warning) => cn.add_comment(format!("Outgoing: {}", warning)),
+                    Err(HandshakeWarning::ConnectionMessageTooShort(size)) => {
+                        cn.add_comment().outgoing_too_short = Some(size);
+                    },
+                    Err(HandshakeWarning::PowInvalid(target)) => {
+                        cn.add_comment().outgoing_wrong_pow = Some(target);
+                    },
                 }
                 match check(&r_chunk.bytes) {
-                    Ok(peer_id) => cn.set_peer_id(peer_id),
-                    Err(warning) => cn.add_comment(format!("Incoming: {}", warning)),
+                    Ok(peer_pk) => cn.set_peer_pk(peer_pk),
+                    Err(HandshakeWarning::ConnectionMessageTooShort(size)) => {
+                        cn.add_comment().incoming_too_short = Some(size);
+                    },
+                    Err(HandshakeWarning::PowInvalid(target)) => {
+                        cn.add_comment().incoming_wrong_pow = Some(target);
+                    },
                 }
                 MakeKeyOutput {
                     cn,
@@ -215,10 +219,10 @@ impl HaveCm<Local> {
                     r_chunk,
                 }
             },
-            Err(error) => {
+            Err(_) => {
                 let (l, l_chunk) = self.have_not_key();
                 let (r, r_chunk) = peer.have_not_key();
-                cn.add_comment(format!("Key calculate error: {}", error));
+                cn.add_comment().outgoing_wrong_pk = true;
                 MakeKeyOutput {
                     cn,
                     local: Err(l),
@@ -238,7 +242,11 @@ where
     fn new(mut inner: Inner<S>) -> (Uncertain<S>, chunk::Item) {
         let (counter, bytes) = inner.buffer.cleanup();
         let c = inner.chunk(counter, bytes, Vec::new());
-        inner.cn.add_comment("uncertain".to_string());
+        if S::BOOL {
+            inner.cn.add_comment().incoming_uncertain = true;
+        } else {
+            inner.cn.add_comment().outgoing_uncertain = true;
+        }
         (Uncertain { inner }, c)
     }
 

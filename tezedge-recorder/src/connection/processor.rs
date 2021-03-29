@@ -33,13 +33,7 @@ where
     Db: Database,
 {
     pub fn new(remote_addr: SocketAddr, incoming: bool, identity: Identity, db: Arc<Db>) -> Self {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let connection_id = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let db_item = connection::Item::new(connection_id, Initiator::new(incoming), remote_addr);
+        let db_item = connection::Item::new(Initiator::new(incoming), remote_addr);
         Connection {
             chunk_parser: ChunkParser::Handshake(Handshake::new(db_item, identity)),
             db,

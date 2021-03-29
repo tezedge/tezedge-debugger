@@ -1,9 +1,10 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{collections::HashMap, sync::Arc, net::SocketAddr};
+use std::{collections::HashMap, sync::Arc, net::SocketAddr, io, error::Error};
 use serde::Deserialize;
 use anyhow::Result;
+use thiserror::Error;
 use tokio::runtime::Runtime;
 use super::{
     database::{DatabaseNew, DatabaseFetch},
@@ -27,13 +28,30 @@ struct Config {
 
 #[derive(Clone)]
 pub struct Identity {
-    pub public_key: Box<[u8]>,
-    pub secret_key: Box<[u8]>,
+    pub public_key: [u8; 32],
+    pub secret_key: [u8; 32],
 }
 
 pub struct NodeInfo<Db> {
     identity: Identity,
     db: Arc<Db>,
+}
+
+#[derive(Error, Debug)]
+pub enum NodeError<DbError>
+where
+    DbError: Error,
+{
+    #[error("failed to open identity {}", _0)]
+    OpenIdentity(io::Error),
+    #[error("failed to parse identity {}", _0)]
+    ParseIdentity(serde_json::Error),
+    #[error("failed to parse public key from hex")]
+    ParsePk,
+    #[error("failed to parse secret key from hex")]
+    ParseSk,
+    #[error("failed to open db {}", _0)]
+    OpenDb(DbError),
 }
 
 pub struct System<Db> {
@@ -46,8 +64,13 @@ impl<Db> NodeInfo<Db>
 where
     Db: DatabaseNew + DatabaseFetch + Sync + Send + 'static,
 {
-    pub fn new(identity_path: &str, db_path: &str, rpc_port: u16, rt: &Runtime) -> Result<Self> {
-        use std::fs::File;
+    pub fn new(
+        identity_path: &str,
+        db_path: &str,
+        rpc_port: u16,
+        rt: &Runtime,
+    ) -> Result<Self, NodeError<Db::Error>> {
+        use std::{fs::File, convert::TryInto};
 
         #[derive(Deserialize)]
         pub struct Inner {
@@ -59,19 +82,31 @@ where
             proof_of_work_stamp: String,
         }
 
-        let file = File::open(identity_path)?;
+        let file = File::open(identity_path)
+            .map_err(NodeError::OpenIdentity)?;
         let Inner {
             public_key,
             secret_key,
             ..
-        } = serde_json::from_reader(file)?;
+        } = serde_json::from_reader(file)
+            .map_err(NodeError::ParseIdentity)?;
 
         let identity = Identity {
-            public_key: hex::decode(public_key)?.into_boxed_slice(),
-            secret_key: hex::decode(secret_key)?.into_boxed_slice(),
+            public_key: {
+                hex::decode(public_key)
+                    .map_err(|_| NodeError::ParsePk)?
+                    .try_into()
+                    .map_err(|_| NodeError::ParsePk)?
+            },
+            secret_key: {
+                hex::decode(secret_key)
+                    .map_err(|_| NodeError::ParseSk)?
+                    .try_into()
+                    .map_err(|_| NodeError::ParseSk)?
+            },
         };
 
-        let db = Db::open(db_path)?;
+        let db = Db::open(db_path).map_err(NodeError::OpenDb)?;
         rt.spawn(warp::serve(server::routes(db.clone())).run(([0, 0, 0, 0], rpc_port)));
 
         Ok(NodeInfo { identity, db })
