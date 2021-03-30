@@ -145,10 +145,7 @@ impl MessageKind {
 
     #[allow(dead_code)]
     pub fn valid_tag(&self) -> bool {
-        match self {
-            MessageKind::Unknown => false,
-            _ => true,
-        }
+        !matches!(self, MessageKind::Unknown)
     }
 }
 
@@ -198,9 +195,15 @@ impl FromStr for MessageType {
             "operation" => Ok(MessageType::P2p(MessageKind::Operation)),
             "get_protocols" => Ok(MessageType::P2p(MessageKind::GetProtocols)),
             "protocol" => Ok(MessageType::P2p(MessageKind::Protocol)),
-            "get_operation_hashes_for_blocks" => Ok(MessageType::P2p(MessageKind::GetOperationHashesForBlocks)),
-            "operation_hashes_for_block" => Ok(MessageType::P2p(MessageKind::OperationHashesForBlocks)),
-            "get_operations_for_blocks" => Ok(MessageType::P2p(MessageKind::GetOperationsForBlocks)),
+            "get_operation_hashes_for_blocks" => {
+                Ok(MessageType::P2p(MessageKind::GetOperationHashesForBlocks))
+            },
+            "operation_hashes_for_block" => {
+                Ok(MessageType::P2p(MessageKind::OperationHashesForBlocks))
+            },
+            "get_operations_for_blocks" => {
+                Ok(MessageType::P2p(MessageKind::GetOperationsForBlocks))
+            },
             "operations_for_blocks" => Ok(MessageType::P2p(MessageKind::OperationsForBlocks)),
 
             s => Err(ParseTypeError(s.to_string())),

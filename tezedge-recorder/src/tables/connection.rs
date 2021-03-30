@@ -3,7 +3,10 @@
 
 use std::{convert::TryFrom, net::SocketAddr, num::ParseIntError, str::FromStr, fmt};
 use thiserror::Error;
-use serde::{Serialize, ser::{self, SerializeSeq, SerializeStruct}};
+use serde::{
+    Serialize,
+    ser::{self, SerializeSeq, SerializeStruct},
+};
 use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError};
 use super::common::Initiator;
 
@@ -36,10 +39,18 @@ impl Comments {
     fn de((i, o): ([u8; 6], [u8; 6])) -> Self {
         Comments {
             incoming_wrong_pow: if i[0] == 0 { None } else { Some(i[0] as f64) },
-            incoming_too_short: if i[1] == 255 { None } else { Some(i[1] as usize )},
+            incoming_too_short: if i[1] == 255 {
+                None
+            } else {
+                Some(i[1] as usize)
+            },
             incoming_uncertain: i[2] != 0,
             outgoing_wrong_pow: if o[0] == 0 { None } else { Some(o[0] as f64) },
-            outgoing_too_short: if o[1] == 255 { None } else { Some(o[1] as usize )},
+            outgoing_too_short: if o[1] == 255 {
+                None
+            } else {
+                Some(o[1] as usize)
+            },
             outgoing_uncertain: o[2] != 0,
             outgoing_wrong_pk: o[3] != 0,
         }
@@ -53,7 +64,10 @@ impl Serialize for Comments {
     {
         let mut s = serializer.serialize_seq(None)?;
         if let Some(target) = self.incoming_wrong_pow {
-            let msg = format!("incoming connection message bad proof-of-work, target: {}", target);
+            let msg = format!(
+                "incoming connection message bad proof-of-work, target: {}",
+                target
+            );
             s.serialize_element(&msg)?;
         }
         if let Some(size) = self.incoming_too_short {
@@ -65,7 +79,10 @@ impl Serialize for Comments {
             s.serialize_element(&msg)?;
         }
         if let Some(target) = self.outgoing_wrong_pow {
-            let msg = format!("outgoing connection message bad proof-of-work, target: {}", target);
+            let msg = format!(
+                "outgoing connection message bad proof-of-work, target: {}",
+                target
+            );
             s.serialize_element(&msg)?;
         }
         if let Some(size) = self.outgoing_too_short {
@@ -147,8 +164,8 @@ impl Item {
     pub fn value(&self) -> Value {
         Value {
             initiator: self.initiator.clone(),
-            remote_addr: self.remote_addr.clone(),
-            peer_pk: self.peer_pk.clone(),
+            remote_addr: self.remote_addr,
+            peer_pk: self.peer_pk,
             comments: self.comments.clone(),
         }
     }
@@ -175,16 +192,17 @@ impl FromStr for Key {
     // example: 1617005682.953928051
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.split('.');
-        let ts = parts.next()
+        let ts = parts
+            .next()
             .ok_or(KeyFromStrError::ConnectionKey)?
-            .parse().map_err(KeyFromStrError::DecimalParse)?;
-        let ts_nanos = parts.next()
+            .parse()
+            .map_err(KeyFromStrError::DecimalParse)?;
+        let ts_nanos = parts
+            .next()
             .ok_or(KeyFromStrError::ConnectionKey)?
-            .parse().map_err(KeyFromStrError::DecimalParse)?;
-        Ok(Key {
-            ts,
-            ts_nanos,
-        })
+            .parse()
+            .map_err(KeyFromStrError::DecimalParse)?;
+        Ok(Key { ts, ts_nanos })
     }
 }
 

@@ -44,10 +44,7 @@ impl Handshake {
     pub fn new(cn: connection::Item, id: Identity) -> Self {
         let local = Half::Initial(Initial::new(cn.clone(), id.clone()));
         let remote = Half::Initial(Initial::new(cn, id));
-        Handshake {
-            local,
-            remote,
-        }
+        Handshake { local, remote }
     }
 
     fn initial(l: Initial<Local>, r: Initial<Remote>) -> Self {

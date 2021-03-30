@@ -74,9 +74,7 @@ where
                     })
                     .link_chunk(chunk.plain.len());
                 match building_result {
-                    Ok(builder_full) => {
-                        Some(builder_full.build(&sender, &self.cn))
-                    },
+                    Ok(builder_full) => Some(builder_full.build(&sender, &self.cn)),
                     Err(builder) => {
                         self.builder = builder;
                         None

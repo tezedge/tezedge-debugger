@@ -32,7 +32,7 @@ impl Keys {
         // check if the identity belong to one of the parties
         if identity.public_key.as_ref() != local[4..36].as_ref() {
             return Err(CryptoError::InvalidKey {
-                reason: format!("The communication does not belong to the local node"),
+                reason: "The communication does not belong to the local node".to_string(),
             });
         };
 

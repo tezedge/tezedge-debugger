@@ -3,7 +3,10 @@
 
 use std::{convert::TryFrom, fmt, str::FromStr, num::ParseIntError};
 use thiserror::Error;
-use serde::{Serialize, ser::{self, SerializeStruct}};
+use serde::{
+    Serialize,
+    ser::{self, SerializeStruct},
+};
 use rocksdb::{Cache, ColumnFamilyDescriptor};
 use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError};
 use super::{common::Sender, connection};
@@ -97,14 +100,17 @@ impl FromStr for Key {
     // example: 1617005682.953928051-remote-15
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.split('-');
-        let cn_id = parts.next()
+        let cn_id = parts
+            .next()
             .ok_or(KeyFromStrError::ChunkKey)?
-            .parse().map_err(KeyFromStrError::ConnectionKey)?;
-        let sender = parts.next()
-            .ok_or(KeyFromStrError::ChunkKey)?;
-        let counter = parts.next()
+            .parse()
+            .map_err(KeyFromStrError::ConnectionKey)?;
+        let sender = parts.next().ok_or(KeyFromStrError::ChunkKey)?;
+        let counter = parts
+            .next()
             .ok_or(KeyFromStrError::ChunkKey)?
-            .parse().map_err(KeyFromStrError::DecimalParse)?;
+            .parse()
+            .map_err(KeyFromStrError::DecimalParse)?;
         Ok(Key {
             cn_id,
             counter,
@@ -115,7 +121,13 @@ impl FromStr for Key {
 
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}-{}-{}", self.cn_id, self.sender.to_string(), self.counter)
+        write!(
+            f,
+            "{}-{}-{}",
+            self.cn_id,
+            self.sender.to_string(),
+            self.counter
+        )
     }
 }
 
@@ -132,7 +144,11 @@ impl Encoder for Key {
     fn encode(&self) -> Result<Vec<u8>, SchemaError> {
         let mut v = Vec::with_capacity(20);
         v.extend_from_slice(&self.cn_id.encode()?);
-        let c = if self.sender.incoming() { self.counter * 2 + 1 } else { self.counter * 2 };
+        let c = if self.sender.incoming() {
+            self.counter * 2 + 1
+        } else {
+            self.counter * 2
+        };
         v.extend_from_slice(&c.to_be_bytes());
         Ok(v)
     }
@@ -144,13 +160,10 @@ impl Decoder for Key {
             return Err(SchemaError::DecodeError);
         }
 
-        let c;
+        let c = u64::from_be_bytes(TryFrom::try_from(&bytes[12..]).unwrap());
         Ok(Key {
             cn_id: connection::Key::decode(&bytes[..12])?,
-            counter: {
-                c = u64::from_be_bytes(TryFrom::try_from(&bytes[12..]).unwrap());
-                c / 2
-            },
+            counter: c / 2,
             sender: Sender::new(c & 1 != 0),
         })
     }
@@ -219,11 +232,10 @@ impl Decoder for Value {
             return Err(SchemaError::DecodeError);
         }
 
-        let len;
+        let len = u64::from_le_bytes(TryFrom::try_from(&bytes[8..16]).unwrap()) as usize;
         Ok(Value {
             timestamp: u64::from_le_bytes(TryFrom::try_from(&bytes[..8]).unwrap()),
             bytes: {
-                len = u64::from_le_bytes(TryFrom::try_from(&bytes[8..16]).unwrap()) as usize;
                 if bytes.len() < 16 + len {
                     return Err(SchemaError::DecodeError);
                 }

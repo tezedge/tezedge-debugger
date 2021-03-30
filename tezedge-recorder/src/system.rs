@@ -83,14 +83,12 @@ where
             proof_of_work_stamp: String,
         }
 
-        let file = File::open(identity_path)
-            .map_err(NodeError::OpenIdentity)?;
+        let file = File::open(identity_path).map_err(NodeError::OpenIdentity)?;
         let Inner {
             public_key,
             secret_key,
             ..
-        } = serde_json::from_reader(file)
-            .map_err(NodeError::ParseIdentity)?;
+        } = serde_json::from_reader(file).map_err(NodeError::ParseIdentity)?;
 
         let identity = Identity {
             public_key: {

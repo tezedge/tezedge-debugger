@@ -20,7 +20,7 @@ pub struct EventId {
 impl EventId {
     pub fn new(socket_id: SocketId, _ts_start: u64, ts_finish: u64) -> Self {
         EventId {
-            socket_id: socket_id,
+            socket_id,
             ts: ts_finish,
         }
     }

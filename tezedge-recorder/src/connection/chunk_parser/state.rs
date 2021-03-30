@@ -25,13 +25,7 @@ where
     S: Bit,
 {
     fn chunk(&self, counter: u64, bytes: Vec<u8>, plain: Vec<u8>) -> chunk::Item {
-        chunk::Item::new(
-            self.cn.key(),
-            Sender::new(S::BOOL),
-            counter,
-            bytes,
-            plain,
-        )
+        chunk::Item::new(self.cn.key(), Sender::new(S::BOOL), counter, bytes, plain)
     }
 
     pub fn handle_data(&mut self, payload: &[u8]) {
@@ -189,7 +183,12 @@ impl HaveCm<Local> {
         let remote_chunk = peer.inner.buffer.have_chunk().unwrap();
         let mut cn = self.inner.cn.clone();
         let identity = &self.inner.id;
-        match Keys::new(identity, local_chunk, remote_chunk, self.inner.cn.initiator.clone()) {
+        match Keys::new(
+            identity,
+            local_chunk,
+            remote_chunk,
+            self.inner.cn.initiator.clone(),
+        ) {
             Ok(Keys { local, remote }) => {
                 let (l, l_chunk) = self.have_key(local);
                 let (r, r_chunk) = peer.have_key(remote);
@@ -246,7 +245,11 @@ where
             Ok(s) => s,
             Err(s) => format!("{:?}", s),
         };
-        log::warn!("uncertain connection: key: {}, value: {}", inner.cn.key(), cn_value);
+        log::warn!(
+            "uncertain connection: key: {}, value: {}",
+            inner.cn.key(),
+            cn_value
+        );
         if S::BOOL {
             inner.cn.add_comment().incoming_uncertain = true;
         } else {
