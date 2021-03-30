@@ -3,8 +3,10 @@ FROM simplestakingcom/tezedge-bpf-builder:latest as builder
 RUN apt install -y g++ git
 
 COPY . .
-RUN cargo +nightly-2020-12-31 build -p bpf-sniffer --release && \
-    cargo +nightly build -p tezedge-recorder --release
+RUN cargo +nightly-2020-12-31 build -p bpf-sniffer --release
+RUN rustup update nightly
+# TODO: freeze the version
+RUN cargo +nightly build -p tezedge-recorder --release
 
 FROM ubuntu:20.10
 
