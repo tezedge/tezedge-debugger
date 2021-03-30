@@ -3,10 +3,7 @@
 
 use std::{
     path::Path,
-    sync::{
-        Arc,
-        atomic::{Ordering, AtomicU64},
-    },
+    sync::atomic::{Ordering, AtomicU64},
 };
 use rocksdb::{Cache, DB, ReadOptions};
 use storage::{
@@ -60,7 +57,7 @@ impl Db {
 impl DatabaseNew for Db {
     type Error = DbError;
 
-    fn open<P>(path: P) -> Result<Arc<Self>, Self::Error>
+    fn open<P>(path: P) -> Result<Self, Self::Error>
     where
         P: AsRef<Path>,
     {
@@ -74,12 +71,12 @@ impl DatabaseNew for Db {
         ];
         let inner = persistent::open_kv(path, cfs, &DbConfiguration::default())?;
 
-        Ok(Arc::new(Db {
+        Ok(Db {
             //_cache: cache,
             message_counter: AtomicU64::new(0),
             log_counter: AtomicU64::new(0),
             inner,
-        }))
+        })
     }
 }
 

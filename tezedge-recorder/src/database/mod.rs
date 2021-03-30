@@ -3,7 +3,7 @@
 
 pub mod rocks;
 
-use std::{error::Error, path::Path, sync::Arc};
+use std::{error::Error, path::Path};
 use serde::Deserialize;
 use super::{
     tables::{connection, chunk, message, node_log},
@@ -70,10 +70,13 @@ where
     ) -> Result<Vec<node_log::Item>, Self::Error>;
 }
 
-pub trait DatabaseNew {
+pub trait DatabaseNew
+where
+    Self: Sized,
+{
     type Error: 'static + Send + Sync + Error;
 
-    fn open<P>(path: P) -> Result<Arc<Self>, Self::Error>
+    fn open<P>(path: P) -> Result<Self, Self::Error>
     where
         P: AsRef<Path>;
 }

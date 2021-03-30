@@ -74,7 +74,7 @@ where
         rt: &Runtime,
         running: Arc<AtomicBool>,
     ) -> Result<Self> {
-        let db = Db::open(db_path)?;
+        let db = Arc::new(Db::open(db_path)?);
         let addr = ([0, 0, 0, 0], rpc_port);
         let server = rt.spawn(warp::serve(server::routes(db.clone())).run(addr));
         let log_client = log_client::spawn(syslog_port, db.clone(), running.clone())?;
