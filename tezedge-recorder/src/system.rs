@@ -56,6 +56,7 @@ where
 
 pub struct System<Db> {
     config: Config,
+    port_to_pid: HashMap<u16, u32>,
     node_info: HashMap<u32, NodeInfo<Db>>,
     tokio_rt: Runtime,
 }
@@ -132,6 +133,7 @@ impl<Db> System<Db> {
 
         Ok(System {
             config,
+            port_to_pid: HashMap::new(),
             node_info: HashMap::new(),
             tokio_rt: Runtime::new().unwrap(),
         })
@@ -185,17 +187,24 @@ where
     Db: DatabaseNew + DatabaseFetch + Sync + Send + 'static,
 {
     pub fn handle_bind(&mut self, pid: u32, port: u16) -> Result<()> {
-        let node_config = self
-            .node_configs()
-            .iter()
-            .find(|c| c.p2p_port == port)
-            .unwrap();
-        let info = NodeInfo::new(
-            &node_config.identity_path,
-            &node_config.db_path,
-            node_config.rpc_port,
-            &self.tokio_rt,
-        )?;
+        let info = if let Some(old_pid) = self.port_to_pid.remove(&port) {
+            log::info!("detaching from pid: {} at port: {}", old_pid, port);
+            self.node_info.remove(&old_pid).unwrap()
+        } else {
+            let node_config = self
+                .node_configs()
+                .iter()
+                .find(|c| c.p2p_port == port)
+                .unwrap();
+            NodeInfo::new(
+                &node_config.identity_path,
+                &node_config.db_path,
+                node_config.rpc_port,
+                &self.tokio_rt,
+            )?
+        };
+        log::info!("attaching to pid: {} at port: {}", pid, port);
+        self.port_to_pid.insert(port, pid);
         self.node_info.insert(pid, info);
 
         Ok(())
