@@ -49,19 +49,20 @@ where
                 log::warn!("cannot parse message, connection: {:?}", self.cn);
             }
             self.error = true;
+            self.db.store_chunk(chunk);
             return;
         }
 
         let sender = &chunk.sender;
 
-        match chunk.counter {
+        let message = match chunk.counter {
             0 => {
                 let message = MessageBuilder::connection_message(chunk.plain.len() as u16)
                     .link_chunk(chunk.plain.len())
                     .ok()
                     .unwrap()
                     .build(&sender, &self.cn);
-                self.db.store_message(message);
+                Some(message)
             },
             1 => {
                 let message = MessageBuilder::metadata_message(chunk.plain.len())
@@ -69,7 +70,7 @@ where
                     .ok()
                     .unwrap()
                     .build(&sender, &self.cn);
-                self.db.store_message(message);
+                Some(message)
             },
             2 => {
                 let message = MessageBuilder::acknowledge_message(chunk.plain.len())
@@ -77,7 +78,7 @@ where
                     .ok()
                     .unwrap()
                     .build(&sender, &self.cn);
-                self.db.store_message(message);
+                Some(message)
             },
             _ => {
                 let b = self
@@ -88,17 +89,22 @@ where
                         MessageBuilder::peer_message(six_bytes, chunk.counter)
                     })
                     .link_chunk(chunk.plain.len());
-                self.builder = match b {
+                match b {
                     Ok(builder_full) => {
-                        let message = builder_full.build(&sender, &self.cn);
-                        self.db.store_message(message);
+                        self.builder = None;
+                        Some(builder_full.build(&sender, &self.cn))
+                    },
+                    Err(b) => {
+                        self.builder = Some(b);
                         None
                     },
-                    Err(b) => Some(b),
                 }
             },
-        }
+        };
 
         self.db.store_chunk(chunk);
+        if let Some(message) = message {
+            self.db.store_message(message);
+        }
     }
 }
