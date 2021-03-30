@@ -31,6 +31,7 @@ where
         for event in events {
             match event {
                 SnifferEvent::Bind { id, address } => {
+                    // TODO: remove old connections on this port
                     if let Err(error) = list.system.handle_bind(id.socket_id.pid, address.port()) {
                         log::error!("failed to handle bind syscall: {}", error);
                     }
@@ -101,8 +102,8 @@ where
         let pid = socket_id.pid;
         let fd = socket_id.fd;
         if !self.system.should_ignore(&address) {
-            if let Some(info) = self.system.get_mut(pid) {
-                let connection = Connection::new(address, incoming, info.identity(), info.db());
+            if let Some((info, db)) = self.system.get_mut(pid) {
+                let connection = Connection::new(address, incoming, info.identity(), db);
                 if let Some(old) = self.connections.insert(socket_id, connection) {
                     old.join();
                 }

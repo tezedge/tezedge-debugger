@@ -16,12 +16,13 @@ fn main() -> anyhow::Result<()> {
         .with_level(log::LevelFilter::Info)
         .init()?;
 
-    let system = System::<rocks::Db>::load_config()?;
     let running = Arc::new(AtomicBool::new(true));
     {
         let running = running.clone();
         ctrlc::set_handler(move || running.store(false, Ordering::Relaxed))?;
     }
 
+    let mut system = System::<rocks::Db>::load_config()?;
+    system.run_dbs(running.clone());
     main_loop::run(system, running)
 }

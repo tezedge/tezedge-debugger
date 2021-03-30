@@ -3083,6 +3083,7 @@ dependencies = [
  "serde_json",
  "simple_logger",
  "storage",
+ "syslog_loose",
  "thiserror",
  "tokio 1.4.0",
  "toml",

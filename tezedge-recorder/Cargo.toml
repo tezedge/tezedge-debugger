@@ -21,6 +21,7 @@ log = "0.4"
 simple_logger = "1.11"
 either = "1.6"
 typenum = "1.13"
+syslog_loose = "0.10"
 
 warp = "0.3"
 tokio = "1.4"

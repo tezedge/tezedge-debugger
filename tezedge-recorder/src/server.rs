@@ -6,7 +6,7 @@ use warp::{
     http::StatusCode,
 };
 use super::{
-    database::{DatabaseFetch, ConnectionsFilter, ChunksFilter, MessagesFilter},
+    database::{DatabaseFetch, ConnectionsFilter, ChunksFilter, MessagesFilter, LogsFilter},
     tables::chunk,
 };
 
@@ -92,6 +92,25 @@ where
         })
 }
 
+fn logs<Db>(
+    db: Arc<Db>,
+) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
+where
+    Db: DatabaseFetch + Sync + Send + 'static,
+{
+    warp::path!("v3" / "logs")
+        .and(warp::query::query())
+        .map(move |filter: LogsFilter| -> reply::WithStatus<Json> {
+            match db.fetch_log(&filter) {
+                Ok(v) => reply::with_status(reply::json(&v), StatusCode::OK),
+                Err(err) => {
+                    let r = &format!("database error: {}", err);
+                    reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+                },
+            }
+        })
+}
+
 pub fn routes<Db>(
     db: Arc<Db>,
 ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static
@@ -105,7 +124,8 @@ where
             connections(db.clone())
                 .or(chunks(db.clone()))
                 .or(chunk(db.clone()))
-                .or(messages(db)),
+                .or(messages(db.clone()))
+                .or(logs(db)),
         )
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))

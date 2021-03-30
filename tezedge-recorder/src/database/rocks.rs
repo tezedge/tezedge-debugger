@@ -18,8 +18,9 @@ use storage::{
 };
 use thiserror::Error;
 use super::{
-    Database, DatabaseNew, DatabaseFetch, ConnectionsFilter, ChunksFilter, MessagesFilter,
-    connection, chunk, message,
+    Database, DatabaseNew, DatabaseFetch,
+    ConnectionsFilter, ChunksFilter, MessagesFilter, LogsFilter,
+    connection, chunk, message, node_log,
 };
 
 #[derive(Error, Debug)]
@@ -35,6 +36,7 @@ impl From<DBError> for DbError {
 pub struct Db {
     //_cache: Cache,
     message_counter: AtomicU64,
+    log_counter: AtomicU64,
     inner: DB,
 }
 
@@ -48,6 +50,10 @@ impl Db {
 
     fn reserve_message_counter(&self) -> u64 {
         self.message_counter.fetch_add(1, Ordering::SeqCst)
+    }
+
+    fn reserve_log_counter(&self) -> u64 {
+        self.log_counter.fetch_add(1, Ordering::SeqCst)
     }
 }
 
@@ -64,12 +70,14 @@ impl DatabaseNew for Db {
             connection::Schema::descriptor(&cache),
             chunk::Schema::descriptor(&cache),
             message::Schema::descriptor(&cache),
+            node_log::Schema::descriptor(&cache),
         ];
         let inner = persistent::open_kv(path, cfs, &DbConfiguration::default())?;
 
         Ok(Arc::new(Db {
             //_cache: cache,
             message_counter: AtomicU64::new(0),
+            log_counter: AtomicU64::new(0),
             inner,
         }))
     }
@@ -79,7 +87,6 @@ impl Database for Db {
     fn store_connection(&self, item: connection::Item) {
         let (key, value) = item.split();
         if let Err(error) = self.as_kv::<connection::Schema>().put(&key, &value) {
-            // TODO: should panic/stop here?
             log::error!("database error: {}", error);
         }
     }
@@ -94,6 +101,13 @@ impl Database for Db {
     fn store_message(&self, item: message::Item) {
         let index = self.reserve_message_counter();
         if let Err(error) = self.as_kv::<message::Schema>().put(&index, &item) {
+            log::error!("database error: {}", error);
+        }
+    }
+
+    fn store_log(&self, item: node_log::Item) {
+        let index = self.reserve_log_counter();
+        if let Err(error) = self.as_kv::<node_log::Schema>().put(&index, &item) {
             log::error!("database error: {}", error);
         }
     }
@@ -201,6 +215,35 @@ impl DatabaseFetch for Db {
             .iterator(mode)?
             .filter_map(|(k, v)| match (k, v) {
                 (Ok(key), Ok(value)) => Some(message::MessageFrontend::new(value, key)),
+                (Ok(index), Err(err)) => {
+                    log::warn!("Failed to load value at {:?}: {}", index, err);
+                    None
+                },
+                (Err(err), _) => {
+                    log::warn!("Failed to load index: {}", err);
+                    None
+                },
+            })
+            .take(limit)
+            .collect();
+        Ok(vec)
+    }
+
+    fn fetch_log(
+        &self,
+        filter: &LogsFilter,
+    ) -> Result<Vec<node_log::Item>, Self::Error> {
+        let limit = filter.limit.unwrap_or(100) as usize;
+        let mode = if let Some(cursor) = &filter.cursor {
+            IteratorMode::From(cursor, Direction::Reverse)
+        } else {
+            IteratorMode::End
+        };
+        let vec = self
+            .as_kv::<node_log::Schema>()
+            .iterator(mode)?
+            .filter_map(|(k, v)| match (k, v) {
+                (Ok(_), Ok(value)) => Some(value),
                 (Ok(index), Err(err)) => {
                     log::warn!("Failed to load value at {:?}: {}", index, err);
                     None

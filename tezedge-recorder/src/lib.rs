@@ -5,13 +5,11 @@
 
 mod common;
 pub mod tables;
-
 mod system;
-pub use self::system::System;
-
+mod log_client;
 mod connection;
 pub mod main_loop;
-
 pub mod database;
-
 mod server;
+
+pub use self::system::System;
