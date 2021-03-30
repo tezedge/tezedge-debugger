@@ -15,11 +15,12 @@ services:
       - "tezedge-shared-data:/tmp/volume/tezedge:ro"
       - "tezos-shared-data:/tmp/volume/tezos:ro"
       # - "./target/debugger_db:/tmp/volume/debugger_db:rw"
-      - "./config-docker.toml:/home/appuser/config.toml:ro"
+      - "./config-docker-new.toml:/home/appuser/config-new.toml:ro"
       - "./target:/tmp/report:rw"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
     ports:
-      - "17732:17732"      # debugger RPC port
+      - "17732:17732"      # debugger RPC port for tezedge node
+      - "17733:17733"      # debugger RPC port for tezos node
       - "10000:10000/udp"  # debugger syslog port for tezedge node
       - "10001:10001/udp"  # debugger syslog port for tezos node
 
