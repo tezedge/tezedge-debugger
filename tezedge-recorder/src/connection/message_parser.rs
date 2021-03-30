@@ -52,7 +52,7 @@ where
 
         if self.error || too_small {
             self.error = true;
-            if chunk.bytes.len() < 2 {
+            if chunk.bytes.len() >= 2 {
                 self.db.store_chunk(chunk);
             }
             return;

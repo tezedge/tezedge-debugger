@@ -34,7 +34,7 @@ pub struct MessagesFilter {
     pub remote_addr: Option<String>,
     pub initiator: Option<String>,
     pub sender: Option<String>,
-    pub types: Vec<String>,
+    pub types: Option<String>,
 }
 
 #[derive(Deserialize)]
