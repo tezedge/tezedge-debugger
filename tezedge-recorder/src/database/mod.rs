@@ -3,9 +3,12 @@
 
 pub mod rocks;
 
-use std::{path::Path, sync::Arc, error::Error};
+use std::{error::Error, net::SocketAddr, path::Path, sync::Arc};
 use serde::Deserialize;
-use super::tables::{connection, chunk, message};
+use super::{
+    tables::{connection, chunk, message},
+    common::Initiator,
+};
 
 pub trait Database {
     fn store_connection(&self, item: connection::Item);
@@ -15,6 +18,7 @@ pub trait Database {
 
 #[derive(Deserialize)]
 pub struct ConnectionsFilter {
+    pub limit: Option<u64>,
     pub cursor: Option<String>,
 }
 
@@ -26,7 +30,12 @@ pub struct ChunksFilter {
 
 #[derive(Deserialize)]
 pub struct MessagesFilter {
+    pub limit: Option<u64>,
     pub cursor: Option<u64>,
+    pub remote_addr: Option<SocketAddr>,
+    pub initiator: Option<Initiator>,
+    pub sender: Option<bool>,
+    //pub types: Vec<P2pType>,
 }
 
 pub trait DatabaseFetch
@@ -36,7 +45,6 @@ where
     fn fetch_connections(
         &self,
         filter: &ConnectionsFilter,
-        limit: usize,
     ) -> Result<Vec<(connection::Key, connection::Value)>, Self::Error>;
 
     fn fetch_chunks_truncated(
@@ -49,7 +57,6 @@ where
     fn fetch_messages(
         &self,
         filter: &MessagesFilter,
-        limit: usize,
     ) -> Result<Vec<message::MessageFrontend>, Self::Error>;
 }
 

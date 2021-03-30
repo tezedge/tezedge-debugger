@@ -98,8 +98,8 @@ impl DatabaseFetch for Db {
     fn fetch_connections(
         &self,
         filter: &ConnectionsFilter,
-        limit: usize,
     ) -> Result<Vec<(connection::Key, connection::Value)>, Self::Error> {
+        let limit = filter.limit.unwrap_or(100) as usize;
         let key;
         let mode = if let Some(cursor) = &filter.cursor {
             key = cursor.parse()
@@ -186,8 +186,8 @@ impl DatabaseFetch for Db {
     fn fetch_messages(
         &self,
         filter: &MessagesFilter,
-        limit: usize,
     ) -> Result<Vec<message::MessageFrontend>, Self::Error> {
+        let limit = filter.limit.unwrap_or(100) as usize;
         let mode = if let Some(cursor) = &filter.cursor {
             IteratorMode::From(cursor, Direction::Reverse)
         } else {

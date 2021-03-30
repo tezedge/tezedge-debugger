@@ -19,7 +19,7 @@ where
     warp::path!("v3" / "connections")
         .and(warp::query::query())
         .map(move |filter: ConnectionsFilter| -> WithStatus<Json> {
-            match db.fetch_connections(&filter, 100) {
+            match db.fetch_connections(&filter) {
                 Ok(connections) => reply::with_status(reply::json(&connections), StatusCode::OK),
                 Err(err) => {
                     let r = &format!("database error: {}", err);
@@ -82,7 +82,7 @@ where
     warp::path!("v3" / "messages")
         .and(warp::query::query())
         .map(move |filter: MessagesFilter| -> reply::WithStatus<Json> {
-            match db.fetch_messages(&filter, 100) {
+            match db.fetch_messages(&filter) {
                 Ok(messages) => reply::with_status(reply::json(&messages), StatusCode::OK),
                 Err(err) => {
                     let r = &format!("database error: {}", err);

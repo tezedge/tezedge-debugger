@@ -41,7 +41,13 @@ where
             0 => chunk.plain.len() < 82,
             1 => chunk.plain.len() < 2,
             2 => chunk.plain.is_empty(),
-            _ => chunk.plain.len() < 6,
+            _ => {
+                if self.builder.is_some() {
+                    chunk.plain.is_empty()
+                } else {
+                    chunk.plain.len() < 6
+                }
+            },
         };
 
         if self.error || too_small {
@@ -49,7 +55,9 @@ where
                 log::warn!("cannot parse message, connection: {:?}", self.cn);
             }
             self.error = true;
-            self.db.store_chunk(chunk);
+            if chunk.bytes.len() < 2 {
+                self.db.store_chunk(chunk);
+            }
             return;
         }
 
@@ -91,11 +99,13 @@ where
                     .link_chunk(chunk.plain.len());
                 match b {
                     Ok(builder_full) => {
-                        self.builder = None;
                         Some(builder_full.build(&sender, &self.cn))
                     },
-                    Err(b) => {
+                    Err(Some(b)) => {
                         self.builder = Some(b);
+                        None
+                    },
+                    Err(None) => {
                         None
                     },
                 }

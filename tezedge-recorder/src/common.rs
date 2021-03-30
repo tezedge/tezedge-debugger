@@ -142,6 +142,14 @@ impl MessageKind {
             _ => MessageKind::Unknown,
         }
     }
+
+    #[allow(dead_code)]
+    pub fn valid_tag(&self) -> bool {
+        match self {
+            MessageKind::Unknown | MessageKind::None => false,
+            _ => true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -97,19 +97,23 @@ impl MessageBuilder {
         }
     }
 
-    pub fn link_chunk(mut self, length: usize) -> Result<MessageBuilderFull, Self> {
+    pub fn link_chunk(mut self, length: usize) -> Result<MessageBuilderFull, Option<Self>> {
         let length = length as u32;
-        // TODO: do not crash
         if self.length < length {
-            panic!();
-        }
-        self.length -= length;
-        self.chunks.end += 1;
-        if self.length == 0 {
-            Ok(MessageBuilderFull(self))
+            Err(None)
         } else {
-            Err(self)
+            self.length -= length;
+            self.chunks.end += 1;
+            if self.length == 0 {
+                Ok(MessageBuilderFull(self))
+            } else {
+                Err(Some(self))
+            }
         }
+    }
+
+    pub fn remaining(&self) -> usize {
+        self.length as usize
     }
 }
 
