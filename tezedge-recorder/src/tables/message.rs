@@ -18,7 +18,7 @@ pub struct Item {
     initiator: Initiator,
     sender: Sender,
     category: MessageCategory,
-    kind: MessageKind,
+    kind: Option<MessageKind>,
     chunks: Range<u64>,
 }
 
@@ -30,7 +30,7 @@ pub struct MessageFrontend {
     source_type: Initiator,
     incoming: bool,
     category: MessageCategory,
-    kind: MessageKind,
+    kind: Option<MessageKind>,
 }
 
 impl MessageFrontend {
@@ -49,7 +49,7 @@ impl MessageFrontend {
 
 pub struct MessageBuilder {
     category: MessageCategory,
-    kind: MessageKind,
+    kind: Option<MessageKind>,
     length: u32,
     chunks: Range<u64>,
 }
@@ -57,31 +57,31 @@ pub struct MessageBuilder {
 pub struct MessageBuilderFull(MessageBuilder);
 
 impl MessageBuilder {
-    pub fn connection_message(length: u16) -> Self {
-        MessageBuilder {
+    pub fn connection_message() -> MessageBuilderFull {
+        MessageBuilderFull(MessageBuilder {
             category: MessageCategory::Connection,
-            kind: MessageKind::None,
-            length: length as u32,
+            kind: None,
+            length: 0,
             chunks: 0..1,
-        }
+        })
     }
 
-    pub fn metadata_message(length: usize) -> Self {
-        MessageBuilder {
+    pub fn metadata_message() -> MessageBuilderFull {
+        MessageBuilderFull(MessageBuilder {
             category: MessageCategory::Meta,
-            kind: MessageKind::None,
-            length: length as u32,
+            kind: None,
+            length: 0,
             chunks: 1..2,
-        }
+        })
     }
 
-    pub fn acknowledge_message(length: usize) -> Self {
-        MessageBuilder {
+    pub fn acknowledge_message() -> MessageBuilderFull {
+        MessageBuilderFull(MessageBuilder {
             category: MessageCategory::Ack,
-            kind: MessageKind::None,
-            length: length as u32,
+            kind: None,
+            length: 0,
             chunks: 2..3,
-        }
+        })
     }
 
     // chunk_number >= 3
@@ -90,7 +90,7 @@ impl MessageBuilder {
             category: MessageCategory::P2p,
             kind: {
                 let tag = u16::from_be_bytes(<[u8; 2]>::try_from(&bytes[4..]).unwrap());
-                MessageKind::from_tag(tag)
+                Some(MessageKind::from_tag(tag))
             },
             length: u32::from_be_bytes(<[u8; 4]>::try_from(&bytes[..4]).unwrap()) + 4,
             chunks: chunk_number..chunk_number,

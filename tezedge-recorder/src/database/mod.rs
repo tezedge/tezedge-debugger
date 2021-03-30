@@ -3,11 +3,10 @@
 
 pub mod rocks;
 
-use std::{error::Error, net::SocketAddr, path::Path, sync::Arc};
+use std::{error::Error, path::Path, sync::Arc};
 use serde::Deserialize;
 use super::{
     tables::{connection, chunk, message},
-    common::Initiator,
 };
 
 pub trait Database {
@@ -19,7 +18,6 @@ pub trait Database {
 #[derive(Deserialize)]
 pub struct ConnectionsFilter {
     pub limit: Option<u64>,
-    pub cursor: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -32,10 +30,10 @@ pub struct ChunksFilter {
 pub struct MessagesFilter {
     pub limit: Option<u64>,
     pub cursor: Option<u64>,
-    pub remote_addr: Option<SocketAddr>,
-    pub initiator: Option<Initiator>,
-    pub sender: Option<bool>,
-    //pub types: Vec<P2pType>,
+    pub remote_addr: Option<String>,
+    pub initiator: Option<String>,
+    pub sender: Option<String>,
+    pub types: Vec<String>,
 }
 
 pub trait DatabaseFetch

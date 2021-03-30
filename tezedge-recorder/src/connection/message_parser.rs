@@ -51,9 +51,6 @@ where
         };
 
         if self.error || too_small {
-            if !self.error {
-                log::warn!("cannot parse message, connection: {:?}", self.cn);
-            }
             self.error = true;
             if chunk.bytes.len() < 2 {
                 self.db.store_chunk(chunk);
@@ -64,32 +61,11 @@ where
         let sender = &chunk.sender;
 
         let message = match chunk.counter {
-            0 => {
-                let message = MessageBuilder::connection_message(chunk.plain.len() as u16)
-                    .link_chunk(chunk.plain.len())
-                    .ok()
-                    .unwrap()
-                    .build(&sender, &self.cn);
-                Some(message)
-            },
-            1 => {
-                let message = MessageBuilder::metadata_message(chunk.plain.len())
-                    .link_chunk(chunk.plain.len())
-                    .ok()
-                    .unwrap()
-                    .build(&sender, &self.cn);
-                Some(message)
-            },
-            2 => {
-                let message = MessageBuilder::acknowledge_message(chunk.plain.len())
-                    .link_chunk(chunk.plain.len())
-                    .ok()
-                    .unwrap()
-                    .build(&sender, &self.cn);
-                Some(message)
-            },
+            0 => Some(MessageBuilder::connection_message().build(&sender, &self.cn)),
+            1 => Some(MessageBuilder::metadata_message().build(&sender, &self.cn)),
+            2 => Some(MessageBuilder::acknowledge_message().build(&sender, &self.cn)),
             _ => {
-                let b = self
+                let building_result = self
                     .builder
                     .take()
                     .unwrap_or_else(|| {
@@ -97,15 +73,12 @@ where
                         MessageBuilder::peer_message(six_bytes, chunk.counter)
                     })
                     .link_chunk(chunk.plain.len());
-                match b {
+                match building_result {
                     Ok(builder_full) => {
                         Some(builder_full.build(&sender, &self.cn))
                     },
-                    Err(Some(b)) => {
-                        self.builder = Some(b);
-                        None
-                    },
-                    Err(None) => {
+                    Err(builder) => {
+                        self.builder = builder;
                         None
                     },
                 }

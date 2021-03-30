@@ -1,8 +1,9 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::fmt;
+use std::{fmt, str::FromStr};
 use serde::{Serialize, Deserialize};
+use thiserror::Error;
 
 pub type Local = typenum::B0;
 pub type Remote = typenum::B1;
@@ -106,7 +107,6 @@ pub enum MessageKind {
     OperationsForBlocks,
     // 0xXXXX
     Unknown,
-    None,
 }
 
 impl MessageKind {
@@ -146,7 +146,7 @@ impl MessageKind {
     #[allow(dead_code)]
     pub fn valid_tag(&self) -> bool {
         match self {
-            MessageKind::Unknown | MessageKind::None => false,
+            MessageKind::Unknown => false,
             _ => true,
         }
     }
@@ -159,4 +159,51 @@ pub enum MessageCategory {
     Meta,
     Ack,
     P2p,
+}
+
+#[derive(Debug, Clone)]
+pub enum MessageType {
+    Connection,
+    Meta,
+    Ack,
+    P2p(MessageKind),
+}
+
+#[derive(Error, Debug)]
+#[error("Invalid message type {}", _0)]
+pub struct ParseTypeError(String);
+
+impl FromStr for MessageType {
+    type Err = ParseTypeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "connection_message" => Ok(MessageType::Connection),
+            "metadata" => Ok(MessageType::Meta),
+            "ack_message" => Ok(MessageType::Ack),
+
+            "disconnect" => Ok(MessageType::P2p(MessageKind::Disconnect)),
+            "advertise" => Ok(MessageType::P2p(MessageKind::Advertise)),
+            "swap_request" => Ok(MessageType::P2p(MessageKind::SwapRequest)),
+            "swap_ack" => Ok(MessageType::P2p(MessageKind::SwapAck)),
+            "bootstrap" => Ok(MessageType::P2p(MessageKind::Bootstrap)),
+            "get_current_branch" => Ok(MessageType::P2p(MessageKind::GetCurrentBranch)),
+            "current_branch" => Ok(MessageType::P2p(MessageKind::CurrentBranch)),
+            "deactivate" => Ok(MessageType::P2p(MessageKind::Deactivate)),
+            "get_current_head" => Ok(MessageType::P2p(MessageKind::GetCurrentHead)),
+            "current_head" => Ok(MessageType::P2p(MessageKind::CurrentHead)),
+            "get_block_headers" => Ok(MessageType::P2p(MessageKind::GetBlockHeaders)),
+            "block_header" => Ok(MessageType::P2p(MessageKind::BlockHeader)),
+            "get_operations" => Ok(MessageType::P2p(MessageKind::GetOperations)),
+            "operation" => Ok(MessageType::P2p(MessageKind::Operation)),
+            "get_protocols" => Ok(MessageType::P2p(MessageKind::GetProtocols)),
+            "protocol" => Ok(MessageType::P2p(MessageKind::Protocol)),
+            "get_operation_hashes_for_blocks" => Ok(MessageType::P2p(MessageKind::GetOperationHashesForBlocks)),
+            "operation_hashes_for_block" => Ok(MessageType::P2p(MessageKind::OperationHashesForBlocks)),
+            "get_operations_for_blocks" => Ok(MessageType::P2p(MessageKind::GetOperationsForBlocks)),
+            "operations_for_blocks" => Ok(MessageType::P2p(MessageKind::OperationsForBlocks)),
+
+            s => Err(ParseTypeError(s.to_string())),
+        }
+    }
 }

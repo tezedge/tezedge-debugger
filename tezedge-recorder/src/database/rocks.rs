@@ -1,13 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{
-    path::Path,
-    sync::{
-        Arc,
-        atomic::{Ordering, AtomicU64},
-    },
-};
+use std::{path::Path, sync::{Arc, atomic::{Ordering, AtomicU64}}};
 use rocksdb::{Cache, DB, ReadOptions};
 use storage::{Direction, IteratorMode, persistent::{self, DBError, DbConfiguration, Decoder, Encoder, KeyValueSchema, KeyValueStoreWithSchema, SchemaError}};
 use thiserror::Error;
@@ -100,16 +94,7 @@ impl DatabaseFetch for Db {
         filter: &ConnectionsFilter,
     ) -> Result<Vec<(connection::Key, connection::Value)>, Self::Error> {
         let limit = filter.limit.unwrap_or(100) as usize;
-        let key;
-        let mode = if let Some(cursor) = &filter.cursor {
-            key = cursor.parse()
-                .map_err(|e: connection::KeyFromStrError| {
-                    DBError::SchemaError { error: SchemaError::DecodeValidationError(e.to_string())}
-                })?;
-            IteratorMode::From(&key, Direction::Reverse)
-        } else {
-            IteratorMode::End
-        };
+        let mode = IteratorMode::Start;
         let vec = self
             .as_kv::<connection::Schema>()
             .iterator(mode)?
