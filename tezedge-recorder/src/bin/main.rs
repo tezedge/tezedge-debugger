@@ -12,9 +12,9 @@ fn main() -> anyhow::Result<()> {
     };
     use tezedge_recorder::{System, database::rocks, main_loop};
 
-    simple_logger::SimpleLogger::new()
-        .with_level(log::LevelFilter::Info)
-        .init()?;
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
 
     let running = Arc::new(AtomicBool::new(true));
     {
