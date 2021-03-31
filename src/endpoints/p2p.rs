@@ -4,7 +4,7 @@
 use std::{net::SocketAddr, convert::TryInto};
 use warp::{Filter, Rejection, reply::{with_status, json, WithStatus, Json}, http::StatusCode};
 use serde::{Serialize, Deserialize};
-use crate::storage_::{P2pStore, p2p::{Filters, FrontendMessage}, indices::{P2pType, ParseTypeError, Initiator, Sender, NodeName}};
+use crate::storage_::{P2pStore, p2p::{Filters, FrontendMessage, FrontendMessageDetails}, indices::{P2pType, ParseTypeError, Initiator, Sender, NodeName}};
 
 /// Cursor structure mapped from the endpoint URI
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +55,7 @@ pub fn p2p(storage: P2pStore) -> impl Filter<Extract=(WithStatus<Json>, ), Error
             match cursor.try_into() {
                 Ok(filters) => match storage.get_cursor(cursor_id, limit, &filters) {
                     Ok(msgs) => {
-                        let msgs = msgs.into_iter().map(FrontendMessage::new).collect::<Vec<_>>();
+                        let msgs = msgs.into_iter().map(|m| FrontendMessage::new(m, 100)).collect::<Vec<_>>();
                         with_status(json(&msgs), StatusCode::OK)
                     },
                     Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),
@@ -70,28 +70,7 @@ pub fn p2p_message(storage: P2pStore) -> impl Filter<Extract=(WithStatus<Json>, 
         .map(move |index: u64| -> WithStatus<Json> {
             match storage.get(index) {
                 Ok(msg) => {
-                    let msg = msg.and_then(|msg| {
-                        use tezos_messages::p2p::{
-                            encoding::peer::PeerMessageResponse,
-                            binary_message::BinaryMessage,
-                        };
-                        use crate::storage_::p2p::TezosPeerMessage;
-
-                        if let Some(msg) = msg.message {
-                            Some(msg)
-                        } else {
-                            let length = msg.decrypted_bytes.len();
-                            if length > 18 {
-                                if let Ok(peer_message) = PeerMessageResponse::from_bytes(&msg.decrypted_bytes[2..(length - 16)]) {
-                                    Some(TezosPeerMessage::PeerMessage(peer_message.message().clone().into()))
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                        }
-                    });
+                    let msg = msg.map(FrontendMessageDetails::new);
                     with_status(json(&msg), StatusCode::OK)
                 },
                 Err(err) => with_status(json(&format!("database error: {}", err)), StatusCode::INTERNAL_SERVER_ERROR),

@@ -16,7 +16,7 @@ pub struct FrontendMessage {
     pub incoming: bool,
     pub category: Option<MessageCategory>,
     pub kind: Option<MessageKind>,
-    pub error: Option<String>,
+    pub message_preview: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -54,8 +54,17 @@ pub enum MessageKind {
     OperationsForBlocks,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct FrontendMessageDetails {
+    id: u64,
+    message: Option<TezosPeerMessage>,
+    original_bytes: String,
+    decrypted_bytes: String,
+    error: Option<String>,
+}
+
 impl FrontendMessage {
-    pub fn new(message: Message) -> Self {
+    pub fn new(message: Message, truncate: usize) -> Self {
         let tezos_message = message.message.as_ref();
         let category = tezos_message
             .map(|m| match m {
@@ -93,6 +102,12 @@ impl FrontendMessage {
             P2pType::GetOperationsForBlocks => Some(MessageKind::GetOperationsForBlocks),
             P2pType::OperationsForBlocks => Some(MessageKind::OperationsForBlocks),
         };
+        let message_preview = serde_json::to_string(&message.message)
+            .ok()
+            .map(|mut s| {
+                s.truncate(truncate);
+                s
+            });
         FrontendMessage {
             id: message.id,
             timestamp: message.timestamp,
@@ -101,6 +116,18 @@ impl FrontendMessage {
             incoming: message.sender.is_incoming(),
             category,
             kind,
+            message_preview,
+        }
+    }
+}
+
+impl FrontendMessageDetails {
+    pub fn new(message: Message) -> Self {
+        FrontendMessageDetails {
+            id: message.id,
+            message: message.message,
+            original_bytes: hex::encode(&message.original_bytes),
+            decrypted_bytes: hex::encode(&message.decrypted_bytes),
             error: message.error,
         }
     }

@@ -2,7 +2,7 @@ mod message;
 pub use self::message::{Message, Schema, TezosPeerMessage, PartialPeerMessage, FullPeerMessage, HandshakeMessage};
 
 mod frontend_message;
-pub use self::frontend_message::FrontendMessage;
+pub use self::frontend_message::{FrontendMessage, FrontendMessageDetails};
 
 mod filter;
 pub use self::filter::{Indices, Filters};
