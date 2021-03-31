@@ -1,5 +1,5 @@
 use std::net::SocketAddr;
-use serde::Serialize;
+use serde::{Serialize, ser::{self, SerializeSeq}};
 use super::{
     message::{Message, TezosPeerMessage, HandshakeMessage},
     indices::{P2pType, Initiator},
@@ -58,9 +58,37 @@ pub enum MessageKind {
 pub struct FrontendMessageDetails {
     id: u64,
     message: Option<TezosPeerMessage>,
-    original_bytes: String,
-    decrypted_bytes: String,
+    original_bytes: HexString,
+    decrypted_bytes: HexString,
     error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HexString(String);
+
+impl HexString {
+    pub fn from_bytes<T>(bytes: T) -> Self
+    where
+        T: AsRef<[u8]>,
+    {
+        HexString(hex::encode(bytes))
+    }
+}
+
+impl Serialize for HexString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        debug_assert_eq!(self.0.len() % 2, 0);
+
+        let l = self.0.len() / 2;
+        let mut s = serializer.serialize_seq(Some(l))?;
+        for i in 0..l {
+            s.serialize_element(&self.0[(2 * i)..(2 * i + 2)])?;
+        }
+        s.end()
+    }
 }
 
 impl FrontendMessage {
@@ -126,8 +154,8 @@ impl FrontendMessageDetails {
         FrontendMessageDetails {
             id: message.id,
             message: message.message,
-            original_bytes: hex::encode(&message.original_bytes),
-            decrypted_bytes: hex::encode(&message.decrypted_bytes),
+            original_bytes: HexString::from_bytes(&message.original_bytes),
+            decrypted_bytes: HexString::from_bytes(&message.decrypted_bytes),
             error: message.error,
         }
     }
