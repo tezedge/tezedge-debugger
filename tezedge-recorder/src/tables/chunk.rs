@@ -74,6 +74,14 @@ pub struct Key {
 }
 
 impl Key {
+    pub fn begin(cn_id: connection::Key) -> Key {
+        Key {
+            cn_id,
+            counter: 0,
+            sender: Sender::Local,
+        }
+    }
+
     pub fn end(cn_id: connection::Key) -> Key {
         Key {
             cn_id,

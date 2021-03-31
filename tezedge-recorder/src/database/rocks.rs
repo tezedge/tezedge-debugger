@@ -180,7 +180,7 @@ impl DatabaseFetch for Db {
                 .map_err(|e: connection::KeyFromStrError| DBError::SchemaError {
                     error: SchemaError::DecodeValidationError(e.to_string()),
                 })?;
-            let k = chunk::Key::end(cn_id);
+            let k = chunk::Key::begin(cn_id);
             let k_bytes = k.encode().map_err(|error| DBError::SchemaError { error })?;
             let mode = rocksdb::IteratorMode::From(&k_bytes, rocksdb::Direction::Forward);
             let mut opts = ReadOptions::default();
