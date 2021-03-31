@@ -241,21 +241,27 @@ impl<App: AppIo> AppProbes for App {
             },
             SyscallContext::Read { fd, data_ptr } => {
                 let read = regs.rc();
+                let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                 if regs.is_syscall_success() && read as i64 > 0 {
                     let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
-                    let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                     send::dyn_sized::<typenum::B0>(id, DataTag::Read, data, app.rb());
-                    app.inc_counter();
+                } else {
+                    app.forget_connection(pid, fd);
+                    send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());        
                 }
+                app.inc_counter();
             },
             SyscallContext::Write { fd, data_ptr } => {
                 let written = regs.rc();
+                let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                 if regs.is_syscall_success() && written as i64 > 0 {
                     let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
-                    let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                     send::dyn_sized::<typenum::B0>(id, DataTag::Write, data, app.rb());
-                    app.inc_counter();
+                } else {
+                    app.forget_connection(pid, fd);
+                    send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());        
                 }
+                app.inc_counter();
             },
             _ => (),
         })
