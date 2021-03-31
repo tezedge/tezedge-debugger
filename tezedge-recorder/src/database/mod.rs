@@ -11,6 +11,7 @@ use super::{
 
 pub trait Database {
     fn store_connection(&self, item: connection::Item);
+    fn update_connection(&self, item: connection::Item);
     fn store_chunk(&self, item: chunk::Item);
     fn store_message(&self, item: message::Item);
     fn store_log(&self, item: node_log::Item);

@@ -183,7 +183,10 @@ where
                 }
                 match temp_state.over() {
                     Ok(state) => HandshakeDone::HaveKey(state),
-                    Err(state) => HandshakeDone::CannotDecrypt(state),
+                    Err((state, cn)) => {
+                        handler.handle_cn(cn);
+                        HandshakeDone::CannotDecrypt(state)
+                    },
                 }
             },
             HandshakeDone::HaveNotKey(mut state) => {
@@ -200,13 +203,5 @@ where
 
 pub trait ChunkHandler {
     fn handle_chunk(&mut self, chunk: chunk::Item);
-}
-
-impl<F> ChunkHandler for F
-where
-    F: FnMut(chunk::Item),
-{
-    fn handle_chunk(&mut self, chunk: chunk::Item) {
-        self(chunk)
-    }
+    fn handle_cn(&mut self, cn: connection::Item);
 }

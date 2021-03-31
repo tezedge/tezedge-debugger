@@ -66,7 +66,7 @@ pub struct HaveNotKey<S> {
 pub struct HaveData<S> {
     inner: Inner<S>,
     key: Key,
-    error: bool,
+    error: Option<u64>,
 }
 
 pub struct CannotDecrypt<S> {
@@ -246,9 +246,9 @@ where
             Err(s) => format!("{:?}", s),
         };
         log::warn!(
-            "uncertain connection: key: {}, value: {}",
+            "uncertain connection: {}, {}",
+            cn_value,
             inner.cn.key(),
-            cn_value
         );
         if S::BOOL {
             inner.cn.add_comment().incoming_uncertain = true;
@@ -289,7 +289,7 @@ where
         HaveData {
             inner: self.inner,
             key: self.key,
-            error: false,
+            error: None,
         }
     }
 }
@@ -301,7 +301,7 @@ where
     type Item = chunk::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.error {
+        if self.error.is_some() {
             return None;
         }
         let _ = self.inner.buffer.have_chunk()?;
@@ -309,8 +309,18 @@ where
         match self.key.decrypt(&bytes) {
             Ok(plain) => Some(self.inner.chunk(counter, bytes, plain)),
             Err(_) => {
-                self.error = true;
-                log::warn!("cannot decrypt: {}, {:?}", counter, Sender::new(S::BOOL));
+                self.error = Some(counter);
+                let cn_value = match serde_json::to_string(&self.inner.cn.value()) {
+                    Ok(s) => s,
+                    Err(s) => format!("{:?}", s),
+                };
+                log::warn!(
+                    "cannot decrypt: {}-{}-{}, connection: {}",
+                    self.inner.cn.key(),
+                    Sender::new(S::BOOL),
+                    counter,
+                    cn_value,
+                );
                 let (counter, bytes) = self.inner.buffer.cleanup();
                 Some(self.inner.chunk(counter, bytes, Vec::new()))
             },
@@ -322,9 +332,16 @@ impl<S> HaveData<S>
 where
     S: Bit,
 {
-    pub fn over(self) -> Result<HaveKey<S>, CannotDecrypt<S>> {
-        if self.error {
-            Err(CannotDecrypt { inner: self.inner })
+    pub fn over(self) -> Result<HaveKey<S>, (CannotDecrypt<S>, connection::Item)> {
+        if let Some(position) = self.error {
+            let mut inner = self.inner;
+            if S::BOOL {
+                inner.cn.add_comment().incoming_cannot_decrypt = Some(position);
+            } else {
+                inner.cn.add_comment().outgoing_cannot_decrypt = Some(position);
+            }
+            let cn = inner.cn.clone();
+            Err((CannotDecrypt { inner }, cn))
         } else {
             Ok(HaveKey {
                 inner: self.inner,

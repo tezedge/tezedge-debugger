@@ -88,4 +88,8 @@ where
             self.db.store_message(message);
         }
     }
+
+    fn handle_cn(&mut self, cn: connection::Item) {
+        self.db.update_connection(cn);
+    }
 }

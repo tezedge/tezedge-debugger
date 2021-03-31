@@ -15,44 +15,62 @@ pub struct Comments {
     pub incoming_wrong_pow: Option<f64>,
     pub incoming_too_short: Option<usize>,
     pub incoming_uncertain: bool,
+    pub incoming_cannot_decrypt: Option<u64>,
     pub outgoing_wrong_pow: Option<f64>,
     pub outgoing_too_short: Option<usize>,
     pub outgoing_uncertain: bool,
     pub outgoing_wrong_pk: bool,
+    pub outgoing_cannot_decrypt: Option<u64>,
 }
 
 impl Comments {
-    fn ser(&self) -> ([u8; 6], [u8; 6]) {
-        let mut i = [0; 6];
+    fn ser(&self) -> ([u8; 18], [u8; 18]) {
+        let mut i = [0; 18];
         i[0] = self.incoming_wrong_pow.as_ref().cloned().unwrap_or(0.0) as u8;
-        i[1] = self.incoming_too_short.as_ref().cloned().unwrap_or(255) as u8;
+        i[1] = self.incoming_too_short.as_ref().cloned().unwrap_or(u8::MAX as _) as u8;
         i[2] = if self.incoming_uncertain { 1 } else { 0 };
-        let mut o = [0; 6];
+        let c = self.incoming_cannot_decrypt.as_ref().cloned().unwrap_or(u64::MAX);
+        i[4..12].clone_from_slice(&c.to_le_bytes());
+        let mut o = [0; 18];
         o[0] = self.outgoing_wrong_pow.as_ref().cloned().unwrap_or(0.0) as u8;
-        o[1] = self.outgoing_too_short.as_ref().cloned().unwrap_or(255) as u8;
+        o[1] = self.outgoing_too_short.as_ref().cloned().unwrap_or(u8::MAX as _) as u8;
         o[2] = if self.outgoing_uncertain { 1 } else { 0 };
         o[3] = if self.outgoing_wrong_pk { 1 } else { 0 };
+        let c = self.outgoing_cannot_decrypt.as_ref().cloned().unwrap_or(u64::MAX);
+        o[4..12].clone_from_slice(&c.to_le_bytes());
 
         (i, o)
     }
 
-    fn de((i, o): ([u8; 6], [u8; 6])) -> Self {
+    fn de((i, o): ([u8; 18], [u8; 18])) -> Self {
+        let i_c = u64::from_le_bytes(TryFrom::try_from(&i[4..12]).unwrap());
+        let o_c = u64::from_le_bytes(TryFrom::try_from(&o[4..12]).unwrap());
         Comments {
             incoming_wrong_pow: if i[0] == 0 { None } else { Some(i[0] as f64) },
-            incoming_too_short: if i[1] == 255 {
+            incoming_too_short: if i[1] == u8::MAX {
                 None
             } else {
                 Some(i[1] as usize)
             },
             incoming_uncertain: i[2] != 0,
+            incoming_cannot_decrypt: if i_c == u64::MAX {
+                None
+            } else {
+                Some(i_c)
+            },
             outgoing_wrong_pow: if o[0] == 0 { None } else { Some(o[0] as f64) },
-            outgoing_too_short: if o[1] == 255 {
+            outgoing_too_short: if o[1] == u8::MAX {
                 None
             } else {
                 Some(o[1] as usize)
             },
             outgoing_uncertain: o[2] != 0,
             outgoing_wrong_pk: o[3] != 0,
+            outgoing_cannot_decrypt: if o_c == u64::MAX {
+                None
+            } else {
+                Some(o_c)
+            },
         }
     }
 }
@@ -78,6 +96,10 @@ impl Serialize for Comments {
             let msg = "incoming data does not look like a connection message";
             s.serialize_element(&msg)?;
         }
+        if let Some(position) = self.incoming_cannot_decrypt {
+            let msg = format!("incoming chunk cannot decrypt, position: {}", position);
+            s.serialize_element(&msg)?;
+        }
         if let Some(target) = self.outgoing_wrong_pow {
             let msg = format!(
                 "outgoing connection message bad proof-of-work, target: {}",
@@ -95,6 +117,10 @@ impl Serialize for Comments {
         }
         if self.outgoing_wrong_pk {
             let msg = "outgoing connection message public key does not match with identity";
+            s.serialize_element(&msg)?;
+        }
+        if let Some(position) = self.outgoing_cannot_decrypt {
+            let msg = format!("outgoing chunk cannot decrypt, position: {}", position);
             s.serialize_element(&msg)?;
         }
 
@@ -243,7 +269,7 @@ impl Decoder for Key {
     }
 }
 
-// ip 16 bytes, port 2 bytes, initiator 1 byte, padding 1 byte, comments 12 bytes, peer_pk 32 bytes
+// ip 16 bytes, port 2 bytes, initiator 1 byte, padding 1 byte, comments 36 bytes, peer_pk 32 bytes
 pub struct Value {
     initiator: Initiator,
     remote_addr: SocketAddr,
@@ -255,7 +281,7 @@ impl Encoder for Value {
     fn encode(&self) -> Result<Vec<u8>, SchemaError> {
         use std::net::IpAddr;
 
-        let mut v = Vec::with_capacity(64);
+        let mut v = Vec::with_capacity(88);
 
         let ip = match self.remote_addr.ip() {
             IpAddr::V4(ip) => ip.to_ipv6_mapped().octets(),
@@ -279,7 +305,7 @@ impl Encoder for Value {
 
 impl Decoder for Value {
     fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
-        if bytes.len() != 64 {
+        if bytes.len() != 88 {
             return Err(SchemaError::DecodeError);
         }
 
@@ -290,10 +316,10 @@ impl Decoder for Value {
                 let port = u16::from_le_bytes(TryFrom::try_from(&bytes[16..18]).unwrap());
                 (ip, port).into()
             },
-            peer_pk: TryFrom::try_from(&bytes[32..64]).unwrap(),
+            peer_pk: TryFrom::try_from(&bytes[56..88]).unwrap(),
             comments: {
-                let i = TryFrom::try_from(&bytes[20..26]).unwrap();
-                let o = TryFrom::try_from(&bytes[26..32]).unwrap();
+                let i = TryFrom::try_from(&bytes[20..38]).unwrap();
+                let o = TryFrom::try_from(&bytes[38..56]).unwrap();
                 Comments::de((i, o))
             },
         })

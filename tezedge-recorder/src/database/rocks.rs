@@ -88,6 +88,14 @@ impl Database for Db {
         }
     }
 
+    fn update_connection(&self, item: connection::Item) {
+        let (key, value) = item.split();
+        let kv = self.as_kv::<connection::Schema>();
+        if let Err(error) = kv.delete(&key).and_then(|()| kv.put(&key, &value)) {
+            log::error!("database error: {}", error);
+        }
+    }
+
     fn store_chunk(&self, item: chunk::Item) {
         let (key, value) = item.split();
         if let Err(error) = self.as_kv::<chunk::Schema>().put(&key, &value) {
@@ -174,7 +182,7 @@ impl DatabaseFetch for Db {
                 })?;
             let k = chunk::Key::end(cn_id);
             let k_bytes = k.encode().map_err(|error| DBError::SchemaError { error })?;
-            let mode = rocksdb::IteratorMode::From(&k_bytes, rocksdb::Direction::Reverse);
+            let mode = rocksdb::IteratorMode::From(&k_bytes, rocksdb::Direction::Forward);
             let mut opts = ReadOptions::default();
             opts.set_prefix_same_as_start(true);
             let cf = self.inner.cf_handle(chunk::Schema::name()).ok_or(
@@ -188,7 +196,7 @@ impl DatabaseFetch for Db {
                 .map(|(k, v)| (chunk::Key::decode(&k), chunk::Value::decode(&v)));
             Ok(collect_it(it, limit))
         } else {
-            let it = self.as_kv::<chunk::Schema>().iterator(IteratorMode::End)?;
+            let it = self.as_kv::<chunk::Schema>().iterator(IteratorMode::Start)?;
             Ok(collect_it(it, limit))
         }
     }
