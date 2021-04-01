@@ -201,3 +201,8 @@ fn kretprobe_accept(regs: Registers) {
 fn kprobe_close(regs: Registers) {
     App.on_close(&regs)
 }
+
+#[kretprobe("get_unused_fd_flags")]
+fn kretprobe_get_fd(regs: Registers) {
+    App.on_ret_get_fd(&regs)
+}

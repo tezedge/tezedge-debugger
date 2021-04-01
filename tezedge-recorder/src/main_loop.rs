@@ -56,6 +56,9 @@ where
                 SnifferEvent::Close { id } => {
                     list.handle_close(id);
                 },
+                SnifferEvent::GetFd { id } => {
+                    list.handle_get_fd(id);
+                }
                 SnifferEvent::Debug { id, msg } => {
                     log::warn!("{} {}", id, msg);
                 },
@@ -130,6 +133,14 @@ where
             connection.handle_data(&payload, net, incoming);
         } else {
             log::debug!("failed to handle data, connection does not exist: {}", id);
+        }
+    }
+
+    fn handle_get_fd(&mut self, id: EventId) {
+        let socket_id = id.socket_id;
+        if let Some(mut c) = self.connections.remove(&socket_id) {
+            c.warn_fd_changed();
+            c.join();
         }
     }
 

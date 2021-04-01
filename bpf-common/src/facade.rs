@@ -40,6 +40,9 @@ pub enum SnifferEvent {
     Close {
         id: EventId,
     },
+    GetFd {
+        id: EventId,
+    },
     Debug {
         id: EventId,
         msg: String,
@@ -170,6 +173,7 @@ impl RingBufferData for SnifferEvent {
                 address: parse_socket_address(&data[4..]).unwrap(),
             }),
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
+            DataTag::GetFd => Ok(SnifferEvent::GetFd { id: descriptor.id }),
             DataTag::Debug => {
                 SnifferError::debug(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
                     let msg = hex::encode(&data[..size]);

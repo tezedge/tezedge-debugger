@@ -90,6 +90,7 @@ pub enum DataTag {
     Accept,
     Close,
 
+    GetFd,
     Debug,
 }
 
@@ -114,6 +115,8 @@ impl DataTag {
             Some(Self::Accept)
         } else if v == Self::Close as u32 {
             Some(Self::Close)
+        } else if v == Self::GetFd as u32 {
+            Some(Self::GetFd)
         } else if v == Self::Debug as u32 {
             Some(Self::Debug)
         } else {

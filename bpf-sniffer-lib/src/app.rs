@@ -32,6 +32,7 @@ pub trait AppProbes {
     fn on_close(&mut self, regs: &Registers);
     fn on_data(&mut self, regs: &Registers, incoming: bool, net: bool);
 
+    fn on_ret_get_fd(&mut self, regs: &Registers);
     fn on_ret(&mut self, regs: &Registers);
 }
 
@@ -133,6 +134,18 @@ impl<App: AppIo> AppProbes for App {
             (true, true) => SyscallContext::Recv { fd, data_ptr },
         };
         self.push_context(thread_id, pid, ts, context);
+    }
+
+    fn on_ret_get_fd(&mut self, regs: &Registers) {
+        let pid = (helpers::bpf_get_current_pid_tgid() >> 32) as u32;
+        if !self.is_process(pid) {
+            return;
+        }
+
+        let fd = regs.rc() as u32;
+        let ts = helpers::bpf_ktime_get_ns();
+        let id = EventId::new(SocketId { pid, fd }, ts, ts);
+        send::sized::<typenum::U0, typenum::B0>(id, DataTag::GetFd, &[], self.rb());
     }
 
     fn on_ret(&mut self, regs: &Registers) {

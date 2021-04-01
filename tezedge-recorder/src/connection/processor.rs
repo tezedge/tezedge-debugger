@@ -12,6 +12,7 @@ use super::{
 };
 
 pub struct Connection<Db> {
+    remote_addr: SocketAddr,
     chunk_parser: ChunkParser<Db>,
     db: Arc<Db>,
 }
@@ -35,6 +36,7 @@ where
     pub fn new(remote_addr: SocketAddr, incoming: bool, identity: Identity, db: Arc<Db>) -> Self {
         let db_item = connection::Item::new(Initiator::new(incoming), remote_addr);
         Connection {
+            remote_addr,
             chunk_parser: ChunkParser::Handshake(Handshake::new(db_item, identity)),
             db,
         }
@@ -96,6 +98,10 @@ where
             },
         };
         let _ = mem::replace(&mut self.chunk_parser, parser);
+    }
+
+    pub fn warn_fd_changed(&self) {
+        log::warn!("fd of: {} has took for other file, the connection data is invalid", self.remote_addr);
     }
 
     pub fn join(self) {}
