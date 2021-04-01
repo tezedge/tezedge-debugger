@@ -138,7 +138,7 @@ where
 
     fn handle_get_fd(&mut self, id: EventId) {
         let socket_id = id.socket_id;
-        if let Some(mut c) = self.connections.remove(&socket_id) {
+        if let Some(c) = self.connections.remove(&socket_id) {
             c.warn_fd_changed();
             c.join();
         }
