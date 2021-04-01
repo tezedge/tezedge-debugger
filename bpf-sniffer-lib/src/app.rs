@@ -259,9 +259,6 @@ impl<App: AppIo> AppProbes for App {
                 if regs.is_syscall_success() && read as i64 > 0 {
                     let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
                     send::dyn_sized::<typenum::B0>(id, DataTag::Read, data, app.rb());
-                } else {
-                    app.forget_connection(pid, fd);
-                    //send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());        
                 }
                 app.inc_counter();
             },
@@ -271,9 +268,6 @@ impl<App: AppIo> AppProbes for App {
                 if regs.is_syscall_success() && written as i64 > 0 {
                     let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
                     send::dyn_sized::<typenum::B0>(id, DataTag::Write, data, app.rb());
-                } else {
-                    app.forget_connection(pid, fd);
-                    //send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());        
                 }
                 app.inc_counter();
             },
@@ -283,9 +277,6 @@ impl<App: AppIo> AppProbes for App {
                 if regs.is_syscall_success() && read as i64 > 0 {
                     let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
                     send::dyn_sized::<typenum::B0>(id, DataTag::Recv, data, app.rb());
-                } else {
-                    app.forget_connection(pid, fd);
-                    //send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());        
                 }
                 app.inc_counter();
             },
@@ -295,9 +286,6 @@ impl<App: AppIo> AppProbes for App {
                 if regs.is_syscall_success() && written as i64 > 0 {
                     let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
                     send::dyn_sized::<typenum::B0>(id, DataTag::Send, data, app.rb());
-                } else {
-                    app.forget_connection(pid, fd);
-                    //send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());        
                 }
                 app.inc_counter();
             },
