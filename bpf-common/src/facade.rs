@@ -15,13 +15,11 @@ use passfd::FdPassingExt;
 use super::{EventId, DataDescriptor, DataTag};
 
 pub enum SnifferEvent {
-    Write {
+    Data {
         id: EventId,
         data: Vec<u8>,
-    },
-    Read {
-        id: EventId,
-        data: Vec<u8>,
+        net: bool,
+        incoming: bool,
     },
     Connect {
         id: EventId,
@@ -51,8 +49,7 @@ pub enum SnifferEvent {
 #[derive(Debug)]
 pub enum SnifferError {
     SliceTooShort(usize),
-    Write { id: EventId, code: SnifferErrorCode },
-    Read { id: EventId, code: SnifferErrorCode },
+    Data { id: EventId, code: SnifferErrorCode, net: bool, incoming: bool },
     Debug { id: EventId, code: SnifferErrorCode },
 }
 
@@ -72,12 +69,8 @@ impl SnifferError {
         }
     }
 
-    fn write(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
-        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Write { id, code })
-    }
-
-    fn read(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
-        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Read { id, code })
+    fn data(id: EventId, code: i32, actual_length: usize, net: bool, incoming: bool) -> Result<(EventId, usize), Self> {
+        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Data { id, code, net, incoming })
     }
 
     fn debug(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
@@ -117,18 +110,42 @@ impl RingBufferData for SnifferEvent {
         let data = &value[mem::size_of::<DataDescriptor>()..];
         match descriptor.tag {
             DataTag::Write => {
-                SnifferError::write(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
-                    SnifferEvent::Write {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), false, false).map(|(id, size)| {
+                    SnifferEvent::Data {
                         id,
                         data: data[..size].to_vec(),
+                        net: false,
+                        incoming: false,
                     }
                 })
             },
             DataTag::Read => {
-                SnifferError::read(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
-                    SnifferEvent::Read {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), false, true).map(|(id, size)| {
+                    SnifferEvent::Data {
                         id,
                         data: data[..size].to_vec(),
+                        net: false,
+                        incoming: true,
+                    }
+                })
+            },
+            DataTag::Send => {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), true, false).map(|(id, size)| {
+                    SnifferEvent::Data {
+                        id,
+                        data: data[..size].to_vec(),
+                        net: true,
+                        incoming: false,
+                    }
+                })
+            },
+            DataTag::Recv => {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), true, true).map(|(id, size)| {
+                    SnifferEvent::Data {
+                        id,
+                        data: data[..size].to_vec(),
+                        net: true,
+                        incoming: true,
                     }
                 })
             },

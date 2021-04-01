@@ -40,13 +40,13 @@ where
         }
     }
 
-    pub fn handle_data(&mut self, payload: &[u8], incoming: bool) {
+    pub fn handle_data(&mut self, payload: &[u8], net: bool, incoming: bool) {
         use std::mem;
 
         let parser = mem::replace(&mut self.chunk_parser, ChunkParser::Invalid);
         let parser = match parser {
             ChunkParser::Invalid => ChunkParser::Invalid,
-            ChunkParser::Handshake(h) => match h.handle_data(payload, incoming) {
+            ChunkParser::Handshake(h) => match h.handle_data(payload, net, incoming) {
                 Either::Left(h) => ChunkParser::Handshake(h),
                 Either::Right(HandshakeOutput {
                     cn,
@@ -80,7 +80,7 @@ where
             } => {
                 if !incoming {
                     ChunkParser::HandshakeDone {
-                        local: local.handle_data(payload, &mut local_mp),
+                        local: local.handle_data(payload, net, &mut local_mp),
                         local_mp,
                         remote,
                         remote_mp,
@@ -89,7 +89,7 @@ where
                     ChunkParser::HandshakeDone {
                         local,
                         local_mp,
-                        remote: remote.handle_data(payload, &mut remote_mp),
+                        remote: remote.handle_data(payload, net, &mut remote_mp),
                         remote_mp,
                     }
                 }

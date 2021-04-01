@@ -80,8 +80,9 @@ impl TryFrom<&[u8]> for DataDescriptor {
 #[derive(Debug)]
 pub enum DataTag {
     Write,
-
     Read,
+    Send,
+    Recv,
 
     Connect,
     Bind,
@@ -99,6 +100,10 @@ impl DataTag {
             Some(Self::Write)
         } else if v == Self::Read as u32 {
             Some(Self::Read)
+        } else if v == Self::Send as u32 {
+            Some(Self::Send)
+        } else if v == Self::Recv as u32 {
+            Some(Self::Recv)
         } else if v == Self::Connect as u32 {
             Some(Self::Connect)
         } else if v == Self::Bind as u32 {

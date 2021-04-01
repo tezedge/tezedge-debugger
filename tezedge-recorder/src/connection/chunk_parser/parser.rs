@@ -68,7 +68,7 @@ impl Handshake {
         }
     }
 
-    pub fn handle_data(self, payload: &[u8], incoming: bool) -> Either<Self, HandshakeOutput> {
+    pub fn handle_data(self, payload: &[u8], net: bool, incoming: bool) -> Either<Self, HandshakeOutput> {
         match self {
             Handshake {
                 local: Half::Initial(l),
@@ -94,7 +94,10 @@ impl Handshake {
                     match l.handle_data(payload) {
                         Ok(l) => Either::Left(Handshake::local_cm(l, r)),
                         Err((l, l_chunk)) => {
-                            let (r, r_chunk) = r.uncertain();
+                            let (r, mut r_chunk) = r.uncertain();
+                            if let Some(c) = &mut r_chunk {
+                                c.net(net);
+                            }
                             Either::Right(HandshakeOutput {
                                 cn: l.cn(),
                                 local: HandshakeDone::Uncertain(l),
@@ -119,7 +122,10 @@ impl Handshake {
                     match r.handle_data(payload) {
                         Ok(r) => Either::Left(Handshake::remote_cm(l, r)),
                         Err((r, r_chunk)) => {
-                            let (l, l_chunk) = l.uncertain();
+                            let (l, mut l_chunk) = l.uncertain();
+                            if let Some(c) = &mut l_chunk {
+                                c.net(net);
+                            }
                             Either::Right(HandshakeOutput {
                                 cn: l.cn(),
                                 local: HandshakeDone::Uncertain(l),
@@ -167,18 +173,21 @@ impl<S> HandshakeDone<S>
 where
     S: Bit,
 {
-    pub fn handle_data<H>(self, payload: &[u8], handler: &mut H) -> Self
+    pub fn handle_data<H>(self, payload: &[u8], net: bool, handler: &mut H) -> Self
     where
         H: ChunkHandler,
     {
         match self {
             HandshakeDone::Uncertain(mut state) => {
-                handler.handle_chunk(state.handle_data(payload));
+                let mut chunk = state.handle_data(payload);
+                chunk.net(net);
+                handler.handle_chunk(chunk);
                 HandshakeDone::Uncertain(state)
             },
             HandshakeDone::HaveKey(state) => {
                 let mut temp_state = state.handle_data(payload);
-                while let Some(chunk) = temp_state.next() {
+                while let Some(mut chunk) = temp_state.next() {
+                    chunk.net(net);
                     handler.handle_chunk(chunk)
                 }
                 match temp_state.over() {
@@ -190,11 +199,15 @@ where
                 }
             },
             HandshakeDone::HaveNotKey(mut state) => {
-                handler.handle_chunk(state.handle_data(payload));
+                let mut chunk = state.handle_data(payload);
+                chunk.net(net);
+                handler.handle_chunk(chunk);
                 HandshakeDone::HaveNotKey(state)
             },
             HandshakeDone::CannotDecrypt(mut state) => {
-                handler.handle_chunk(state.handle_data(payload));
+                let mut chunk = state.handle_data(payload);
+                chunk.net(net);
+                handler.handle_chunk(chunk);
                 HandshakeDone::CannotDecrypt(state)
             },
         }

@@ -17,6 +17,7 @@ pub struct Item {
     pub sender: Sender,
     pub counter: u64,
     timestamp: u64,
+    net: bool,
     pub bytes: Vec<u8>,
     pub plain: Vec<u8>,
 }
@@ -40,16 +41,21 @@ impl Item {
             cn_id,
             sender,
             counter,
+            net: true,
             timestamp,
             bytes,
             plain,
         }
     }
 
+    pub fn net(&mut self, net: bool) {
+        self.net = net;
+    }
+
     #[rustfmt::skip]
     pub fn split(self) -> (Key, Value) {
-        let Item { cn_id, counter, sender, timestamp, bytes, plain } = self;
-        (Key { cn_id, counter, sender }, Value { timestamp, bytes, plain })
+        let Item { cn_id, counter, sender, net, timestamp, bytes, plain } = self;
+        (Key { cn_id, counter, sender }, Value { net, timestamp, bytes, plain })
     }
 }
 
@@ -178,6 +184,7 @@ impl Decoder for Key {
 }
 
 pub struct Value {
+    net: bool,
     timestamp: u64,
     bytes: Vec<u8>,
     plain: Vec<u8>,
@@ -190,7 +197,8 @@ impl Serialize for Value {
     where
         S: ser::Serializer,
     {
-        let mut s = serializer.serialize_struct("Chunk", 3)?;
+        let mut s = serializer.serialize_struct("Chunk", 4)?;
+        s.serialize_field("net", &self.net)?;
         s.serialize_field("timestamp", &self.timestamp)?;
         s.serialize_field("bytes", &hex::encode(&self.bytes))?;
         s.serialize_field("plain", &hex::encode(&self.plain))?;
@@ -216,6 +224,7 @@ impl Serialize for ValueTruncated {
         };
 
         let mut s = serializer.serialize_struct("Chunk", 3)?;
+        s.serialize_field("net", &self.0.net)?;
         s.serialize_field("timestamp", &self.0.timestamp)?;
         s.serialize_field("bytes", &truncated_hex(&self.0.bytes))?;
         s.serialize_field("plain", &truncated_hex(&self.0.plain))?;
@@ -225,9 +234,10 @@ impl Serialize for ValueTruncated {
 
 impl Encoder for Value {
     fn encode(&self) -> Result<Vec<u8>, SchemaError> {
-        let mut v = Vec::with_capacity(self.bytes.len() + self.plain.len() + 16);
+        let mut v = Vec::with_capacity(self.bytes.len() + self.plain.len() + 17);
         v.extend_from_slice(&self.timestamp.to_le_bytes());
         v.extend_from_slice(&(self.bytes.len() as u64).to_le_bytes());
+        v.push(if self.net { 1 } else { 0 });
         v.extend_from_slice(&self.bytes);
         v.extend_from_slice(&self.plain);
         Ok(v)
@@ -236,20 +246,21 @@ impl Encoder for Value {
 
 impl Decoder for Value {
     fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
-        if bytes.len() < 16 {
+        if bytes.len() < 17 {
             return Err(SchemaError::DecodeError);
         }
 
         let len = u64::from_le_bytes(TryFrom::try_from(&bytes[8..16]).unwrap()) as usize;
         Ok(Value {
+            net: bytes[16] != 0,
             timestamp: u64::from_le_bytes(TryFrom::try_from(&bytes[..8]).unwrap()),
             bytes: {
                 if bytes.len() < 16 + len {
                     return Err(SchemaError::DecodeError);
                 }
-                bytes[16..(16 + len)].to_vec()
+                bytes[17..(17 + len)].to_vec()
             },
-            plain: bytes[(16 + len)..].to_vec(),
+            plain: bytes[(17 + len)..].to_vec(),
         })
     }
 }

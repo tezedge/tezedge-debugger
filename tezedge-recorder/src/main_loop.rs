@@ -50,11 +50,8 @@ where
                     let _ = listen_on_fd;
                     list.handle_connection(id, address, true);
                 },
-                SnifferEvent::Write { id, data } => {
-                    list.handle_data(id, data, false);
-                },
-                SnifferEvent::Read { id, data } => {
-                    list.handle_data(id, data, true);
+                SnifferEvent::Data { id, data, net, incoming } => {
+                    list.handle_data(id, data, net, incoming);
                 },
                 SnifferEvent::Close { id } => {
                     list.handle_close(id);
@@ -125,12 +122,12 @@ where
         }
     }
 
-    fn handle_data(&mut self, id: EventId, payload: Vec<u8>, incoming: bool) {
+    fn handle_data(&mut self, id: EventId, payload: Vec<u8>, net: bool, incoming: bool) {
         if payload.len() > 0x1000000 {
             log::warn!("received from ring buffer big payload {}", payload.len());
         }
         if let Some(connection) = self.connections.get_mut(&id.socket_id) {
-            connection.handle_data(&payload, incoming);
+            connection.handle_data(&payload, net, incoming);
         } else {
             log::debug!("failed to handle data, connection does not exist: {}", id);
         }

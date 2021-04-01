@@ -119,7 +119,7 @@ impl AppIo for App {
 
 #[kprobe("ksys_write")]
 fn kprobe_write(regs: Registers) {
-    App.on_data(&regs, false)
+    App.on_data(&regs, false, false)
 }
 
 #[kretprobe("ksys_write")]
@@ -129,7 +129,7 @@ fn kretprobe_write(regs: Registers) {
 
 #[kprobe("ksys_read")]
 fn kprobe_read(regs: Registers) {
-    App.on_data(&regs, true)
+    App.on_data(&regs, true, false)
 }
 
 #[kretprobe("ksys_read")]
@@ -139,7 +139,7 @@ fn kretprobe_read(regs: Registers) {
 
 #[kprobe("__sys_sendto")]
 fn kprobe_sendto(regs: Registers) {
-    App.on_data(&regs, false)
+    App.on_data(&regs, false, true)
 }
 
 #[kretprobe("__sys_sendto")]
@@ -149,7 +149,7 @@ fn kretprobe_sendto(regs: Registers) {
 
 #[kprobe("__sys_recvfrom")]
 fn kprobe_recvfrom(regs: Registers) {
-    App.on_data(&regs, true)
+    App.on_data(&regs, true, true)
 }
 
 #[kretprobe("__sys_recvfrom")]
