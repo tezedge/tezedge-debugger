@@ -58,8 +58,12 @@ where
                     let mut local_mp = MessageParser::new(cn.clone(), self.db.clone());
                     let mut remote_mp = MessageParser::new(cn.clone(), self.db.clone());
                     self.db.store_connection(cn);
-                    local_mp.handle_chunk(l_chunk);
-                    remote_mp.handle_chunk(r_chunk);
+                    if let Some(chunk) = l_chunk {
+                        local_mp.handle_chunk(chunk);
+                    }
+                    if let Some(chunk) = r_chunk {
+                        remote_mp.handle_chunk(chunk);
+                    }
                     ChunkParser::HandshakeDone {
                         local,
                         local_mp,

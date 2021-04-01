@@ -52,12 +52,16 @@ impl Buffer {
         }
     }
 
-    pub fn cleanup(&mut self) -> (u64, Vec<u8>) {
+    pub fn cleanup(&mut self) -> Option<(u64, Vec<u8>)> {
         use std::mem;
+
+        if self.buffer.is_empty() {
+            return None;
+        }
 
         let counter = self.counter;
         self.counter += 1;
-        (counter, mem::replace(&mut self.buffer, Vec::new()))
+        Some((counter, mem::replace(&mut self.buffer, Vec::new())))
     }
 }
 

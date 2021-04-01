@@ -31,6 +31,11 @@ where
     pub fn handle_data(&mut self, payload: &[u8]) {
         self.buffer.handle_data(payload);
     }
+
+    pub fn cleanup(&mut self) -> Option<chunk::Item> {
+        self.buffer.cleanup()
+            .map(|(counter, bytes)| self.chunk(counter, bytes, Vec::new()))
+    }
 }
 
 /// State machine:
@@ -88,7 +93,7 @@ where
         }
     }
 
-    pub fn uncertain(self) -> (Uncertain<S>, chunk::Item) {
+    pub fn uncertain(self) -> (Uncertain<S>, Option<chunk::Item>) {
         Uncertain::new(self.inner)
     }
 
@@ -107,7 +112,7 @@ where
     S: Bit,
 {
     /// Should not need to call
-    pub fn handle_data(mut self, payload: &[u8]) -> Result<Self, (Uncertain<S>, chunk::Item)> {
+    pub fn handle_data(mut self, payload: &[u8]) -> Result<Self, (Uncertain<S>, Option<chunk::Item>)> {
         // 128 kiB
         if self.inner.buffer.remaining() > 0x20000 {
             Err(Uncertain::new(self.inner))
@@ -137,9 +142,8 @@ where
         )
     }
 
-    fn have_not_key(mut self) -> (HaveNotKey<S>, chunk::Item) {
-        let (counter, bytes) = self.inner.buffer.cleanup();
-        let c = self.inner.chunk(counter, bytes, Vec::new());
+    fn have_not_key(mut self) -> (HaveNotKey<S>, Option<chunk::Item>) {
+        let c = self.inner.cleanup();
         (HaveNotKey { inner: self.inner }, c)
     }
 }
@@ -147,9 +151,9 @@ where
 pub struct MakeKeyOutput {
     pub cn: connection::Item,
     pub local: Result<HaveKey<Local>, HaveNotKey<Local>>,
-    pub l_chunk: chunk::Item,
+    pub l_chunk: Option<chunk::Item>,
     pub remote: Result<HaveKey<Remote>, HaveNotKey<Remote>>,
-    pub r_chunk: chunk::Item,
+    pub r_chunk: Option<chunk::Item>,
 }
 
 impl HaveCm<Local> {
@@ -213,9 +217,9 @@ impl HaveCm<Local> {
                 MakeKeyOutput {
                     cn,
                     local: Ok(l),
-                    l_chunk,
+                    l_chunk: Some(l_chunk),
                     remote: Ok(r),
-                    r_chunk,
+                    r_chunk: Some(r_chunk),
                 }
             },
             Err(_) => {
@@ -238,9 +242,8 @@ impl<S> Uncertain<S>
 where
     S: Bit,
 {
-    fn new(mut inner: Inner<S>) -> (Uncertain<S>, chunk::Item) {
-        let (counter, bytes) = inner.buffer.cleanup();
-        let c = inner.chunk(counter, bytes, Vec::new());
+    fn new(mut inner: Inner<S>) -> (Uncertain<S>, Option<chunk::Item>) {
+        let c= inner.cleanup();
         let cn_value = match serde_json::to_string(&inner.cn.value()) {
             Ok(s) => s,
             Err(s) => format!("{:?}", s),
@@ -259,9 +262,9 @@ where
     }
 
     pub fn handle_data(&mut self, payload: &[u8]) -> chunk::Item {
+        debug_assert!(!payload.is_empty());
         self.inner.handle_data(payload);
-        let (counter, bytes) = self.inner.buffer.cleanup();
-        self.inner.chunk(counter, bytes, Vec::new())
+        self.inner.cleanup().unwrap()
     }
 
     pub fn cn(&self) -> connection::Item {
@@ -274,9 +277,9 @@ where
     S: Bit,
 {
     pub fn handle_data(&mut self, payload: &[u8]) -> chunk::Item {
+        debug_assert!(!payload.is_empty());
         self.inner.handle_data(payload);
-        let (counter, bytes) = self.inner.buffer.cleanup();
-        self.inner.chunk(counter, bytes, Vec::new())
+        self.inner.cleanup().unwrap()
     }
 }
 
@@ -304,8 +307,7 @@ where
         if self.error.is_some() {
             return None;
         }
-        let _ = self.inner.buffer.have_chunk()?;
-        let (counter, bytes) = self.inner.buffer.next().unwrap();
+        let (counter, bytes) = self.inner.buffer.next()?;
         match self.key.decrypt(&bytes) {
             Ok(plain) => Some(self.inner.chunk(counter, bytes, plain)),
             Err(_) => {
@@ -321,8 +323,7 @@ where
                     counter,
                     cn_value,
                 );
-                let (counter, bytes) = self.inner.buffer.cleanup();
-                Some(self.inner.chunk(counter, bytes, Vec::new()))
+                self.inner.cleanup()
             },
         }
     }
@@ -356,8 +357,8 @@ where
     S: Bit,
 {
     pub fn handle_data(&mut self, payload: &[u8]) -> chunk::Item {
+        debug_assert!(!payload.is_empty());
         self.inner.handle_data(payload);
-        let (counter, bytes) = self.inner.buffer.cleanup();
-        self.inner.chunk(counter, bytes, Vec::new())
+        self.inner.cleanup().unwrap()
     }
 }

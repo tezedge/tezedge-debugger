@@ -247,7 +247,7 @@ impl<App: AppIo> AppProbes for App {
                     send::dyn_sized::<typenum::B0>(id, DataTag::Read, data, app.rb());
                 } else {
                     app.forget_connection(pid, fd);
-                    send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());        
+                    //send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());        
                 }
                 app.inc_counter();
             },
@@ -259,7 +259,7 @@ impl<App: AppIo> AppProbes for App {
                     send::dyn_sized::<typenum::B0>(id, DataTag::Write, data, app.rb());
                 } else {
                     app.forget_connection(pid, fd);
-                    send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());        
+                    //send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, &[], app.rb());        
                 }
                 app.inc_counter();
             },

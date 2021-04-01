@@ -23,9 +23,9 @@ enum Half<S> {
 pub struct HandshakeOutput {
     pub cn: connection::Item,
     pub local: HandshakeDone<Local>,
-    pub l_chunk: chunk::Item,
+    pub l_chunk: Option<chunk::Item>,
     pub remote: HandshakeDone<Remote>,
-    pub r_chunk: chunk::Item,
+    pub r_chunk: Option<chunk::Item>,
 }
 
 impl From<MakeKeyOutput> for HandshakeOutput {
