@@ -1,6 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+use std::{rc::Rc, cell::RefCell};
 use typenum::Bit;
 use either::Either;
 use super::{
@@ -21,7 +22,6 @@ enum Half<S> {
 }
 
 pub struct HandshakeOutput {
-    pub cn: connection::Item,
     pub local: HandshakeDone<Local>,
     pub l_chunk: Option<chunk::Item>,
     pub remote: HandshakeDone<Remote>,
@@ -31,7 +31,6 @@ pub struct HandshakeOutput {
 impl From<MakeKeyOutput> for HandshakeOutput {
     fn from(v: MakeKeyOutput) -> Self {
         HandshakeOutput {
-            cn: v.cn,
             local: v.local.into(),
             l_chunk: v.l_chunk,
             remote: v.remote.into(),
@@ -41,10 +40,19 @@ impl From<MakeKeyOutput> for HandshakeOutput {
 }
 
 impl Handshake {
-    pub fn new(cn: connection::Item, id: Identity) -> Self {
+    pub fn new(cn: Rc<RefCell<connection::Item>>, id: Identity) -> Self {
         let local = Half::Initial(Initial::new(cn.clone(), id.clone()));
         let remote = Half::Initial(Initial::new(cn, id));
         Handshake { local, remote }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Handshake { local: Half::Initial(l), remote: Half::Initial(r) } => {
+                l.is_empty() && r.is_empty()
+            },
+            _ => false,
+        }
     }
 
     fn initial(l: Initial<Local>, r: Initial<Remote>) -> Self {
@@ -99,7 +107,6 @@ impl Handshake {
                                 c.net(net);
                             }
                             Either::Right(HandshakeOutput {
-                                cn: l.cn(),
                                 local: HandshakeDone::Uncertain(l),
                                 l_chunk,
                                 remote: HandshakeDone::Uncertain(r),
@@ -127,7 +134,6 @@ impl Handshake {
                                 c.net(net);
                             }
                             Either::Right(HandshakeOutput {
-                                cn: l.cn(),
                                 local: HandshakeDone::Uncertain(l),
                                 l_chunk,
                                 remote: HandshakeDone::Uncertain(r),
@@ -192,8 +198,8 @@ where
                 }
                 match temp_state.over() {
                     Ok(state) => HandshakeDone::HaveKey(state),
-                    Err((state, cn)) => {
-                        handler.handle_cn(cn);
+                    Err(state) => {
+                        handler.update_cn();
                         HandshakeDone::CannotDecrypt(state)
                     },
                 }
@@ -216,5 +222,5 @@ where
 
 pub trait ChunkHandler {
     fn handle_chunk(&mut self, chunk: chunk::Item);
-    fn handle_cn(&mut self, cn: connection::Item);
+    fn update_cn(&mut self);
 }

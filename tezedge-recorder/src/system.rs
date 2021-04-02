@@ -170,7 +170,7 @@ impl<Db> System<Db> {
             },
             // ignore syslog
             p => {
-                if self.config.nodes.iter().find(|n| n.syslog_port == p).is_some() {
+                if self.config.nodes.iter().any(|n| n.syslog_port == p) {
                     return true;
                 }
             },

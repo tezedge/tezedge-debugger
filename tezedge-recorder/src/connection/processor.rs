@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, rc::Rc, cell::RefCell};
 use either::Either;
 use super::{
     chunk_parser::{Handshake, HandshakeOutput, HandshakeDone, ChunkHandler},
@@ -12,15 +12,13 @@ use super::{
 };
 
 pub struct Connection<Db> {
-    remote_addr: SocketAddr,
-    has_data: bool,
-    chunk_parser: ChunkParser<Db>,
+    state: Option<ConnectionState<Db>>,
+    item: Rc<RefCell<connection::Item>>,
     db: Arc<Db>,
 }
 
 #[allow(clippy::large_enum_variant)]
-enum ChunkParser<Db> {
-    Invalid,
+enum ConnectionState<Db> {
     Handshake(Handshake),
     HandshakeDone {
         local: HandshakeDone<Local>,
@@ -35,41 +33,35 @@ where
     Db: Database,
 {
     pub fn new(remote_addr: SocketAddr, incoming: bool, identity: Identity, db: Arc<Db>) -> Self {
-        let db_item = connection::Item::new(Initiator::new(incoming), remote_addr);
+        let item = connection::Item::new(Initiator::new(incoming), remote_addr);
+        let item = Rc::new(RefCell::new(item));
         Connection {
-            remote_addr,
-            has_data: false,
-            chunk_parser: ChunkParser::Handshake(Handshake::new(db_item, identity)),
+            state: Some(ConnectionState::Handshake(Handshake::new(item.clone(), identity))),
+            item,
             db,
         }
     }
 
     pub fn handle_data(&mut self, payload: &[u8], net: bool, incoming: bool) {
-        use std::mem;
-
-        self.has_data = true;
-        let parser = mem::replace(&mut self.chunk_parser, ChunkParser::Invalid);
-        let parser = match parser {
-            ChunkParser::Invalid => ChunkParser::Invalid,
-            ChunkParser::Handshake(h) => match h.handle_data(payload, net, incoming) {
-                Either::Left(h) => ChunkParser::Handshake(h),
+        let state = match self.state.take().unwrap() {
+            ConnectionState::Handshake(h) => match h.handle_data(payload, net, incoming) {
+                Either::Left(h) => ConnectionState::Handshake(h),
                 Either::Right(HandshakeOutput {
-                    cn,
                     local,
                     l_chunk,
                     remote,
                     r_chunk,
                 }) => {
-                    let mut local_mp = MessageParser::new(cn.clone(), self.db.clone());
-                    let mut remote_mp = MessageParser::new(cn.clone(), self.db.clone());
-                    self.db.store_connection(cn);
+                    let mut local_mp = MessageParser::new(self.item.clone(), self.db.clone());
+                    let mut remote_mp = MessageParser::new(self.item.clone(), self.db.clone());
+                    self.db.store_connection(self.item.borrow().clone());
                     if let Some(chunk) = l_chunk {
                         local_mp.handle_chunk(chunk);
                     }
                     if let Some(chunk) = r_chunk {
                         remote_mp.handle_chunk(chunk);
                     }
-                    ChunkParser::HandshakeDone {
+                    ConnectionState::HandshakeDone {
                         local,
                         local_mp,
                         remote,
@@ -77,21 +69,21 @@ where
                     }
                 },
             },
-            ChunkParser::HandshakeDone {
+            ConnectionState::HandshakeDone {
                 local,
                 mut local_mp,
                 remote,
                 mut remote_mp,
             } => {
                 if !incoming {
-                    ChunkParser::HandshakeDone {
+                    ConnectionState::HandshakeDone {
                         local: local.handle_data(payload, net, &mut local_mp),
                         local_mp,
                         remote,
                         remote_mp,
                     }
                 } else {
-                    ChunkParser::HandshakeDone {
+                    ConnectionState::HandshakeDone {
                         local,
                         local_mp,
                         remote: remote.handle_data(payload, net, &mut remote_mp),
@@ -100,12 +92,12 @@ where
                 }
             },
         };
-        let _ = mem::replace(&mut self.chunk_parser, parser);
+        self.state = Some(state);
     }
 
     pub fn warn_fd_changed(&self) {
-        if self.has_data {
-            log::warn!("fd of: {} has took for other file, the connection is closed", self.remote_addr);
+        if !matches!(&self.state, &Some(ConnectionState::Handshake(ref h)) if h.is_empty()) {
+            log::warn!("fd of: {} has took for other file, the connection is closed", self.item.borrow().remote_addr);
         }
     }
 
