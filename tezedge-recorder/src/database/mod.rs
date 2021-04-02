@@ -65,10 +65,7 @@ where
         filter: &MessagesFilter,
     ) -> Result<Vec<message::MessageFrontend>, Self::Error>;
 
-    fn fetch_log(
-        &self,
-        filter: &LogsFilter,
-    ) -> Result<Vec<node_log::Item>, Self::Error>;
+    fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::Item>, Self::Error>;
 }
 
 pub trait DatabaseNew

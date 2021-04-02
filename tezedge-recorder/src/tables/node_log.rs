@@ -77,11 +77,11 @@ where
 
         /// Parse ocaml formatted log
         fn ocaml_log_line(line: &str) -> Option<(&str, &str)> {
-            let mut parts = line.split("-");
+            let mut parts = line.split('-');
             let _ = parts.next();
             let msg = parts.next();
             if let Some(value) = msg {
-                let mut parts = value.split(":");
+                let mut parts = value.split(':');
                 let _ = parts.next();
                 let msg = parts.next();
                 if let Some(msg) = msg {
@@ -94,7 +94,8 @@ where
             }
         }
 
-        let timestamp = msg.timestamp
+        let timestamp = msg
+            .timestamp
             .map(|dt| dt.timestamp_nanos() as u128)
             .unwrap_or_else(|| {
                 SystemTime::now()
@@ -105,6 +106,7 @@ where
         let line = msg.msg.as_ref();
 
         let pos = line.find('.').unwrap_or_default();
+        #[allow(clippy::collapsible_else_if)]
         if pos == 15 {
             if let Some((level, message)) = rust_log_line(line) {
                 Item {

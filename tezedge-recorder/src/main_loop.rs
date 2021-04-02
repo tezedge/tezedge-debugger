@@ -50,7 +50,12 @@ where
                     let _ = listen_on_fd;
                     list.handle_connection(id, address, true);
                 },
-                SnifferEvent::Data { id, data, net, incoming } => {
+                SnifferEvent::Data {
+                    id,
+                    data,
+                    net,
+                    incoming,
+                } => {
                     list.handle_data(id, data, net, incoming);
                 },
                 SnifferEvent::Close { id } => {
@@ -58,7 +63,7 @@ where
                 },
                 SnifferEvent::GetFd { id } => {
                     list.handle_get_fd(id);
-                }
+                },
                 SnifferEvent::Debug { id, msg } => {
                     log::warn!("{} {}", id, msg);
                 },

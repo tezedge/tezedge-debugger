@@ -1,7 +1,12 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{collections::HashMap, sync::{Arc, atomic::AtomicBool}, net::SocketAddr, io, thread};
+use std::{
+    collections::HashMap,
+    sync::{Arc, atomic::AtomicBool},
+    net::SocketAddr,
+    io, thread,
+};
 use serde::Deserialize;
 use anyhow::Result;
 use thiserror::Error;
@@ -77,9 +82,13 @@ where
         let db = Arc::new(Db::open(db_path)?);
         let addr = ([0, 0, 0, 0], rpc_port);
         let server = rt.spawn(warp::serve(server::routes(db.clone())).run(addr));
-        let log_client = log_client::spawn(syslog_port, db.clone(), running.clone())?;
+        let log_client = log_client::spawn(syslog_port, db.clone(), running)?;
 
-        Ok(NodeDb { db, _server: server, _log_client: log_client })
+        Ok(NodeDb {
+            db,
+            _server: server,
+            _log_client: log_client,
+        })
     }
 
     pub fn db(&self) -> Arc<Db> {
@@ -201,13 +210,11 @@ where
                 let r = running.clone();
                 let rt = &self.tokio_rt;
                 match NodeDb::open_spawn(&c.db_path, c.rpc_port, c.syslog_port, rt, r) {
-                    Ok(ndb) => {
-                        Some((c.p2p_port, ndb))
-                    },
+                    Ok(ndb) => Some((c.p2p_port, ndb)),
                     Err(error) => {
                         log::error!("{}", error);
                         None
-                    }
+                    },
                 }
             })
             .collect();
@@ -234,7 +241,10 @@ where
     }
 
     pub fn get_mut(&mut self, pid: u32) -> Option<(&mut NodeInfo, Arc<Db>)> {
-        let db = self.node_info.get(&pid).map(|i| i.p2p_port)
+        let db = self
+            .node_info
+            .get(&pid)
+            .map(|i| i.p2p_port)
             .and_then(|port| self.node_dbs.get(&port))
             .map(NodeDb::db)?;
         let info = self.node_info.get_mut(&pid)?;

@@ -25,7 +25,13 @@ where
     S: Bit,
 {
     fn chunk(&self, counter: u64, bytes: Vec<u8>, plain: Vec<u8>) -> chunk::Item {
-        chunk::Item::new(self.cn.borrow().key(), Sender::new(S::BOOL), counter, bytes, plain)
+        chunk::Item::new(
+            self.cn.borrow().key(),
+            Sender::new(S::BOOL),
+            counter,
+            bytes,
+            plain,
+        )
     }
 
     pub fn handle_data(&mut self, payload: &[u8]) {
@@ -33,7 +39,8 @@ where
     }
 
     pub fn cleanup(&mut self) -> Option<chunk::Item> {
-        self.buffer.cleanup()
+        self.buffer
+            .cleanup()
             .map(|(counter, bytes)| self.chunk(counter, bytes, Vec::new()))
     }
 }
@@ -116,7 +123,10 @@ where
     S: Bit,
 {
     /// Should not need to call
-    pub fn handle_data(mut self, payload: &[u8]) -> Result<Self, (Uncertain<S>, Option<chunk::Item>)> {
+    pub fn handle_data(
+        mut self,
+        payload: &[u8],
+    ) -> Result<Self, (Uncertain<S>, Option<chunk::Item>)> {
         // 128 kiB
         if self.inner.buffer.remaining() > 0x20000 {
             Err(Uncertain::new(self.inner))
@@ -190,12 +200,7 @@ impl HaveCm<Local> {
         let remote_chunk = peer.inner.buffer.have_chunk().unwrap();
         let identity = &self.inner.id;
         let initiator = self.inner.cn.borrow().initiator.clone();
-        match Keys::new(
-            identity,
-            local_chunk,
-            remote_chunk,
-            initiator,
-        ) {
+        match Keys::new(identity, local_chunk, remote_chunk, initiator) {
             Ok(Keys { local, remote }) => {
                 let (l, l_chunk) = self.have_key(local);
                 let (r, r_chunk) = peer.have_key(remote);
@@ -247,20 +252,20 @@ where
     S: Bit,
 {
     fn new(mut inner: Inner<S>) -> (Uncertain<S>, Option<chunk::Item>) {
-        let c= inner.cleanup();
-        let cn_value = match serde_json::to_string(&inner.cn.borrow().value()) {
-            Ok(s) => s,
-            Err(s) => format!("{:?}", s),
-        };
-        log::warn!(
-            "uncertain connection: {}, {}",
-            cn_value,
-            inner.cn.borrow().key(),
-        );
-        if S::BOOL {
-            inner.cn.borrow_mut().add_comment().incoming_uncertain = true;
-        } else {
-            inner.cn.borrow_mut().add_comment().outgoing_uncertain = true;
+        let c = inner.cleanup();
+        {
+            let cn = inner.cn.borrow();
+            let cn_value = match serde_json::to_string(&cn.value()) {
+                Ok(s) => s,
+                Err(s) => format!("{:?}", s),
+            };
+            log::warn!("uncertain connection: {}, {}", cn_value, cn.key(),);
+            let mut cn = inner.cn.borrow_mut();
+            if S::BOOL {
+                cn.add_comment().incoming_uncertain = true;
+            } else {
+                cn.add_comment().outgoing_uncertain = true;
+            }
         }
         (Uncertain { inner }, c)
     }
@@ -316,17 +321,20 @@ where
             Ok(plain) => Some(self.inner.chunk(counter, bytes, plain)),
             Err(_) => {
                 self.error = Some(counter);
-                let cn_value = match serde_json::to_string(&self.inner.cn.borrow().value()) {
-                    Ok(s) => s,
-                    Err(s) => format!("{:?}", s),
-                };
-                log::warn!(
-                    "cannot decrypt: {}-{}-{}, connection: {}",
-                    self.inner.cn.borrow().key(),
-                    Sender::new(S::BOOL),
-                    counter,
-                    cn_value,
-                );
+                {
+                    let cn = self.inner.cn.borrow();
+                    let cn_value = match serde_json::to_string(&cn.value()) {
+                        Ok(s) => s,
+                        Err(s) => format!("{:?}", s),
+                    };
+                    log::warn!(
+                        "cannot decrypt: {}-{}-{}, connection: {}",
+                        cn.key(),
+                        Sender::new(S::BOOL),
+                        counter,
+                        cn_value,
+                    );
+                }
                 self.inner.cleanup()
             },
         }
@@ -339,10 +347,13 @@ where
 {
     pub fn over(self) -> Result<HaveKey<S>, CannotDecrypt<S>> {
         if let Some(position) = self.error {
-            if S::BOOL {
-                self.inner.cn.borrow_mut().add_comment().incoming_cannot_decrypt = Some(position);
-            } else {
-                self.inner.cn.borrow_mut().add_comment().outgoing_cannot_decrypt = Some(position);
+            {
+                let mut cn = self.inner.cn.borrow_mut();
+                if S::BOOL {
+                    cn.add_comment().incoming_cannot_decrypt = Some(position);
+                } else {
+                    cn.add_comment().outgoing_cannot_decrypt = Some(position);
+                }
             }
             Err(CannotDecrypt { inner: self.inner })
         } else {

@@ -1,7 +1,14 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, thread, io, net::UdpSocket};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread, io,
+    net::UdpSocket,
+};
 use super::{database::Database, tables::node_log};
 
 pub fn spawn<Db>(
@@ -22,7 +29,7 @@ where
                         let msg = syslog_loose::parse_message(log);
                         let item = node_log::Item::from(msg);
                         db.store_log(item);
-                    }        
+                    }
                 },
                 Err(error) => log::error!("receiving log error: {}", error),
             }

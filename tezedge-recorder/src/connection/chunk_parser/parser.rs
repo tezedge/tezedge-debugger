@@ -48,9 +48,10 @@ impl Handshake {
 
     pub fn is_empty(&self) -> bool {
         match self {
-            Handshake { local: Half::Initial(l), remote: Half::Initial(r) } => {
-                l.is_empty() && r.is_empty()
-            },
+            Handshake {
+                local: Half::Initial(l),
+                remote: Half::Initial(r),
+            } => l.is_empty() && r.is_empty(),
             _ => false,
         }
     }
@@ -76,7 +77,12 @@ impl Handshake {
         }
     }
 
-    pub fn handle_data(self, payload: &[u8], net: bool, incoming: bool) -> Either<Self, HandshakeOutput> {
+    pub fn handle_data(
+        self,
+        payload: &[u8],
+        net: bool,
+        incoming: bool,
+    ) -> Either<Self, HandshakeOutput> {
         match self {
             Handshake {
                 local: Half::Initial(l),

@@ -15,9 +15,8 @@ use storage::{
 };
 use thiserror::Error;
 use super::{
-    Database, DatabaseNew, DatabaseFetch,
-    ConnectionsFilter, ChunksFilter, MessagesFilter, LogsFilter,
-    connection, chunk, message, node_log,
+    Database, DatabaseNew, DatabaseFetch, ConnectionsFilter, ChunksFilter, MessagesFilter,
+    LogsFilter, connection, chunk, message, node_log,
 };
 
 #[derive(Error, Debug)]
@@ -196,7 +195,9 @@ impl DatabaseFetch for Db {
                 .map(|(k, v)| (chunk::Key::decode(&k), chunk::Value::decode(&v)));
             Ok(collect_it(it, limit))
         } else {
-            let it = self.as_kv::<chunk::Schema>().iterator(IteratorMode::Start)?;
+            let it = self
+                .as_kv::<chunk::Schema>()
+                .iterator(IteratorMode::Start)?;
             Ok(collect_it(it, limit))
         }
     }
@@ -234,10 +235,7 @@ impl DatabaseFetch for Db {
         Ok(vec)
     }
 
-    fn fetch_log(
-        &self,
-        filter: &LogsFilter,
-    ) -> Result<Vec<node_log::Item>, Self::Error> {
+    fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::Item>, Self::Error> {
         let limit = filter.limit.unwrap_or(100) as usize;
         let mode = if let Some(cursor) = &filter.cursor {
             IteratorMode::From(cursor, Direction::Reverse)

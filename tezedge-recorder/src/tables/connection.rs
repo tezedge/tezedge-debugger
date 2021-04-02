@@ -27,16 +27,32 @@ impl Comments {
     fn ser(&self) -> ([u8; 18], [u8; 18]) {
         let mut i = [0; 18];
         i[0] = self.incoming_wrong_pow.as_ref().cloned().unwrap_or(0.0) as u8;
-        i[1] = self.incoming_too_short.as_ref().cloned().unwrap_or(u8::MAX as _) as u8;
+        i[1] = self
+            .incoming_too_short
+            .as_ref()
+            .cloned()
+            .unwrap_or(u8::MAX as _) as u8;
         i[2] = if self.incoming_uncertain { 1 } else { 0 };
-        let c = self.incoming_cannot_decrypt.as_ref().cloned().unwrap_or(u64::MAX);
+        let c = self
+            .incoming_cannot_decrypt
+            .as_ref()
+            .cloned()
+            .unwrap_or(u64::MAX);
         i[4..12].clone_from_slice(&c.to_le_bytes());
         let mut o = [0; 18];
         o[0] = self.outgoing_wrong_pow.as_ref().cloned().unwrap_or(0.0) as u8;
-        o[1] = self.outgoing_too_short.as_ref().cloned().unwrap_or(u8::MAX as _) as u8;
+        o[1] = self
+            .outgoing_too_short
+            .as_ref()
+            .cloned()
+            .unwrap_or(u8::MAX as _) as u8;
         o[2] = if self.outgoing_uncertain { 1 } else { 0 };
         o[3] = if self.outgoing_wrong_pk { 1 } else { 0 };
-        let c = self.outgoing_cannot_decrypt.as_ref().cloned().unwrap_or(u64::MAX);
+        let c = self
+            .outgoing_cannot_decrypt
+            .as_ref()
+            .cloned()
+            .unwrap_or(u64::MAX);
         o[4..12].clone_from_slice(&c.to_le_bytes());
 
         (i, o)
@@ -53,11 +69,7 @@ impl Comments {
                 Some(i[1] as usize)
             },
             incoming_uncertain: i[2] != 0,
-            incoming_cannot_decrypt: if i_c == u64::MAX {
-                None
-            } else {
-                Some(i_c)
-            },
+            incoming_cannot_decrypt: if i_c == u64::MAX { None } else { Some(i_c) },
             outgoing_wrong_pow: if o[0] == 0 { None } else { Some(o[0] as f64) },
             outgoing_too_short: if o[1] == u8::MAX {
                 None
@@ -66,11 +78,7 @@ impl Comments {
             },
             outgoing_uncertain: o[2] != 0,
             outgoing_wrong_pk: o[3] != 0,
-            outgoing_cannot_decrypt: if o_c == u64::MAX {
-                None
-            } else {
-                Some(o_c)
-            },
+            outgoing_cannot_decrypt: if o_c == u64::MAX { None } else { Some(o_c) },
         }
     }
 }

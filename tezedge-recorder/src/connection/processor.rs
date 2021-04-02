@@ -35,8 +35,9 @@ where
     pub fn new(remote_addr: SocketAddr, incoming: bool, identity: Identity, db: Arc<Db>) -> Self {
         let item = connection::Item::new(Initiator::new(incoming), remote_addr);
         let item = Rc::new(RefCell::new(item));
+        let state = ConnectionState::Handshake(Handshake::new(item.clone(), identity));
         Connection {
-            state: Some(ConnectionState::Handshake(Handshake::new(item.clone(), identity))),
+            state: Some(state),
             item,
             db,
         }
@@ -97,7 +98,10 @@ where
 
     pub fn warn_fd_changed(&self) {
         if !matches!(&self.state, &Some(ConnectionState::Handshake(ref h)) if h.is_empty()) {
-            log::warn!("fd of: {} has took for other file, the connection is closed", self.item.borrow().remote_addr);
+            log::warn!(
+                "fd of: {} has took for other file, the connection is closed",
+                self.item.borrow().remote_addr
+            );
         }
     }
 

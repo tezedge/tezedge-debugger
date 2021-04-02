@@ -98,9 +98,8 @@ fn logs<Db>(
 where
     Db: DatabaseFetch + Sync + Send + 'static,
 {
-    warp::path!("v3" / "logs")
-        .and(warp::query::query())
-        .map(move |filter: LogsFilter| -> reply::WithStatus<Json> {
+    warp::path!("v3" / "logs").and(warp::query::query()).map(
+        move |filter: LogsFilter| -> reply::WithStatus<Json> {
             match db.fetch_log(&filter) {
                 Ok(v) => reply::with_status(reply::json(&v), StatusCode::OK),
                 Err(err) => {
@@ -108,7 +107,8 @@ where
                     reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
                 },
             }
-        })
+        },
+    )
 }
 
 pub fn routes<Db>(
