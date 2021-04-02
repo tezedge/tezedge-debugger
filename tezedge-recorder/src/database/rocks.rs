@@ -4,6 +4,7 @@
 use std::{
     path::Path,
     sync::atomic::{Ordering, AtomicU64},
+    net::SocketAddr,
 };
 use rocksdb::{Cache, DB, ReadOptions};
 use storage::{
@@ -23,7 +24,7 @@ use super::{
     // tables
     common, connection, chunk, message, node_log,
     // secondary indexes
-    message_ty, message_sender, message_initiator,
+    message_ty, message_sender, message_initiator, message_addr,
 };
 
 #[derive(Error, Debug)]
@@ -77,6 +78,7 @@ impl DatabaseNew for Db {
             message_ty::Schema::descriptor(&cache),
             message_sender::Schema::descriptor(&cache),
             message_initiator::Schema::descriptor(&cache),
+            message_addr::Schema::descriptor(&cache),
         ];
         let inner = persistent::open_kv(path, cfs, &DbConfiguration::default())?;
 
@@ -126,12 +128,18 @@ impl Database for Db {
             initiator: item.initiator.clone(),
             index,
         };
+        let addr_index = message_addr::Item {
+            addr: item.remote_addr.clone(),
+            index,
+        };
         let inner = || -> Result<(), DbError> {
             self.as_kv::<message_ty::Schema>().put(&ty_index, &())?;
             self.as_kv::<message_sender::Schema>()
                 .put(&sender_index, &())?;
             self.as_kv::<message_initiator::Schema>()
                 .put(&initiator_index, &())?;
+            self.as_kv::<message_addr::Schema>()
+                .put(&addr_index, &())?;
             self.as_kv::<message::Schema>().put(&index, &item)?;
             Ok(())
         };
@@ -351,6 +359,33 @@ impl DatabaseFetch for Db {
                     .inner
                     .iterator_cf_opt(cf, opts, mode)
                     .filter_map(|(k, _)| Some(message_initiator::Item::decode(&k).ok()?.index));
+                iters.push(Box::new(it));
+            }
+            if let Some(addr) = &filter.remote_addr {
+                let addr = addr.parse::<SocketAddr>()
+                    .map_err(|e| DBError::SchemaError {
+                        error: SchemaError::DecodeValidationError(e.to_string()),
+                    })?;
+                let key = message_addr::Item {
+                    addr: addr.clone(),
+                    index: cursor,
+                };
+                let key = key
+                    .encode()
+                    .map_err(|error| DBError::SchemaError { error })?;
+                let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                let cf = self
+                    .inner
+                    .cf_handle(message_addr::Schema::name())
+                    .ok_or_else(|| DBError::MissingColumnFamily {
+                        name: message_addr::Schema::name(),
+                    })?;
+                let mut opts = ReadOptions::default();
+                opts.set_prefix_same_as_start(true);
+                let it = self
+                    .inner
+                    .iterator_cf_opt(cf, opts, mode)
+                    .filter_map(|(k, _)| Some(message_addr::Item::decode(&k).ok()?.index));
                 iters.push(Box::new(it));
             }
 

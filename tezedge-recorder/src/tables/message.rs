@@ -14,7 +14,7 @@ pub struct Item {
     cn_ts: u64,
     cn_ts_nanos: u32,
     timestamp: u64,
-    remote_addr: SocketAddr,
+    pub remote_addr: SocketAddr,
     pub initiator: Initiator,
     pub sender: Sender,
     pub ty: MessageType,
