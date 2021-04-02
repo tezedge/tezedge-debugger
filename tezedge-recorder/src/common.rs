@@ -158,7 +158,7 @@ pub enum MessageCategory {
     P2p,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageType {
     Connection,
     Meta,
@@ -207,6 +207,75 @@ impl FromStr for MessageType {
             "operations_for_blocks" => Ok(MessageType::P2p(MessageKind::OperationsForBlocks)),
 
             s => Err(ParseTypeError(s.to_string())),
+        }
+    }
+}
+
+impl MessageType {
+    pub fn split(self) -> (MessageCategory, Option<MessageKind>) {
+        match self {
+            MessageType::Connection => (MessageCategory::Connection, None),
+            MessageType::Meta => (MessageCategory::Meta, None),
+            MessageType::Ack => (MessageCategory::Ack, None),
+            MessageType::P2p(kind) => (MessageCategory::P2p, Some(kind)),
+        }
+    }
+
+    pub fn from_int(v: u8) -> Self {
+        match v {
+            0x00 => MessageType::Connection,
+            0x01 => MessageType::Meta,
+            0x02 => MessageType::Ack,
+            0x03 => MessageType::P2p(MessageKind::Disconnect),
+            0x04 => MessageType::P2p(MessageKind::Bootstrap),
+            0x05 => MessageType::P2p(MessageKind::Advertise),
+            0x06 => MessageType::P2p(MessageKind::SwapRequest),
+            0x07 => MessageType::P2p(MessageKind::SwapAck),
+            0x08 => MessageType::P2p(MessageKind::GetCurrentBranch),
+            0x09 => MessageType::P2p(MessageKind::CurrentBranch),
+            0x0a => MessageType::P2p(MessageKind::Deactivate),
+            0x0b => MessageType::P2p(MessageKind::GetCurrentHead),
+            0x0c => MessageType::P2p(MessageKind::CurrentHead),
+            0x0d => MessageType::P2p(MessageKind::GetBlockHeaders),
+            0x0e => MessageType::P2p(MessageKind::BlockHeader),
+            0x0f => MessageType::P2p(MessageKind::GetOperations),
+            0x10 => MessageType::P2p(MessageKind::Operation),
+            0x11 => MessageType::P2p(MessageKind::GetProtocols),
+            0x12 => MessageType::P2p(MessageKind::Protocol),
+            0x13 => MessageType::P2p(MessageKind::GetOperationHashesForBlocks),
+            0x14 => MessageType::P2p(MessageKind::OperationHashesForBlocks),
+            0x15 => MessageType::P2p(MessageKind::GetOperationsForBlocks),
+            0x16 => MessageType::P2p(MessageKind::OperationsForBlocks),
+            _ => MessageType::P2p(MessageKind::Unknown),
+        }
+    }
+
+    pub fn into_int(self) -> u8 {
+        match self {
+            MessageType::Connection => 0x00,
+            MessageType::Meta => 0x01,
+            MessageType::Ack => 0x02,
+            MessageType::P2p(MessageKind::Disconnect) => 0x03,
+            MessageType::P2p(MessageKind::Bootstrap) => 0x04,
+            MessageType::P2p(MessageKind::Advertise) => 0x05,
+            MessageType::P2p(MessageKind::SwapRequest) => 0x06,
+            MessageType::P2p(MessageKind::SwapAck) => 0x07,
+            MessageType::P2p(MessageKind::GetCurrentBranch) => 0x08,
+            MessageType::P2p(MessageKind::CurrentBranch) => 0x09,
+            MessageType::P2p(MessageKind::Deactivate) => 0x0a,
+            MessageType::P2p(MessageKind::GetCurrentHead) => 0x0b,
+            MessageType::P2p(MessageKind::CurrentHead) => 0x0c,
+            MessageType::P2p(MessageKind::GetBlockHeaders) => 0x0d,
+            MessageType::P2p(MessageKind::BlockHeader) => 0x0e,
+            MessageType::P2p(MessageKind::GetOperations) => 0x0f,
+            MessageType::P2p(MessageKind::Operation) => 0x10,
+            MessageType::P2p(MessageKind::GetProtocols) => 0x11,
+            MessageType::P2p(MessageKind::Protocol) => 0x12,
+            MessageType::P2p(MessageKind::GetOperationHashesForBlocks) => 0x13,
+            MessageType::P2p(MessageKind::OperationHashesForBlocks) => 0x14,
+            MessageType::P2p(MessageKind::GetOperationsForBlocks) => 0x15,
+            MessageType::P2p(MessageKind::OperationsForBlocks) => 0x16,
+            MessageType::P2p(MessageKind::Unknown) => 0xff,
         }
     }
 }

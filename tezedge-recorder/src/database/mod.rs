@@ -3,11 +3,11 @@
 
 pub mod rocks;
 
+mod sorted_intersect;
+
 use std::{error::Error, path::Path};
 use serde::Deserialize;
-use super::{
-    tables::{connection, chunk, message, node_log},
-};
+use super::{tables::*, common};
 
 pub trait Database {
     fn store_connection(&self, item: connection::Item);

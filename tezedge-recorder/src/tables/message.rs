@@ -5,7 +5,7 @@ use std::{net::SocketAddr, ops::Range, convert::TryFrom};
 use serde::{Serialize, Deserialize};
 use storage::persistent::{KeyValueSchema, BincodeEncoded};
 use super::{
-    common::{Initiator, Sender, MessageCategory, MessageKind},
+    common::{Initiator, Sender, MessageCategory, MessageKind, MessageType},
     connection,
 };
 
@@ -17,8 +17,7 @@ pub struct Item {
     remote_addr: SocketAddr,
     initiator: Initiator,
     sender: Sender,
-    category: MessageCategory,
-    kind: Option<MessageKind>,
+    pub ty: MessageType,
     chunks: Range<u64>,
 }
 
@@ -35,21 +34,21 @@ pub struct MessageFrontend {
 
 impl MessageFrontend {
     pub fn new(item: Item, id: u64) -> Self {
+        let (category, kind) = item.ty.split();
         MessageFrontend {
             id,
             timestamp: item.timestamp,
             remote_addr: item.remote_addr,
             source_type: item.initiator,
             incoming: item.sender.incoming(),
-            category: item.category,
-            kind: item.kind,
+            category,
+            kind,
         }
     }
 }
 
 pub struct MessageBuilder {
-    category: MessageCategory,
-    kind: Option<MessageKind>,
+    ty: MessageType,
     length: u32,
     chunks: Range<u64>,
 }
@@ -59,8 +58,7 @@ pub struct MessageBuilderFull(MessageBuilder);
 impl MessageBuilder {
     pub fn connection_message() -> MessageBuilderFull {
         MessageBuilderFull(MessageBuilder {
-            category: MessageCategory::Connection,
-            kind: None,
+            ty: MessageType::Connection,
             length: 0,
             chunks: 0..1,
         })
@@ -68,8 +66,7 @@ impl MessageBuilder {
 
     pub fn metadata_message() -> MessageBuilderFull {
         MessageBuilderFull(MessageBuilder {
-            category: MessageCategory::Meta,
-            kind: None,
+            ty: MessageType::Meta,
             length: 0,
             chunks: 1..2,
         })
@@ -77,8 +74,7 @@ impl MessageBuilder {
 
     pub fn acknowledge_message() -> MessageBuilderFull {
         MessageBuilderFull(MessageBuilder {
-            category: MessageCategory::Ack,
-            kind: None,
+            ty: MessageType::Ack,
             length: 0,
             chunks: 2..3,
         })
@@ -87,11 +83,10 @@ impl MessageBuilder {
     // chunk_number >= 3
     pub fn peer_message(bytes: [u8; 6], chunk_number: u64) -> Self {
         MessageBuilder {
-            category: MessageCategory::P2p,
-            kind: {
+            ty: MessageType::P2p({
                 let tag = u16::from_be_bytes(<[u8; 2]>::try_from(&bytes[4..]).unwrap());
-                Some(MessageKind::from_tag(tag))
-            },
+                MessageKind::from_tag(tag)
+            }),
             length: u32::from_be_bytes(<[u8; 4]>::try_from(&bytes[..4]).unwrap()) + 4,
             chunks: chunk_number..chunk_number,
         }
@@ -133,8 +128,7 @@ impl MessageBuilderFull {
             remote_addr: connection.remote_addr,
             initiator: connection.initiator.clone(),
             sender: sender.clone(),
-            category: self.0.category,
-            kind: self.0.kind,
+            ty: self.0.ty,
             chunks: self.0.chunks,
         }
     }

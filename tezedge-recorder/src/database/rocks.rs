@@ -14,9 +14,16 @@ use storage::{
     },
 };
 use thiserror::Error;
+#[rustfmt::skip]
 use super::{
-    Database, DatabaseNew, DatabaseFetch, ConnectionsFilter, ChunksFilter, MessagesFilter,
-    LogsFilter, connection, chunk, message, node_log,
+    // core traits
+    Database, DatabaseNew, DatabaseFetch,
+    // filters
+    ConnectionsFilter, ChunksFilter, MessagesFilter, LogsFilter,
+    // tables
+    common, connection, chunk, message, node_log,
+    // secondary indexes
+    message_ty,
 };
 
 #[derive(Error, Debug)]
@@ -67,6 +74,8 @@ impl DatabaseNew for Db {
             chunk::Schema::descriptor(&cache),
             message::Schema::descriptor(&cache),
             node_log::Schema::descriptor(&cache),
+
+            message_ty::Schema::descriptor(&cache),
         ];
         let inner = persistent::open_kv(path, cfs, &DbConfiguration::default())?;
 
@@ -104,7 +113,16 @@ impl Database for Db {
 
     fn store_message(&self, item: message::Item) {
         let index = self.reserve_message_counter();
-        if let Err(error) = self.as_kv::<message::Schema>().put(&index, &item) {
+        let ty_key = message_ty::Item {
+            ty: item.ty.clone(),
+            index,
+        };
+        let inner = || -> Result<(), DbError> {
+            self.as_kv::<message_ty::Schema>().put(&ty_key, &())?;
+            self.as_kv::<message::Schema>().put(&index, &item)?;
+            Ok(())
+        };
+        if let Err(error) = inner() {
             log::error!("database error: {}", error);
         }
     }
@@ -210,29 +228,84 @@ impl DatabaseFetch for Db {
         &self,
         filter: &MessagesFilter,
     ) -> Result<Vec<message::MessageFrontend>, Self::Error> {
+        use itertools::Itertools;
+        use super::sorted_intersect::sorted_intersect;
+
         let limit = filter.limit.unwrap_or(100) as usize;
-        let mode = if let Some(cursor) = &filter.cursor {
-            IteratorMode::From(cursor, Direction::Reverse)
+
+        if filter.remote_addr.is_none() && filter.initiator.is_none() && filter.sender.is_none() && filter.types.is_none() {
+            let mode = if let Some(cursor) = &filter.cursor {
+                IteratorMode::From(cursor, Direction::Reverse)
+            } else {
+                IteratorMode::End
+            };
+            let v = self
+                .as_kv::<message::Schema>()
+                .iterator(mode)?
+                .take(limit)
+                .filter_map(|(k, v)| match (k, v) {
+                    (Ok(key), Ok(value)) => Some(message::MessageFrontend::new(value, key)),
+                    (Ok(index), Err(err)) => {
+                        log::warn!("Failed to load value at {:?}: {}", index, err);
+                        None
+                    },
+                    (Err(err), _) => {
+                        log::warn!("Failed to load index: {}", err);
+                        None
+                    },
+                })
+                .collect();
+
+            Ok(v)
         } else {
-            IteratorMode::End
-        };
-        let vec = self
-            .as_kv::<message::Schema>()
-            .iterator(mode)?
-            .filter_map(|(k, v)| match (k, v) {
-                (Ok(key), Ok(value)) => Some(message::MessageFrontend::new(value, key)),
-                (Ok(index), Err(err)) => {
-                    log::warn!("Failed to load value at {:?}: {}", index, err);
-                    None
-                },
-                (Err(err), _) => {
-                    log::warn!("Failed to load index: {}", err);
-                    None
-                },
-            })
-            .take(limit)
-            .collect();
-        Ok(vec)
+            let cursor = filter.cursor.clone().unwrap_or(u64::MAX);
+            let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(4);
+            if let Some(ty) = &filter.types {
+                let mut tys = Vec::new();
+                for ty in ty.split(',') {
+                    let message_type = ty.parse::<common::MessageType>()
+                        .map_err(|e| DBError::SchemaError {
+                            error: SchemaError::DecodeValidationError(e.to_string()),
+                        })?;
+                    let key = message_ty::Item {
+                        ty: message_type,
+                        index: cursor,
+                    };
+                    let key = key.encode()
+                        .map_err(|error| DBError::SchemaError { error })?;
+                    let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                    let cf = self.inner
+                        .cf_handle(message_ty::Schema::name())
+                        .ok_or_else(|| DBError::MissingColumnFamily { name: message_ty::Schema::name() })?;
+                    let mut opts = ReadOptions::default();
+                    opts.set_prefix_same_as_start(true);
+                    let it = self.inner.iterator_cf_opt(cf, opts, mode)
+                        .filter_map(|(k, _)| Some(message_ty::Item::decode(&k).ok()?.index));
+                    tys.push(it);
+                }
+                iters.push(Box::new(tys.into_iter().kmerge_by(|x, y| x > y)));
+            }
+
+            let v = sorted_intersect(iters.as_mut_slice(), limit)
+                .into_iter()
+                .filter_map(move |index| {
+                    match self.as_kv::<message::Schema>().get(&index) {
+                        Ok(Some(value)) => {
+                            Some(message::MessageFrontend::new(value, index))
+                        },
+                        Ok(None) => {
+                            log::info!("No value at index: {}", index);
+                            None
+                        },
+                        Err(err) => {
+                            log::warn!("Failed to load value at index {}: {}", index, err);
+                            None
+                        },
+                    }
+                })
+                .collect();
+            Ok(v)
+        }
     }
 
     fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::Item>, Self::Error> {
