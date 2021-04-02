@@ -35,7 +35,7 @@ where
     pub fn new(source: S) -> Self {
         SortedIntersect {
             inner: source,
-        }    
+        }
     }
 }
 
@@ -59,7 +59,7 @@ where
     I::Item: Ord,
 {
     let mut ret = Default::default();
-    if iters.len() == 0 {
+    if iters.is_empty() {
         return ret;
     } else if iters.len() == 1 {
         let iter = iters.iter_mut().next().unwrap();
@@ -117,7 +117,15 @@ fn heapify<Item: Ord>(heap: &mut Vec<(Item, usize)>) {
 }
 
 /// Fill heap with new values
-fn fill_heap<'a, Item: Ord, Inner: 'a + Iterator<Item=Item>, Outer: Iterator<Item=&'a mut Inner>>(iters: Outer, heap: &mut Vec<(Inner::Item, usize)>) -> bool {
+fn fill_heap<
+    'a,
+    Item: Ord,
+    Inner: 'a + Iterator<Item = Item>,
+    Outer: Iterator<Item = &'a mut Inner>,
+>(
+    iters: Outer,
+    heap: &mut Vec<(Inner::Item, usize)>,
+) -> bool {
     for (i, iter) in iters.enumerate() {
         let value = iter.next();
         if let Some(value) = value {
@@ -132,16 +140,12 @@ fn fill_heap<'a, Item: Ord, Inner: 'a + Iterator<Item=Item>, Outer: Iterator<Ite
 
 /// Check if top of the heap is a hit, meaning if it should be contained in the
 /// resulting set
-fn is_hit<Item: Ord>(heap: &Vec<(Item, usize)>) -> bool {
-    let value = heap.iter().next().map(|(value, _)|
+fn is_hit<Item: Ord>(heap: &[(Item, usize)]) -> bool {
+    let value = heap.iter().next().map(|(value, _)| {
         heap.iter().fold((value, true), |(a, eq), (b, _)| {
             (b, eq & (a.cmp(b) == Ordering::Equal))
         })
-    );
+    });
 
-    if let Some((_, true)) = value {
-        true
-    } else {
-        false
-    }
+    matches!(value, Some((_, true)))
 }

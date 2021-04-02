@@ -20,8 +20,7 @@ impl Encoder for Item {
 
 impl Decoder for Item {
     fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
-        let mut bytes = <[u8; 8]>::try_from(bytes)
-            .map_err(|_| SchemaError::DecodeError)?;
+        let mut bytes = <[u8; 8]>::try_from(bytes).map_err(|_| SchemaError::DecodeError)?;
         let sender = Sender::new(bytes[0] != 0);
         bytes[0] = 0;
         Ok(Item {

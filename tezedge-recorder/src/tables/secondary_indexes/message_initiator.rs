@@ -13,15 +13,18 @@ pub struct Item {
 impl Encoder for Item {
     fn encode(&self) -> Result<Vec<u8>, SchemaError> {
         let mut v = self.index.to_be_bytes();
-        v[0] = if self.initiator.incoming() { 0xff } else { 0x00 };
+        v[0] = if self.initiator.incoming() {
+            0xff
+        } else {
+            0x00
+        };
         Ok(v.into())
     }
 }
 
 impl Decoder for Item {
     fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
-        let mut bytes = <[u8; 8]>::try_from(bytes)
-            .map_err(|_| SchemaError::DecodeError)?;
+        let mut bytes = <[u8; 8]>::try_from(bytes).map_err(|_| SchemaError::DecodeError)?;
         let initiator = Initiator::new(bytes[0] != 0);
         bytes[0] = 0;
         Ok(Item {

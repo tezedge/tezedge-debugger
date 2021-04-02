@@ -74,7 +74,6 @@ impl DatabaseNew for Db {
             chunk::Schema::descriptor(&cache),
             message::Schema::descriptor(&cache),
             node_log::Schema::descriptor(&cache),
-
             message_ty::Schema::descriptor(&cache),
             message_sender::Schema::descriptor(&cache),
             message_initiator::Schema::descriptor(&cache),
@@ -115,13 +114,24 @@ impl Database for Db {
 
     fn store_message(&self, item: message::Item) {
         let index = self.reserve_message_counter();
-        let ty_index = message_ty::Item { ty: item.ty.clone(), index };
-        let sender_index = message_sender::Item { sender: item.sender.clone(), index };
-        let initiator_index = message_initiator::Item { initiator: item.initiator.clone(), index };
+        let ty_index = message_ty::Item {
+            ty: item.ty.clone(),
+            index,
+        };
+        let sender_index = message_sender::Item {
+            sender: item.sender.clone(),
+            index,
+        };
+        let initiator_index = message_initiator::Item {
+            initiator: item.initiator.clone(),
+            index,
+        };
         let inner = || -> Result<(), DbError> {
             self.as_kv::<message_ty::Schema>().put(&ty_index, &())?;
-            self.as_kv::<message_sender::Schema>().put(&sender_index, &())?;
-            self.as_kv::<message_initiator::Schema>().put(&initiator_index, &())?;
+            self.as_kv::<message_sender::Schema>()
+                .put(&sender_index, &())?;
+            self.as_kv::<message_initiator::Schema>()
+                .put(&initiator_index, &())?;
             self.as_kv::<message::Schema>().put(&index, &item)?;
             Ok(())
         };
@@ -236,7 +246,11 @@ impl DatabaseFetch for Db {
 
         let limit = filter.limit.unwrap_or(100) as usize;
 
-        if filter.remote_addr.is_none() && filter.source_type.is_none() && filter.incoming.is_none() && filter.types.is_none() {
+        if filter.remote_addr.is_none()
+            && filter.source_type.is_none()
+            && filter.incoming.is_none()
+            && filter.types.is_none()
+        {
             let mode = if let Some(cursor) = &filter.cursor {
                 IteratorMode::From(cursor, Direction::Reverse)
             } else {
@@ -266,23 +280,27 @@ impl DatabaseFetch for Db {
             if let Some(ty) = &filter.types {
                 let mut tys = Vec::new();
                 for ty in ty.split(',') {
-                    let ty = ty.parse::<common::MessageType>()
-                        .map_err(|e| DBError::SchemaError {
-                            error: SchemaError::DecodeValidationError(e.to_string()),
-                        })?;
-                    let key = message_ty::Item {
-                        ty,
-                        index: cursor,
-                    };
-                    let key = key.encode()
+                    let ty =
+                        ty.parse::<common::MessageType>()
+                            .map_err(|e| DBError::SchemaError {
+                                error: SchemaError::DecodeValidationError(e.to_string()),
+                            })?;
+                    let key = message_ty::Item { ty, index: cursor };
+                    let key = key
+                        .encode()
                         .map_err(|error| DBError::SchemaError { error })?;
                     let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
-                    let cf = self.inner
+                    let cf = self
+                        .inner
                         .cf_handle(message_ty::Schema::name())
-                        .ok_or_else(|| DBError::MissingColumnFamily { name: message_ty::Schema::name() })?;
+                        .ok_or_else(|| DBError::MissingColumnFamily {
+                            name: message_ty::Schema::name(),
+                        })?;
                     let mut opts = ReadOptions::default();
                     opts.set_prefix_same_as_start(true);
-                    let it = self.inner.iterator_cf_opt(cf, opts, mode)
+                    let it = self
+                        .inner
+                        .iterator_cf_opt(cf, opts, mode)
                         .filter_map(|(k, _)| Some(message_ty::Item::decode(&k).ok()?.index));
                     tys.push(it);
                 }
@@ -294,15 +312,21 @@ impl DatabaseFetch for Db {
                     sender,
                     index: cursor,
                 };
-                let key = key.encode()
+                let key = key
+                    .encode()
                     .map_err(|error| DBError::SchemaError { error })?;
                 let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
-                let cf = self.inner
+                let cf = self
+                    .inner
                     .cf_handle(message_sender::Schema::name())
-                    .ok_or_else(|| DBError::MissingColumnFamily { name: message_sender::Schema::name() })?;
+                    .ok_or_else(|| DBError::MissingColumnFamily {
+                        name: message_sender::Schema::name(),
+                    })?;
                 let mut opts = ReadOptions::default();
                 opts.set_prefix_same_as_start(true);
-                let it = self.inner.iterator_cf_opt(cf, opts, mode)
+                let it = self
+                    .inner
+                    .iterator_cf_opt(cf, opts, mode)
                     .filter_map(|(k, _)| Some(message_sender::Item::decode(&k).ok()?.index));
                 iters.push(Box::new(it));
             }
@@ -311,26 +335,30 @@ impl DatabaseFetch for Db {
                     initiator: initiator.clone(),
                     index: cursor,
                 };
-                let key = key.encode()
+                let key = key
+                    .encode()
                     .map_err(|error| DBError::SchemaError { error })?;
                 let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
-                let cf = self.inner
+                let cf = self
+                    .inner
                     .cf_handle(message_initiator::Schema::name())
-                    .ok_or_else(|| DBError::MissingColumnFamily { name: message_initiator::Schema::name() })?;
+                    .ok_or_else(|| DBError::MissingColumnFamily {
+                        name: message_initiator::Schema::name(),
+                    })?;
                 let mut opts = ReadOptions::default();
                 opts.set_prefix_same_as_start(true);
-                let it = self.inner.iterator_cf_opt(cf, opts, mode)
+                let it = self
+                    .inner
+                    .iterator_cf_opt(cf, opts, mode)
                     .filter_map(|(k, _)| Some(message_initiator::Item::decode(&k).ok()?.index));
                 iters.push(Box::new(it));
             }
 
             let v = sorted_intersect(iters.as_mut_slice(), limit)
                 .into_iter()
-                .filter_map(move |index| {
-                    match self.as_kv::<message::Schema>().get(&index) {
-                        Ok(Some(value)) => {
-                            Some(message::MessageFrontend::new(value, index))
-                        },
+                .filter_map(
+                    move |index| match self.as_kv::<message::Schema>().get(&index) {
+                        Ok(Some(value)) => Some(message::MessageFrontend::new(value, index)),
                         Ok(None) => {
                             log::info!("No value at index: {}", index);
                             None
@@ -339,8 +367,8 @@ impl DatabaseFetch for Db {
                             log::warn!("Failed to load value at index {}: {}", index, err);
                             None
                         },
-                    }
-                })
+                    },
+                )
                 .collect();
             Ok(v)
         }
