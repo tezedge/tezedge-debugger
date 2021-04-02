@@ -9,4 +9,4 @@ pub mod message;
 pub mod node_log;
 
 mod secondary_indexes;
-pub use self::secondary_indexes::message_ty;
+pub use self::secondary_indexes::*;

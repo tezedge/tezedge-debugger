@@ -33,8 +33,8 @@ pub struct MessagesFilter {
     pub limit: Option<u64>,
     pub cursor: Option<u64>,
     pub remote_addr: Option<String>,
-    pub initiator: Option<String>,
-    pub sender: Option<String>,
+    pub source_type: Option<common::Initiator>,
+    pub incoming: Option<bool>,
     pub types: Option<String>,
 }
 

@@ -43,6 +43,22 @@ pub enum Sender {
     Remote,
 }
 
+#[derive(Error, Debug)]
+#[error("Invalid message type {}", _0)]
+pub struct ParseSenderError(String);
+
+impl FromStr for Sender {
+    type Err = ParseSenderError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "local" => Ok(Sender::Local),
+            "remote" => Ok(Sender::Remote),
+            s => Err(ParseSenderError(s.to_string())),
+        }
+    }
+}
+
 impl fmt::Display for Sender {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
