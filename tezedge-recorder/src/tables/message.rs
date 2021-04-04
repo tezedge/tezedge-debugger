@@ -2,11 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 use std::{net::SocketAddr, ops::Range, convert::TryFrom};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize, ser};
 use storage::persistent::{KeyValueSchema, BincodeEncoded};
+use tezos_messages::p2p::{
+    encoding::{
+        connection::ConnectionMessage,
+        metadata::MetadataMessage,
+        ack::AckMessage,
+        peer::{PeerMessage, PeerMessageResponse},
+    },
+    binary_message::BinaryMessage,
+};
 use super::{
     common::{Initiator, Sender, MessageCategory, MessageKind, MessageType},
     connection,
+    chunk,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +31,23 @@ pub struct Item {
     chunks: Range<u64>,
 }
 
+impl Item {
+    pub fn chunks(&self) -> impl Iterator<Item = chunk::Key> + '_ {
+        let cn_id = connection::Key {
+            ts: self.cn_ts,
+            ts_nanos: self.cn_ts_nanos,
+        };
+        let sender = self.sender.clone();
+        self.chunks.clone().map(move |counter| {
+            chunk::Key {
+                cn_id: cn_id.clone(),
+                counter,
+                sender: sender.clone(),
+            }
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct MessageFrontend {
     id: u64,
@@ -30,10 +57,11 @@ pub struct MessageFrontend {
     incoming: bool,
     category: MessageCategory,
     kind: Option<MessageKind>,
+    message_preview: Option<String>,
 }
 
 impl MessageFrontend {
-    pub fn new(item: Item, id: u64) -> Self {
+    pub fn new(item: Item, id: u64, message_preview: Option<String>) -> Self {
         let (category, kind) = item.ty.split();
         MessageFrontend {
             id,
@@ -43,7 +71,126 @@ impl MessageFrontend {
             incoming: item.sender.incoming(),
             category,
             kind,
+            message_preview,
         }
+    }
+}
+
+#[derive(Debug)]
+pub enum TezosMessage {
+    ConnectionMessage(ConnectionMessage),
+    MetadataMessage(MetadataMessage),
+    AckMessage(AckMessage),
+    PeerMessage(PeerMessage),
+}
+
+impl TezosMessage {
+    pub fn json_string(&self) -> Result<String, serde_json::Error> {
+        match self {
+            TezosMessage::ConnectionMessage(m) => serde_json::to_string(m),
+            TezosMessage::MetadataMessage(m) => serde_json::to_string(m),
+            TezosMessage::AckMessage(m) => serde_json::to_string(m),
+            TezosMessage::PeerMessage(m) => serde_json::to_string(m),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct MessageDetails {
+    id: u64,
+    message: Option<TezosMessage>,
+    original_bytes: Vec<Vec<u8>>,
+    decrypted_bytes: Vec<Vec<u8>>,
+    error: Option<String>,
+}
+
+impl Serialize for MessageDetails {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        use self::ser::SerializeStruct;
+
+        struct HexString<'a>(&'a [Vec<u8>]);
+
+        impl<'a> Serialize for HexString<'a> {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: ser::Serializer,
+            {
+                use self::ser::SerializeSeq;
+
+                let len = self.0.iter().map(|v| v.len()).sum();
+                let mut s = serializer.serialize_seq(Some(len))?;
+                for v in self.0 {
+                    let hex = hex::encode(v);
+                    for i in 0..v.len() {
+                        s.serialize_element(&hex[(2 * i)..(2 * (i + 1))])?;
+                    }
+                }
+                s.end()
+            }
+        }
+
+        let mut s = serializer.serialize_struct("MessageDetails", 5)?;
+        s.serialize_field("id", &self.id)?;
+        match &self.message {
+            Some(TezosMessage::ConnectionMessage(m)) => s.serialize_field("message", m)?,
+            Some(TezosMessage::MetadataMessage(m)) => s.serialize_field("message", m)?,
+            Some(TezosMessage::AckMessage(m)) => s.serialize_field("message", m)?,
+            Some(TezosMessage::PeerMessage(m)) => s.serialize_field("message", m)?,
+            None => s.serialize_field("message", &None::<()>)?,
+        }
+        s.serialize_field("original_bytes", &HexString(&self.original_bytes))?;
+        s.serialize_field("decrypted_bytes", &HexString(&self.decrypted_bytes))?;
+        s.serialize_field("error", &self.error)?;
+        s.end()
+    }
+}
+
+impl MessageDetails {
+    pub fn new(id: u64, ty: &MessageType, chunks: &[chunk::Value]) -> Self {
+        let mut bytes = Vec::with_capacity(chunks.iter().map(|c| c.plain.len()).sum());
+        for c in chunks {
+            bytes.extend_from_slice(&c.plain);
+        }
+        let message = match ty {
+            &MessageType::Connection => {
+                ConnectionMessage::from_bytes(&bytes)
+                    .map_err(|e| e.to_string())
+                    .map(TezosMessage::ConnectionMessage)
+            },
+            &MessageType::Meta => {
+                MetadataMessage::from_bytes(&bytes)
+                    .map_err(|e| e.to_string())
+                    .map(TezosMessage::MetadataMessage)
+            },
+            &MessageType::Ack => {
+                AckMessage::from_bytes(&bytes)
+                    .map_err(|e| e.to_string())
+                    .map(TezosMessage::AckMessage)
+            },
+            &MessageType::P2p(_) => {
+                PeerMessageResponse::from_bytes(&bytes)
+                    .map_err(|e| e.to_string())
+                    .map(|n| TezosMessage::PeerMessage(n.message().clone()))
+            },
+        };
+        let (message, error) = match message {
+            Ok(m) => (Some(m), None),
+            Err(e) => (None, Some(e)),
+        };
+        MessageDetails {
+            id,
+            message,
+            original_bytes: chunks.iter().map(|c| c.bytes.clone()).collect(),
+            decrypted_bytes: chunks.iter().map(|c| c.plain.clone()).collect(),
+            error,
+        }
+    }
+
+    pub fn json_string(&self) -> Result<Option<String>, serde_json::Error> {
+        self.message.as_ref().map(|m| m.json_string()).transpose()
     }
 }
 

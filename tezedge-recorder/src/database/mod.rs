@@ -47,6 +47,8 @@ pub struct LogsFilter {
     pub log_level: Option<String>,
     pub from: Option<u64>,
     pub to: Option<u64>,
+    // compatibility
+    pub node_name: Option<u16>,
 }
 
 pub trait DatabaseFetch
@@ -69,6 +71,8 @@ where
         &self,
         filter: &MessagesFilter,
     ) -> Result<Vec<message::MessageFrontend>, Self::Error>;
+
+    fn fetch_message(&self, id: u64) -> Result<Option<message::MessageDetails>, Self::Error>;
 
     fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::Item>, Self::Error>;
 }

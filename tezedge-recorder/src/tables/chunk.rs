@@ -75,8 +75,8 @@ impl fmt::Debug for Item {
 #[derive(Debug, Default, Clone)]
 pub struct Key {
     pub cn_id: connection::Key,
-    counter: u64,
-    sender: Sender,
+    pub counter: u64,
+    pub sender: Sender,
 }
 
 impl Key {
@@ -186,8 +186,8 @@ impl Decoder for Key {
 pub struct Value {
     net: bool,
     timestamp: u64,
-    bytes: Vec<u8>,
-    plain: Vec<u8>,
+    pub bytes: Vec<u8>,
+    pub plain: Vec<u8>,
 }
 
 pub struct ValueTruncated(pub Value);

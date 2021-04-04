@@ -1,11 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{
-    path::Path,
-    sync::atomic::{Ordering, AtomicU64},
-    net::SocketAddr,
-};
+use std::{collections::HashMap, net::SocketAddr, path::Path, sync::{atomic::{Ordering, AtomicU64}, Mutex}};
 use rocksdb::{Cache, DB, ReadOptions};
 use storage::{
     Direction, IteratorMode,
@@ -14,6 +10,7 @@ use storage::{
         SchemaError,
     },
 };
+use anyhow::Result;
 use thiserror::Error;
 use itertools::Itertools;
 use super::sorted_intersect::sorted_intersect;
@@ -39,10 +36,43 @@ impl From<DBError> for DbError {
     }
 }
 
+struct DbCache {
+    details: HashMap<u64, (message::MessageDetails, Option<String>)>,
+}
+
+impl DbCache {
+    pub fn fill(
+        &mut self,
+        m: &message::Item,
+        id: u64,
+        db: &impl KeyValueStoreWithSchema<chunk::Schema>,
+    ) -> Result<Option<String>> {
+        if let Some((_, p)) = self.details.get(&id) {
+            return Ok(p.clone());
+        }
+        let mut chunks = Vec::new();
+        for key in m.chunks() {
+            if let Some(c) = db.get(&key).map_err(DbError)? {
+                chunks.push(c);
+            } else {
+                break;
+            }
+        }
+        let details = message::MessageDetails::new(id, &m.ty, &chunks);
+        let preview = details.json_string()?.map(|mut s| {
+            s.truncate(100);
+            s
+        });
+        self.details.insert(id, (details, preview.clone()));
+        Ok(preview)
+    }
+}
+
 pub struct Db {
     //_cache: Cache,
     message_counter: AtomicU64,
     log_counter: AtomicU64,
+    cache: Mutex<DbCache>,
     inner: DB,
 }
 
@@ -91,6 +121,9 @@ impl DatabaseNew for Db {
             //_cache: cache,
             message_counter: AtomicU64::new(0),
             log_counter: AtomicU64::new(0),
+            cache: Mutex::new(DbCache {
+                details: HashMap::new(),
+            }),
             inner,
         })
     }
@@ -287,12 +320,23 @@ impl DatabaseFetch for Db {
             } else {
                 IteratorMode::End
             };
+            let mut cache = self.cache.lock().unwrap();
+            cache.details.clear();
             let v = self
                 .as_kv::<message::Schema>()
                 .iterator(mode)?
                 .take(limit)
                 .filter_map(|(k, v)| match (k, v) {
-                    (Ok(key), Ok(value)) => Some(message::MessageFrontend::new(value, key)),
+                    (Ok(key), Ok(value)) => {
+                        let preview = match cache.fill(&value, key, self.as_kv()) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                log::error!("{}", e);
+                                None
+                            },
+                        };
+                        Some(message::MessageFrontend::new(value, key, preview))
+                    },
                     (Ok(index), Err(err)) => {
                         log::warn!("Failed to load value at {:?}: {}", index, err);
                         None
@@ -435,11 +479,21 @@ impl DatabaseFetch for Db {
                 }
             }
 
+            let mut cache = self.cache.lock().unwrap();
             let v = sorted_intersect(iters.as_mut_slice(), limit)
                 .into_iter()
                 .filter_map(
                     move |index| match self.as_kv::<message::Schema>().get(&index) {
-                        Ok(Some(value)) => Some(message::MessageFrontend::new(value, index)),
+                        Ok(Some(value)) => {
+                            let preview = match cache.fill(&value, index, self.as_kv()) {
+                                Ok(p) => p,
+                                Err(e) => {
+                                    log::error!("{}", e);
+                                    None
+                                },
+                            };
+                            Some(message::MessageFrontend::new(value, index, preview))
+                        },
                         Ok(None) => {
                             log::info!("No value at index: {}", index);
                             None
@@ -453,6 +507,13 @@ impl DatabaseFetch for Db {
                 .collect();
             Ok(v)
         }
+    }
+
+    fn fetch_message(&self, id: u64) -> Result<Option<message::MessageDetails>, Self::Error> {
+        let mut cache = self.cache.lock().unwrap();
+
+        // TODO: clone
+        Ok(cache.details.remove(&id).map(|(m, _)| m))
     }
 
     fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::Item>, Self::Error> {

@@ -92,6 +92,23 @@ where
         })
 }
 
+fn message<Db>(
+    db: Arc<Db>,
+) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
+where
+    Db: DatabaseFetch + Sync + Send + 'static,
+{
+    warp::path!("v3" / "message" / u64).map(move |id: u64| -> reply::WithStatus<Json> {
+        match db.fetch_message(id) {
+            Ok(message) => reply::with_status(reply::json(&message), StatusCode::OK),
+            Err(err) => {
+                let r = &format!("database error: {}", err);
+                reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+            },
+        }
+    })
+}
+
 fn logs<Db>(
     db: Arc<Db>,
 ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
@@ -125,6 +142,7 @@ where
                 .or(chunks(db.clone()))
                 .or(chunk(db.clone()))
                 .or(messages(db.clone()))
+                .or(message(db.clone()))
                 .or(logs(db)),
         )
         .with(with::header("Content-Type", "application/json"))

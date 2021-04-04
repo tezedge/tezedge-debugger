@@ -207,8 +207,8 @@ impl Item {
 
 #[derive(Debug, Default, Clone)]
 pub struct Key {
-    ts: u64,
-    ts_nanos: u32,
+    pub ts: u64,
+    pub ts_nanos: u32,
 }
 
 #[derive(Error, Debug)]

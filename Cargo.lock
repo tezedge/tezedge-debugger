@@ -3060,6 +3060,7 @@ dependencies = [
  "serde_json",
  "storage",
  "syslog_loose",
+ "tezos_messages 1.1.4",
  "thiserror",
  "tokio 1.4.0",
  "toml",

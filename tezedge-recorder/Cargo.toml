@@ -37,3 +37,4 @@ bpf-common = { path = "../bpf-common", features = ["std"] }
 
 crypto = { tag = "v1.1.5", git = "https://github.com/simplestaking/tezedge" }
 storage = { tag = "v1.1.5", git = "htps://github.com/simplestaking/tezedge" }
+tezos_messages = { tag = "v1.1.5", git = "https://github.com/simplestaking/tezedge" }
