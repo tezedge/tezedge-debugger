@@ -13,7 +13,7 @@ use super::{
 pub struct Item {
     cn_ts: u64,
     cn_ts_nanos: u32,
-    timestamp: u64,
+    pub timestamp: u64,
     pub remote_addr: SocketAddr,
     pub initiator: Initiator,
     pub sender: Sender,

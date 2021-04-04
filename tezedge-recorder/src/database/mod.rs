@@ -36,12 +36,16 @@ pub struct MessagesFilter {
     pub source_type: Option<common::Initiator>,
     pub incoming: Option<bool>,
     pub types: Option<String>,
+    pub from: Option<u64>,
+    pub to: Option<u64>,
 }
 
 #[derive(Deserialize)]
 pub struct LogsFilter {
     pub limit: Option<u64>,
     pub cursor: Option<u64>,
+    pub from: Option<u64>,
+    pub to: Option<u64>,
 }
 
 pub trait DatabaseFetch

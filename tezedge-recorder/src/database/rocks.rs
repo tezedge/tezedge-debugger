@@ -24,7 +24,7 @@ use super::{
     // tables
     common, connection, chunk, message, node_log,
     // secondary indexes
-    message_ty, message_sender, message_initiator, message_addr,
+    message_ty, message_sender, message_initiator, message_addr, timestamp,
 };
 
 #[derive(Error, Debug)]
@@ -79,6 +79,8 @@ impl DatabaseNew for Db {
             message_sender::Schema::descriptor(&cache),
             message_initiator::Schema::descriptor(&cache),
             message_addr::Schema::descriptor(&cache),
+            timestamp::MessageSchema::descriptor(&cache),
+            timestamp::LogSchema::descriptor(&cache),
         ];
         let inner = persistent::open_kv(path, cfs, &DbConfiguration::default())?;
 
@@ -132,6 +134,10 @@ impl Database for Db {
             addr: item.remote_addr.clone(),
             index,
         };
+        let timestamp_index = timestamp::Item {
+            timestamp: item.timestamp.clone(),
+            index,
+        };
         let inner = || -> Result<(), DbError> {
             self.as_kv::<message_ty::Schema>().put(&ty_index, &())?;
             self.as_kv::<message_sender::Schema>()
@@ -140,6 +146,7 @@ impl Database for Db {
                 .put(&initiator_index, &())?;
             self.as_kv::<message_addr::Schema>()
                 .put(&addr_index, &())?;
+            self.as_kv::<timestamp::MessageSchema>().put(&timestamp_index, &())?;
             self.as_kv::<message::Schema>().put(&index, &item)?;
             Ok(())
         };
@@ -258,6 +265,8 @@ impl DatabaseFetch for Db {
             && filter.source_type.is_none()
             && filter.incoming.is_none()
             && filter.types.is_none()
+            && filter.from.is_none()
+            && filter.to.is_none()
         {
             let mode = if let Some(cursor) = &filter.cursor {
                 IteratorMode::From(cursor, Direction::Reverse)
@@ -284,7 +293,7 @@ impl DatabaseFetch for Db {
             Ok(v)
         } else {
             let cursor = filter.cursor.clone().unwrap_or(u64::MAX);
-            let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(4);
+            let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(5);
             if let Some(ty) = &filter.types {
                 let mut tys = Vec::new();
                 for ty in ty.split(',') {
@@ -387,6 +396,29 @@ impl DatabaseFetch for Db {
                     .iterator_cf_opt(cf, opts, mode)
                     .filter_map(|(k, _)| Some(message_addr::Item::decode(&k).ok()?.index));
                 iters.push(Box::new(it));
+            }
+            if filter.from.is_some() || filter.to.is_some() {
+                let mut timestamp = timestamp::Item {
+                    timestamp: u64::MAX,
+                    index: u64::MAX,
+                };
+                let mode = if let Some(end) = filter.to.clone() {
+                    timestamp.timestamp = end;
+                    IteratorMode::From(&timestamp, Direction::Reverse)
+                } else {
+                    IteratorMode::End
+                };
+                let it = self.as_kv::<timestamp::MessageSchema>()
+                    .iterator(mode)?
+                    .filter_map(|(k, _)| k.ok());
+                if let Some(begin) = filter.from.clone() {
+                    let it = it
+                        .take_while(move |k| k.timestamp >= begin)
+                        .map(|k| k.index);
+                    iters.push(Box::new(it));
+                } else {
+                    iters.push(Box::new(it.map(|k| k.index)));
+                }
             }
 
             let v = sorted_intersect(iters.as_mut_slice(), limit)
