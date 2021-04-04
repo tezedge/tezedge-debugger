@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::str::FromStr;
+use std::{str::FromStr, convert::TryFrom};
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
 use storage::persistent::{BincodeEncoded, KeyValueSchema};
@@ -53,6 +53,23 @@ impl FromStr for LogLevel {
             "fatal" => LogLevel::Fatal,
             _ => return Err(ParseLogLevelError::InvalidName(level)),
         })
+    }
+}
+
+impl TryFrom<u8> for LogLevel {
+    type Error = ParseLogLevelError;
+
+    fn try_from(value: u8) -> Result<Self, ParseLogLevelError> {
+        match value {
+            x if x == Self::Trace as u8 => { Ok(Self::Trace) }
+            x if x == Self::Debug as u8 => { Ok(Self::Debug) }
+            x if x == Self::Info as u8 => { Ok(Self::Info) }
+            x if x == Self::Notice as u8 => { Ok(Self::Notice) }
+            x if x == Self::Warning as u8 => { Ok(Self::Warning) }
+            x if x == Self::Error as u8 => { Ok(Self::Error) }
+            x if x == Self::Fatal as u8 => { Ok(Self::Fatal) }
+            x => Err(ParseLogLevelError::InvalidValue(x)),
+        }
     }
 }
 

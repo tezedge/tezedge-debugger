@@ -44,6 +44,7 @@ pub struct MessagesFilter {
 pub struct LogsFilter {
     pub limit: Option<u64>,
     pub cursor: Option<u64>,
+    pub log_level: Option<String>,
     pub from: Option<u64>,
     pub to: Option<u64>,
 }

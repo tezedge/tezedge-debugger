@@ -15,6 +15,8 @@ use storage::{
     },
 };
 use thiserror::Error;
+use itertools::Itertools;
+use super::sorted_intersect::sorted_intersect;
 #[rustfmt::skip]
 use super::{
     // core traits
@@ -24,7 +26,7 @@ use super::{
     // tables
     common, connection, chunk, message, node_log,
     // secondary indexes
-    message_ty, message_sender, message_initiator, message_addr, timestamp,
+    message_ty, message_sender, message_initiator, message_addr, log_level, timestamp,
 };
 
 #[derive(Error, Debug)]
@@ -80,6 +82,7 @@ impl DatabaseNew for Db {
             message_initiator::Schema::descriptor(&cache),
             message_addr::Schema::descriptor(&cache),
             timestamp::MessageSchema::descriptor(&cache),
+            log_level::Schema::descriptor(&cache),
             timestamp::LogSchema::descriptor(&cache),
         ];
         let inner = persistent::open_kv(path, cfs, &DbConfiguration::default())?;
@@ -157,7 +160,21 @@ impl Database for Db {
 
     fn store_log(&self, item: node_log::Item) {
         let index = self.reserve_log_counter();
-        if let Err(error) = self.as_kv::<node_log::Schema>().put(&index, &item) {
+        let lv_index = log_level::Item {
+            lv: item.level.clone(),
+            index,
+        };
+        let timestamp_index = timestamp::Item {
+            timestamp: (item.timestamp.clone() / 1_000_000_000) as u64,
+            index,
+        };
+        let inner = || -> Result<(), DbError> {
+            self.as_kv::<log_level::Schema>().put(&lv_index, &())?;
+            self.as_kv::<timestamp::LogSchema>().put(&timestamp_index, &())?;
+            self.as_kv::<node_log::Schema>().put(&index, &item)?;
+            Ok(())
+        };
+        if let Err(error) = inner() {
             log::error!("database error: {}", error);
         }
     }
@@ -256,9 +273,6 @@ impl DatabaseFetch for Db {
         &self,
         filter: &MessagesFilter,
     ) -> Result<Vec<message::MessageFrontend>, Self::Error> {
-        use itertools::Itertools;
-        use super::sorted_intersect::sorted_intersect;
-
         let limit = filter.limit.unwrap_or(100) as usize;
 
         if filter.remote_addr.is_none()
@@ -443,27 +457,104 @@ impl DatabaseFetch for Db {
 
     fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::Item>, Self::Error> {
         let limit = filter.limit.unwrap_or(100) as usize;
-        let mode = if let Some(cursor) = &filter.cursor {
-            IteratorMode::From(cursor, Direction::Reverse)
+
+        if filter.log_level.is_none() && filter.from.is_none() && filter.to.is_none() {
+            let mode = if let Some(cursor) = &filter.cursor {
+                IteratorMode::From(cursor, Direction::Reverse)
+            } else {
+                IteratorMode::End
+            };
+            let vec = self
+                .as_kv::<node_log::Schema>()
+                .iterator(mode)?
+                .filter_map(|(k, v)| match (k, v) {
+                    (Ok(_), Ok(value)) => Some(value),
+                    (Ok(index), Err(err)) => {
+                        log::warn!("Failed to load value at {:?}: {}", index, err);
+                        None
+                    },
+                    (Err(err), _) => {
+                        log::warn!("Failed to load index: {}", err);
+                        None
+                    },
+                })
+                .take(limit)
+                .collect();
+            Ok(vec)
         } else {
-            IteratorMode::End
-        };
-        let vec = self
-            .as_kv::<node_log::Schema>()
-            .iterator(mode)?
-            .filter_map(|(k, v)| match (k, v) {
-                (Ok(_), Ok(value)) => Some(value),
-                (Ok(index), Err(err)) => {
-                    log::warn!("Failed to load value at {:?}: {}", index, err);
-                    None
-                },
-                (Err(err), _) => {
-                    log::warn!("Failed to load index: {}", err);
-                    None
-                },
-            })
-            .take(limit)
-            .collect();
-        Ok(vec)
+            let cursor = filter.cursor.clone().unwrap_or(u64::MAX);
+            let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(5);
+
+            if let Some(lv) = &filter.log_level {
+                let mut lvs = Vec::new();
+                for lv in lv.split(',') {
+                    let lv =
+                        lv.parse::<node_log::LogLevel>()
+                            .map_err(|e| DBError::SchemaError {
+                                error: SchemaError::DecodeValidationError(e.to_string()),
+                            })?;
+                    let key = log_level::Item { lv, index: cursor };
+                    let key = key
+                        .encode()
+                        .map_err(|error| DBError::SchemaError { error })?;
+                    let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                    let cf = self
+                        .inner
+                        .cf_handle(log_level::Schema::name())
+                        .ok_or_else(|| DBError::MissingColumnFamily {
+                            name: log_level::Schema::name(),
+                        })?;
+                    let mut opts = ReadOptions::default();
+                    opts.set_prefix_same_as_start(true);
+                    let it = self
+                        .inner
+                        .iterator_cf_opt(cf, opts, mode)
+                        .filter_map(|(k, _)| Some(log_level::Item::decode(&k).ok()?.index));
+                    lvs.push(it);
+                }
+                iters.push(Box::new(lvs.into_iter().kmerge_by(|x, y| x > y)));
+            }
+            if filter.from.is_some() || filter.to.is_some() {
+                let mut timestamp = timestamp::Item {
+                    timestamp: u64::MAX,
+                    index: u64::MAX,
+                };
+                let mode = if let Some(end) = filter.to.clone() {
+                    timestamp.timestamp = end;
+                    IteratorMode::From(&timestamp, Direction::Reverse)
+                } else {
+                    IteratorMode::End
+                };
+                let it = self.as_kv::<timestamp::LogSchema>()
+                    .iterator(mode)?
+                    .filter_map(|(k, _)| k.ok());
+                if let Some(begin) = filter.from.clone() {
+                    let it = it
+                        .take_while(move |k| k.timestamp >= begin)
+                        .map(|k| k.index);
+                    iters.push(Box::new(it));
+                } else {
+                    iters.push(Box::new(it.map(|k| k.index)));
+                }
+            }
+
+            let v = sorted_intersect(iters.as_mut_slice(), limit)
+                .into_iter()
+                .filter_map(
+                    move |index| match self.as_kv::<node_log::Schema>().get(&index) {
+                        Ok(Some(value)) => Some(value),
+                        Ok(None) => {
+                            log::info!("No value at index: {}", index);
+                            None
+                        },
+                        Err(err) => {
+                            log::warn!("Failed to load value at index {}: {}", index, err);
+                            None
+                        },
+                    },
+                )
+                .collect();
+            Ok(v)
+        }
     }
 }
