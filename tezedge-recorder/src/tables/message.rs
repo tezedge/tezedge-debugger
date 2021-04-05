@@ -51,7 +51,7 @@ impl Item {
 #[derive(Debug, Clone, Serialize)]
 pub struct MessageFrontend {
     id: u64,
-    timestamp: u64,
+    timestamp: u128,
     remote_addr: SocketAddr,
     source_type: Initiator,
     incoming: bool,
@@ -65,7 +65,7 @@ impl MessageFrontend {
         let (category, kind) = item.ty.split();
         MessageFrontend {
             id,
-            timestamp: item.timestamp,
+            timestamp: (item.timestamp as u128) * 1_000_000_000,
             remote_addr: item.remote_addr,
             source_type: item.initiator,
             incoming: item.sender.incoming(),
