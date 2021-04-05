@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{collections::HashMap, net::SocketAddr, path::Path, sync::{atomic::{Ordering, AtomicU64}, Mutex}};
+use std::{net::SocketAddr, path::Path, sync::atomic::{Ordering, AtomicU64}};
 use rocksdb::{Cache, DB, ReadOptions};
 use storage::{
     Direction, IteratorMode,
@@ -36,43 +36,10 @@ impl From<DBError> for DbError {
     }
 }
 
-struct DbCache {
-    details: HashMap<u64, (message::MessageDetails, Option<String>)>,
-}
-
-impl DbCache {
-    pub fn fill(
-        &mut self,
-        m: &message::Item,
-        id: u64,
-        db: &impl KeyValueStoreWithSchema<chunk::Schema>,
-    ) -> Result<Option<String>> {
-        if let Some((_, p)) = self.details.get(&id) {
-            return Ok(p.clone());
-        }
-        let mut chunks = Vec::new();
-        for key in m.chunks() {
-            if let Some(c) = db.get(&key).map_err(DbError)? {
-                chunks.push(c);
-            } else {
-                break;
-            }
-        }
-        let details = message::MessageDetails::new(id, &m.ty, &chunks);
-        let preview = details.json_string()?.map(|mut s| {
-            s.truncate(100);
-            s
-        });
-        self.details.insert(id, (details, preview.clone()));
-        Ok(preview)
-    }
-}
-
 pub struct Db {
     //_cache: Cache,
     message_counter: AtomicU64,
     log_counter: AtomicU64,
-    cache: Mutex<DbCache>,
     inner: DB,
 }
 
@@ -121,9 +88,6 @@ impl DatabaseNew for Db {
             //_cache: cache,
             message_counter: AtomicU64::new(0),
             log_counter: AtomicU64::new(0),
-            cache: Mutex::new(DbCache {
-                details: HashMap::new(),
-            }),
             inner,
         })
     }
@@ -320,18 +284,27 @@ impl DatabaseFetch for Db {
             } else {
                 IteratorMode::End
             };
-            let mut cache = self.cache.lock().unwrap();
-            cache.details.clear();
             let v = self
                 .as_kv::<message::Schema>()
                 .iterator(mode)?
                 .take(limit)
                 .filter_map(|(k, v)| match (k, v) {
                     (Ok(key), Ok(value)) => {
-                        let preview = match cache.fill(&value, key, self.as_kv()) {
-                            Ok(p) => p,
-                            Err(e) => {
-                                log::error!("{}", e);
+                        let preview = match details(&value, key, self.as_kv()) {
+                            Ok(details) => {
+                                match details.json_string() {
+                                    Ok(p) => p.map(|mut s| {
+                                        s.truncate(100);
+                                        s
+                                    }),
+                                    Err(error) => {
+                                        log::error!("Failed to deserialize message {:?}, error: {}", value, error);
+                                        None
+                                    }
+                                }
+                            },
+                            Err(error) => {
+                                log::error!("Failed to chunks for {:?}, error: {}", value, error);
                                 None
                             },
                         };
@@ -479,16 +452,26 @@ impl DatabaseFetch for Db {
                 }
             }
 
-            let mut cache = self.cache.lock().unwrap();
             let v = sorted_intersect(iters.as_mut_slice(), limit)
                 .into_iter()
                 .filter_map(
                     move |index| match self.as_kv::<message::Schema>().get(&index) {
                         Ok(Some(value)) => {
-                            let preview = match cache.fill(&value, index, self.as_kv()) {
-                                Ok(p) => p,
-                                Err(e) => {
-                                    log::error!("{}", e);
+                            let preview = match details(&value, index, self.as_kv()) {
+                                Ok(details) => {
+                                    match details.json_string() {
+                                        Ok(p) => p.map(|mut s| {
+                                            s.truncate(100);
+                                            s
+                                        }),
+                                        Err(error) => {
+                                            log::error!("Failed to deserialize message {:?}, error: {}", value, error);
+                                            None
+                                        }
+                                    }
+                                },
+                                Err(error) => {
+                                    log::error!("Failed to chunks for {:?}, error: {}", value, error);
                                     None
                                 },
                             };
@@ -510,10 +493,11 @@ impl DatabaseFetch for Db {
     }
 
     fn fetch_message(&self, id: u64) -> Result<Option<message::MessageDetails>, Self::Error> {
-        let mut cache = self.cache.lock().unwrap();
-
-        // TODO: clone
-        Ok(cache.details.remove(&id).map(|(m, _)| m))
+        if let Some(brief) = self.as_kv::<message::Schema>().get(&id)? {
+            details(&brief, id, self.as_kv()).map(Some)
+        } else {
+            Ok(None)
+        }
     }
 
     fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::Item>, Self::Error> {
@@ -618,4 +602,20 @@ impl DatabaseFetch for Db {
             Ok(v)
         }
     }
+}
+
+pub fn details(
+    message_item: &message::Item,
+    id: u64,
+    db: &impl KeyValueStoreWithSchema<chunk::Schema>,
+) -> Result<message::MessageDetails, DbError> {
+    let mut chunks = Vec::new();
+    for key in message_item.chunks() {
+        if let Some(c) = db.get(&key)? {
+            chunks.push(c);
+        } else {
+            break;
+        }
+    }
+    Ok(message::MessageDetails::new(id, &message_item.ty, &chunks))
 }
