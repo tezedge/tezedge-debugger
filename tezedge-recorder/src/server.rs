@@ -158,7 +158,8 @@ where
     warp::path!("v2" / "p2p")
         .and(warp::query::query())
         .map(move |filter: MessagesFilter| -> reply::WithStatus<Json> {
-            match filter.node_name.and_then(|port| dbs.get(&port)) {
+            let node_name = filter.node_name.unwrap_or(9732);
+            match dbs.get(&node_name) {
                 Some(db) => {
                     match db.fetch_messages(&filter) {
                         Ok(messages) => reply::with_status(reply::json(&messages), StatusCode::OK),
@@ -169,7 +170,7 @@ where
                     }
                 },
                 None => {
-                    let r = &format!("no such node: {:?}, use `node_name=<port>`", filter.node_name);
+                    let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
                     reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
                 },
             }
@@ -183,9 +184,9 @@ where
     Db: DatabaseFetch + Sync + Send + 'static,
 {
     warp::path!("v2" / "p2p" / u64)
-        .and(warp::query::query())
-        .map(move |id: u64, filter: MessagesFilter| -> reply::WithStatus<Json> {
-            match filter.node_name.and_then(|port| dbs.get(&port)) {
+        .map(move |id: u64| -> reply::WithStatus<Json> {
+            let node_name = 9732;
+            match dbs.get(&node_name) {
                 Some(db) => {
                     match db.fetch_message(id) {
                         Ok(message) => reply::with_status(reply::json(&message), StatusCode::OK),
@@ -196,7 +197,7 @@ where
                     }
                 },
                 None => {
-                    let r = &format!("no such node: {:?}, use `node_name=<port>`", filter.node_name);
+                    let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
                     reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
                 },
             }
@@ -211,7 +212,8 @@ where
 {
     warp::path!("v2" / "log").and(warp::query::query()).map(
         move |filter: LogsFilter| -> reply::WithStatus<Json> {
-            match filter.node_name.and_then(|port| dbs.get(&port)) {
+            let node_name = filter.node_name.unwrap_or(9732);
+            match dbs.get(&node_name) {
                 Some(db) => {
                     match db.fetch_log(&filter) {
                         Ok(v) => reply::with_status(reply::json(&v), StatusCode::OK),
@@ -222,7 +224,7 @@ where
                     }
                 },
                 None => {
-                    let r = &format!("no such node: {:?}, use `node_name=<port>`", filter.node_name);
+                    let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
                     reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
                 },
             }
