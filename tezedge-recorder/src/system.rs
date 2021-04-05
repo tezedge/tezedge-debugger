@@ -10,7 +10,7 @@ use std::{
 use serde::Deserialize;
 use anyhow::Result;
 use thiserror::Error;
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, task::JoinHandle};
 use super::{
     database::{DatabaseNew, DatabaseFetch, Database},
     server, log_client,
@@ -21,13 +21,14 @@ pub struct NodeConfig {
     pub db_path: String,
     pub identity_path: String,
     pub p2p_port: u16,
-    pub rpc_port: u16,
-    pub syslog_port: u16,
+    pub rpc_port: Option<u16>,
+    pub syslog_port: Option<u16>,
 }
 
 #[derive(Clone, Deserialize)]
 struct Config {
     pub bpf_sniffer_path: String,
+    pub rpc_port: Option<u16>,
     pub nodes: Vec<NodeConfig>,
 }
 
@@ -54,45 +55,54 @@ pub enum NodeError {
     ParseSk,
 }
 
-pub struct NodeDb<Db> {
-    db: Arc<Db>,
-    _server: tokio::task::JoinHandle<()>,
-    _log_client: thread::JoinHandle<()>,
+pub struct NodeServer {
+    _server: Option<JoinHandle<()>>,
+    _log_client: Option<thread::JoinHandle<()>>,
 }
 
 pub struct System<Db> {
     config: Config,
     port_to_pid: HashMap<u16, u32>,
     node_info: HashMap<u32, NodeInfo>,
-    node_dbs: HashMap<u16, NodeDb<Db>>,
+    node_servers: HashMap<u16, NodeServer>,
+    node_dbs: HashMap<u16, Arc<Db>>,
+    _old_server: Option<JoinHandle<()>>,
     tokio_rt: Runtime,
 }
 
-impl<Db> NodeDb<Db>
-where
-    Db: DatabaseNew + Database + DatabaseFetch + Sync + Send + 'static,
-{
-    pub fn open_spawn(
+impl NodeServer {
+    pub fn open_spawn<Db>(
         db_path: &str,
-        rpc_port: u16,
-        syslog_port: u16,
+        rpc_port: Option<u16>,
+        syslog_port: Option<u16>,
         rt: &Runtime,
         running: Arc<AtomicBool>,
-    ) -> Result<Self> {
+    ) -> Result<(Self, Arc<Db>)>
+    where
+        Db: DatabaseNew + Database + DatabaseFetch + Sync + Send + 'static,
+    {
         let db = Arc::new(Db::open(db_path)?);
-        let addr = ([0, 0, 0, 0], rpc_port);
-        let server = rt.spawn(warp::serve(server::routes(db.clone())).run(addr));
-        let log_client = log_client::spawn(syslog_port, db.clone(), running)?;
+        let server = if let Some(port) = rpc_port {
+            let addr = ([0, 0, 0, 0], port);
+            Some(rt.spawn(warp::serve(server::routes(db.clone())).run(addr)))
+        } else {
+            None
+        };
+        let log_client = if let Some(port) = syslog_port {
+            Some(log_client::spawn(port, db.clone(), running)?)
+        } else {
+            None
+        };
 
-        Ok(NodeDb {
-            db,
-            _server: server,
-            _log_client: log_client,
-        })
-    }
-
-    pub fn db(&self) -> Arc<Db> {
-        self.db.clone()
+        Ok(
+            (
+                NodeServer {
+                    _server: server,
+                    _log_client: log_client,
+                },
+                db,
+            )
+        )
     }
 }
 
@@ -153,7 +163,9 @@ impl<Db> System<Db> {
             config,
             port_to_pid: HashMap::new(),
             node_info: HashMap::new(),
+            node_servers: HashMap::new(),
             node_dbs: HashMap::new(),
+            _old_server: None,
             tokio_rt: Runtime::new().unwrap(),
         })
     }
@@ -179,7 +191,7 @@ impl<Db> System<Db> {
             },
             // ignore syslog
             p => {
-                if self.config.nodes.iter().any(|n| n.syslog_port == p) {
+                if self.config.nodes.iter().any(|n| n.syslog_port.unwrap_or(0) == p) {
                     return true;
                 }
             },
@@ -202,23 +214,25 @@ where
     Db: DatabaseNew + Database + DatabaseFetch + Sync + Send + 'static,
 {
     pub fn run_dbs(&mut self, running: Arc<AtomicBool>) {
-        let dbs = self
-            .config
-            .nodes
-            .iter()
-            .filter_map(|c| {
-                let r = running.clone();
-                let rt = &self.tokio_rt;
-                match NodeDb::open_spawn(&c.db_path, c.rpc_port, c.syslog_port, rt, r) {
-                    Ok(ndb) => Some((c.p2p_port, ndb)),
-                    Err(error) => {
-                        log::error!("{}", error);
-                        None
-                    },
-                }
-            })
-            .collect();
-        self.node_dbs = dbs;
+        for c in &self.config.nodes {
+            let r = running.clone();
+            let rt = &self.tokio_rt;
+            match NodeServer::open_spawn(&c.db_path, c.rpc_port, c.syslog_port, rt, r) {
+                Ok((server, db)) => {
+                    self.node_servers.insert(c.p2p_port, server);
+                    self.node_dbs.insert(c.p2p_port, db);
+                },
+                Err(error) => {
+                    log::error!("{}", error);
+                },
+            }
+        }
+
+        if let Some(port) = self.config.rpc_port {
+            let addr = ([0, 0, 0, 0], port);
+            let s = warp::serve(server::routes_old(self.node_dbs.clone())).run(addr);
+            self._old_server = Some(self.tokio_rt.spawn(s));    
+        }
     }
 
     pub fn handle_bind(&mut self, pid: u32, port: u16) -> Result<()> {
@@ -245,8 +259,8 @@ where
             .node_info
             .get(&pid)
             .map(|i| i.p2p_port)
-            .and_then(|port| self.node_dbs.get(&port))
-            .map(NodeDb::db)?;
+            .and_then(|port| self.node_dbs.get(&port))?
+            .clone();
         let info = self.node_info.get_mut(&pid)?;
         Some((info, db))
     }

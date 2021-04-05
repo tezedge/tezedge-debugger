@@ -38,6 +38,8 @@ pub struct MessagesFilter {
     pub types: Option<String>,
     pub from: Option<u64>,
     pub to: Option<u64>,
+    // compatibility
+    pub node_name: Option<u16>,
 }
 
 #[derive(Deserialize)]
