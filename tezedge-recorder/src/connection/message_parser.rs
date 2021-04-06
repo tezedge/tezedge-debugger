@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{sync::Arc, rc::Rc, cell::RefCell};
+use std::sync::Arc;
 use super::{
     chunk_parser::ChunkHandler,
     Database,
@@ -11,7 +11,6 @@ use super::{
 pub struct MessageParser<Db> {
     builder: Option<message::MessageBuilder>,
     error: bool,
-    cn: Rc<RefCell<connection::Item>>,
     db: Arc<Db>,
 }
 
@@ -19,11 +18,10 @@ impl<Db> MessageParser<Db>
 where
     Db: Database,
 {
-    pub fn new(cn: Rc<RefCell<connection::Item>>, db: Arc<Db>) -> Self {
+    pub fn new(db: Arc<Db>) -> Self {
         MessageParser {
             builder: None,
             error: false,
-            cn,
             db,
         }
     }
@@ -33,7 +31,7 @@ impl<Db> ChunkHandler for MessageParser<Db>
 where
     Db: Database,
 {
-    fn handle_chunk(&mut self, chunk: chunk::Item) {
+    fn handle_chunk(&mut self, chunk: chunk::Item, cn: &connection::Item) {
         use std::convert::TryFrom;
         use self::message::MessageBuilder;
 
@@ -60,7 +58,6 @@ where
 
         let sender = &chunk.sender;
 
-        let cn = self.cn.borrow();
         let message = match chunk.counter {
             0 => Some(MessageBuilder::connection_message().build(&sender, &cn)),
             1 => Some(MessageBuilder::metadata_message().build(&sender, &cn)),
@@ -90,7 +87,7 @@ where
         }
     }
 
-    fn update_cn(&mut self) {
-        self.db.update_connection(self.cn.borrow().clone());
+    fn update_cn(&mut self, cn: &connection::Item) {
+        self.db.update_connection(cn.clone());
     }
 }

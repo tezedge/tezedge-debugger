@@ -7,8 +7,9 @@ use serde::{
     Serialize,
     ser::{self, SerializeSeq, SerializeStruct},
 };
+use typenum::Bit;
 use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError};
-use super::common::Initiator;
+use super::common::{Initiator, Sender};
 
 #[derive(Debug, Clone, Default)]
 pub struct Comments {
@@ -174,6 +175,38 @@ impl Item {
 
     pub fn add_comment(&mut self) -> &mut Comments {
         &mut self.comments
+    }
+
+    pub fn mark_uncertain(&mut self) {
+        let cn_value = match serde_json::to_string(&self.value()) {
+            Ok(s) => s,
+            Err(s) => format!("{:?}", s),
+        };
+        log::warn!("uncertain connection: {}, {}", cn_value, self.key(),);
+        self.add_comment().incoming_uncertain = true;
+        self.add_comment().outgoing_uncertain = true;
+    }
+
+    pub fn mark_cannot_decrypt<S>(&mut self, position: u64)
+    where
+        S: Bit,
+    {
+        let cn_value = match serde_json::to_string(&self.value()) {
+            Ok(s) => s,
+            Err(s) => format!("{:?}", s),
+        };
+        log::warn!(
+            "cannot decrypt: {}-{}-{}, connection: {}",
+            self.key(),
+            Sender::new(S::BOOL),
+            position,
+            cn_value,
+        );
+        if S::BOOL {
+            self.add_comment().incoming_cannot_decrypt = Some(position);
+        } else {
+            self.add_comment().outgoing_cannot_decrypt = Some(position);
+        }
     }
 
     #[rustfmt::skip]

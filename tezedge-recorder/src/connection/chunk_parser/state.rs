@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{cell::RefCell, marker::PhantomData, rc::Rc};
+use std::marker::PhantomData;
 use either::Either;
 use thiserror::Error;
 use typenum::{self, Bit};
@@ -14,7 +14,7 @@ use super::{
 };
 
 struct Inner<S> {
-    cn: Rc<RefCell<connection::Item>>,
+    cn_id: connection::Key,
     id: Identity,
     buffer: Buffer,
     incoming: PhantomData<S>,
@@ -26,7 +26,7 @@ where
 {
     fn chunk(&self, counter: u64, bytes: Vec<u8>, plain: Vec<u8>) -> chunk::Item {
         chunk::Item::new(
-            self.cn.borrow().key(),
+            self.cn_id.clone(),
             Sender::new(S::BOOL),
             counter,
             bytes,
@@ -89,10 +89,10 @@ impl<S> Initial<S>
 where
     S: Bit,
 {
-    pub fn new(cn: Rc<RefCell<connection::Item>>, id: Identity) -> Self {
+    pub fn new(cn_id: &connection::Key, id: Identity) -> Self {
         Initial {
             inner: Inner {
-                cn,
+                cn_id: cn_id.clone(),
                 id,
                 buffer: Buffer::default(),
                 incoming: PhantomData,
@@ -170,7 +170,7 @@ pub struct MakeKeyOutput {
 }
 
 impl HaveCm<Local> {
-    pub fn make_key(self, peer: HaveCm<Remote>) -> MakeKeyOutput {
+    pub fn make_key(self, peer: HaveCm<Remote>, cn: &mut connection::Item) -> MakeKeyOutput {
         use crypto::proof_of_work;
 
         #[derive(Error, Debug)]
@@ -199,31 +199,28 @@ impl HaveCm<Local> {
         let local_chunk = self.inner.buffer.have_chunk().unwrap();
         let remote_chunk = peer.inner.buffer.have_chunk().unwrap();
         let identity = &self.inner.id;
-        let initiator = self.inner.cn.borrow().initiator.clone();
+        let initiator = cn.initiator.clone();
         match Keys::new(identity, local_chunk, remote_chunk, initiator) {
             Ok(Keys { local, remote }) => {
                 let (l, l_chunk) = self.have_key(local);
                 let (r, r_chunk) = peer.have_key(remote);
-                {
-                    let mut cn = l.inner.cn.borrow_mut();
-                    match check(&l_chunk.bytes) {
-                        Ok(_) => (),
-                        Err(HandshakeWarning::ConnectionMessageTooShort(size)) => {
-                            cn.add_comment().outgoing_too_short = Some(size);
-                        },
-                        Err(HandshakeWarning::PowInvalid(target)) => {
-                            cn.add_comment().outgoing_wrong_pow = Some(target);
-                        },
-                    }
-                    match check(&r_chunk.bytes) {
-                        Ok(peer_pk) => cn.set_peer_pk(peer_pk),
-                        Err(HandshakeWarning::ConnectionMessageTooShort(size)) => {
-                            cn.add_comment().incoming_too_short = Some(size);
-                        },
-                        Err(HandshakeWarning::PowInvalid(target)) => {
-                            cn.add_comment().incoming_wrong_pow = Some(target);
-                        },
-                    }
+                match check(&l_chunk.bytes) {
+                    Ok(_) => (),
+                    Err(HandshakeWarning::ConnectionMessageTooShort(size)) => {
+                        cn.add_comment().outgoing_too_short = Some(size);
+                    },
+                    Err(HandshakeWarning::PowInvalid(target)) => {
+                        cn.add_comment().outgoing_wrong_pow = Some(target);
+                    },
+                }
+                match check(&r_chunk.bytes) {
+                    Ok(peer_pk) => cn.set_peer_pk(peer_pk),
+                    Err(HandshakeWarning::ConnectionMessageTooShort(size)) => {
+                        cn.add_comment().incoming_too_short = Some(size);
+                    },
+                    Err(HandshakeWarning::PowInvalid(target)) => {
+                        cn.add_comment().incoming_wrong_pow = Some(target);
+                    },
                 }
                 MakeKeyOutput {
                     local: Ok(l),
@@ -233,7 +230,7 @@ impl HaveCm<Local> {
                 }
             },
             Err(_) => {
-                self.inner.cn.borrow_mut().add_comment().outgoing_wrong_pk = true;
+                cn.add_comment().outgoing_wrong_pk = true;
                 let (l, l_chunk) = self.have_not_key();
                 let (r, r_chunk) = peer.have_not_key();
                 MakeKeyOutput {
@@ -253,20 +250,7 @@ where
 {
     fn new(mut inner: Inner<S>) -> (Uncertain<S>, Option<chunk::Item>) {
         let c = inner.cleanup();
-        {
-            let cn = inner.cn.borrow();
-            let cn_value = match serde_json::to_string(&cn.value()) {
-                Ok(s) => s,
-                Err(s) => format!("{:?}", s),
-            };
-            log::warn!("uncertain connection: {}, {}", cn_value, cn.key(),);
-            let mut cn = inner.cn.borrow_mut();
-            if S::BOOL {
-                cn.add_comment().incoming_uncertain = true;
-            } else {
-                cn.add_comment().outgoing_uncertain = true;
-            }
-        }
+        // TODO: mark cn
         (Uncertain { inner }, c)
     }
 
@@ -275,10 +259,6 @@ where
         self.inner.handle_data(payload);
         self.inner.cleanup().unwrap()
     }
-
-    //pub fn cn(&self) -> Rc<connection::Item> {
-    //    self.inner.cn.clone()
-    //}
 }
 
 impl<S> HaveNotKey<S>
@@ -321,20 +301,6 @@ where
             Ok(plain) => Some(self.inner.chunk(counter, bytes, plain)),
             Err(_) => {
                 self.error = Some(counter);
-                {
-                    let cn = self.inner.cn.borrow();
-                    let cn_value = match serde_json::to_string(&cn.value()) {
-                        Ok(s) => s,
-                        Err(s) => format!("{:?}", s),
-                    };
-                    log::warn!(
-                        "cannot decrypt: {}-{}-{}, connection: {}",
-                        cn.key(),
-                        Sender::new(S::BOOL),
-                        counter,
-                        cn_value,
-                    );
-                }
                 self.inner.cleanup()
             },
         }
@@ -345,17 +311,9 @@ impl<S> HaveData<S>
 where
     S: Bit,
 {
-    pub fn over(self) -> Result<HaveKey<S>, CannotDecrypt<S>> {
+    pub fn over(self) -> Result<HaveKey<S>, (CannotDecrypt<S>, u64)> {
         if let Some(position) = self.error {
-            {
-                let mut cn = self.inner.cn.borrow_mut();
-                if S::BOOL {
-                    cn.add_comment().incoming_cannot_decrypt = Some(position);
-                } else {
-                    cn.add_comment().outgoing_cannot_decrypt = Some(position);
-                }
-            }
-            Err(CannotDecrypt { inner: self.inner })
+            Err((CannotDecrypt { inner: self.inner }, position))
         } else {
             Ok(HaveKey {
                 inner: self.inner,
