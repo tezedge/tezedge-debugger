@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::convert::TryFrom;
 use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError};
 use rocksdb::{ColumnFamilyDescriptor, Cache};

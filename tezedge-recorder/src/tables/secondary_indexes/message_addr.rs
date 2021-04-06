@@ -1,4 +1,10 @@
-use std::{convert::TryFrom, net::{SocketAddr, IpAddr}};
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
+use std::{
+    convert::TryFrom,
+    net::{SocketAddr, IpAddr},
+};
 use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError};
 use rocksdb::{ColumnFamilyDescriptor, Cache};
 
@@ -21,7 +27,7 @@ impl Encoder for Item {
         v.extend_from_slice(&self.addr.port().to_le_bytes());
         v.extend_from_slice(&self.index.to_be_bytes()[2..]);
 
-        Ok(v.into())
+        Ok(v)
     }
 }
 

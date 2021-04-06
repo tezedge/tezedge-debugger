@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 /// Module implements sorted intersection algorithm
 /// Intersection is an *set* operation returning values
 /// that are present in both sets

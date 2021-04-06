@@ -15,8 +15,7 @@ use tezos_messages::p2p::{
 };
 use super::{
     common::{Initiator, Sender, MessageCategory, MessageKind, MessageType},
-    connection,
-    chunk,
+    connection, chunk,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,12 +37,10 @@ impl Item {
             ts_nanos: self.cn_ts_nanos,
         };
         let sender = self.sender.clone();
-        self.chunks.clone().map(move |counter| {
-            chunk::Key {
-                cn_id: cn_id.clone(),
-                counter,
-                sender: sender.clone(),
-            }
+        self.chunks.clone().map(move |counter| chunk::Key {
+            cn_id: cn_id.clone(),
+            counter,
+            sender: sender.clone(),
         })
     }
 }
@@ -155,26 +152,18 @@ impl MessageDetails {
             bytes.extend_from_slice(&c.plain);
         }
         let message = match ty {
-            &MessageType::Connection => {
-                ConnectionMessage::from_bytes(&bytes)
-                    .map_err(|e| e.to_string())
-                    .map(TezosMessage::ConnectionMessage)
-            },
-            &MessageType::Meta => {
-                MetadataMessage::from_bytes(&bytes)
-                    .map_err(|e| e.to_string())
-                    .map(TezosMessage::MetadataMessage)
-            },
-            &MessageType::Ack => {
-                AckMessage::from_bytes(&bytes)
-                    .map_err(|e| e.to_string())
-                    .map(TezosMessage::AckMessage)
-            },
-            &MessageType::P2p(_) => {
-                PeerMessageResponse::from_bytes(&bytes)
-                    .map_err(|e| e.to_string())
-                    .map(|n| TezosMessage::PeerMessage(n.message().clone()))
-            },
+            MessageType::Connection => ConnectionMessage::from_bytes(&bytes)
+                .map_err(|e| e.to_string())
+                .map(TezosMessage::ConnectionMessage),
+            MessageType::Meta => MetadataMessage::from_bytes(&bytes)
+                .map_err(|e| e.to_string())
+                .map(TezosMessage::MetadataMessage),
+            MessageType::Ack => AckMessage::from_bytes(&bytes)
+                .map_err(|e| e.to_string())
+                .map(TezosMessage::AckMessage),
+            MessageType::P2p(_) => PeerMessageResponse::from_bytes(&bytes)
+                .map_err(|e| e.to_string())
+                .map(|n| TezosMessage::PeerMessage(n.message().clone())),
         };
         let (message, error) = match message {
             Ok(m) => (Some(m), None),

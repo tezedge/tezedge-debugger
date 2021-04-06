@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::{sync::Arc, collections::HashMap};
 use anyhow::Result;
 use warp::{
@@ -155,26 +158,24 @@ fn p2p<Db>(
 where
     Db: DatabaseFetch + Sync + Send + 'static,
 {
-    warp::path!("v2" / "p2p")
-        .and(warp::query::query())
-        .map(move |filter: MessagesFilter| -> reply::WithStatus<Json> {
+    warp::path!("v2" / "p2p").and(warp::query::query()).map(
+        move |filter: MessagesFilter| -> reply::WithStatus<Json> {
             let node_name = filter.node_name.unwrap_or(9732);
             match dbs.get(&node_name) {
-                Some(db) => {
-                    match db.fetch_messages(&filter) {
-                        Ok(messages) => reply::with_status(reply::json(&messages), StatusCode::OK),
-                        Err(err) => {
-                            let r = &format!("database error: {}", err);
-                            reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
-                        },
-                    }
+                Some(db) => match db.fetch_messages(&filter) {
+                    Ok(messages) => reply::with_status(reply::json(&messages), StatusCode::OK),
+                    Err(err) => {
+                        let r = &format!("database error: {}", err);
+                        reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+                    },
                 },
                 None => {
                     let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
                     reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
                 },
             }
-        })
+        },
+    )
 }
 
 fn p2p_details<Db>(
@@ -183,25 +184,22 @@ fn p2p_details<Db>(
 where
     Db: DatabaseFetch + Sync + Send + 'static,
 {
-    warp::path!("v2" / "p2p" / u64)
-        .map(move |id: u64| -> reply::WithStatus<Json> {
-            let node_name = 9732;
-            match dbs.get(&node_name) {
-                Some(db) => {
-                    match db.fetch_message(id) {
-                        Ok(message) => reply::with_status(reply::json(&message), StatusCode::OK),
-                        Err(err) => {
-                            let r = &format!("database error: {}", err);
-                            reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
-                        },
-                    }
+    warp::path!("v2" / "p2p" / u64).map(move |id: u64| -> reply::WithStatus<Json> {
+        let node_name = 9732;
+        match dbs.get(&node_name) {
+            Some(db) => match db.fetch_message(id) {
+                Ok(message) => reply::with_status(reply::json(&message), StatusCode::OK),
+                Err(err) => {
+                    let r = &format!("database error: {}", err);
+                    reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
                 },
-                None => {
-                    let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
-                    reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
-                },
-            }
-        })
+            },
+            None => {
+                let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
+                reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
+            },
+        }
+    })
 }
 
 fn log_old<Db>(
@@ -214,14 +212,12 @@ where
         move |filter: LogsFilter| -> reply::WithStatus<Json> {
             let node_name = filter.node_name.unwrap_or(9732);
             match dbs.get(&node_name) {
-                Some(db) => {
-                    match db.fetch_log(&filter) {
-                        Ok(v) => reply::with_status(reply::json(&v), StatusCode::OK),
-                        Err(err) => {
-                            let r = &format!("database error: {}", err);
-                            reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
-                        },
-                    }
+                Some(db) => match db.fetch_log(&filter) {
+                    Ok(v) => reply::with_status(reply::json(&v), StatusCode::OK),
+                    Err(err) => {
+                        let r = &format!("database error: {}", err);
+                        reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+                    },
                 },
                 None => {
                     let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
@@ -241,7 +237,11 @@ where
     use warp::reply::with;
 
     warp::get()
-        .and(p2p(dbs.clone()).or(p2p_details(dbs.clone())).or(log_old(dbs)))
+        .and(
+            p2p(dbs.clone())
+                .or(p2p_details(dbs.clone()))
+                .or(log_old(dbs)),
+        )
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
 }

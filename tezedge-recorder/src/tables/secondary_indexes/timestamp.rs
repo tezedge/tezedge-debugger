@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::convert::TryFrom;
 use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError};
 
@@ -14,7 +17,7 @@ impl Encoder for Item {
         v.extend_from_slice(&self.timestamp.to_be_bytes());
         v.extend_from_slice(&self.index.to_be_bytes());
 
-        Ok(v.into())
+        Ok(v)
     }
 }
 

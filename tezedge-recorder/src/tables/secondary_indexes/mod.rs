@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use super::{
     common::{MessageType, Sender, Initiator},
     node_log::LogLevel,

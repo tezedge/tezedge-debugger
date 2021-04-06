@@ -44,30 +44,32 @@ where
 
     pub fn handle_data(&mut self, payload: &[u8], net: bool, incoming: bool) {
         let state = match self.state.take().unwrap() {
-            ConnectionState::Handshake(h) => match h.handle_data(payload, net, incoming, &mut self.item) {
-                Either::Left(h) => ConnectionState::Handshake(h),
-                Either::Right(HandshakeOutput {
-                    local,
-                    l_chunk,
-                    remote,
-                    r_chunk,
-                }) => {
-                    let mut local_mp = MessageParser::new(self.db.clone());
-                    let mut remote_mp = MessageParser::new(self.db.clone());
-                    self.db.store_connection(self.item.clone());
-                    if let Some(chunk) = l_chunk {
-                        local_mp.handle_chunk(chunk, &self.item);
-                    }
-                    if let Some(chunk) = r_chunk {
-                        remote_mp.handle_chunk(chunk, &self.item);
-                    }
-                    ConnectionState::HandshakeDone {
+            ConnectionState::Handshake(h) => {
+                match h.handle_data(payload, net, incoming, &mut self.item) {
+                    Either::Left(h) => ConnectionState::Handshake(h),
+                    Either::Right(HandshakeOutput {
                         local,
-                        local_mp,
+                        l_chunk,
                         remote,
-                        remote_mp,
-                    }
-                },
+                        r_chunk,
+                    }) => {
+                        let mut local_mp = MessageParser::new(self.db.clone());
+                        let mut remote_mp = MessageParser::new(self.db.clone());
+                        self.db.store_connection(self.item.clone());
+                        if let Some(chunk) = l_chunk {
+                            local_mp.handle_chunk(chunk, &self.item);
+                        }
+                        if let Some(chunk) = r_chunk {
+                            remote_mp.handle_chunk(chunk, &self.item);
+                        }
+                        ConnectionState::HandshakeDone {
+                            local,
+                            local_mp,
+                            remote,
+                            remote_mp,
+                        }
+                    },
+                }
             },
             ConnectionState::HandshakeDone {
                 local,

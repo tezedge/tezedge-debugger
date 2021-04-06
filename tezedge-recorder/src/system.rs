@@ -94,15 +94,13 @@ impl NodeServer {
             None
         };
 
-        Ok(
-            (
-                NodeServer {
-                    _server: server,
-                    _log_client: log_client,
-                },
-                db,
-            )
-        )
+        Ok((
+            NodeServer {
+                _server: server,
+                _log_client: log_client,
+            },
+            db,
+        ))
     }
 }
 
@@ -191,7 +189,12 @@ impl<Db> System<Db> {
             },
             // ignore syslog
             p => {
-                if self.config.nodes.iter().any(|n| n.syslog_port.unwrap_or(0) == p) {
+                if self
+                    .config
+                    .nodes
+                    .iter()
+                    .any(|n| n.syslog_port.unwrap_or(0) == p)
+                {
                     return true;
                 }
             },
@@ -231,7 +234,7 @@ where
         if let Some(port) = self.config.rpc_port {
             let addr = ([0, 0, 0, 0], port);
             let s = warp::serve(server::routes_old(self.node_dbs.clone())).run(addr);
-            self._old_server = Some(self.tokio_rt.spawn(s));    
+            self._old_server = Some(self.tokio_rt.spawn(s));
         }
     }
 

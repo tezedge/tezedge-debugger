@@ -61,13 +61,13 @@ impl TryFrom<u8> for LogLevel {
 
     fn try_from(value: u8) -> Result<Self, ParseLogLevelError> {
         match value {
-            x if x == Self::Trace as u8 => { Ok(Self::Trace) }
-            x if x == Self::Debug as u8 => { Ok(Self::Debug) }
-            x if x == Self::Info as u8 => { Ok(Self::Info) }
-            x if x == Self::Notice as u8 => { Ok(Self::Notice) }
-            x if x == Self::Warning as u8 => { Ok(Self::Warning) }
-            x if x == Self::Error as u8 => { Ok(Self::Error) }
-            x if x == Self::Fatal as u8 => { Ok(Self::Fatal) }
+            x if x == Self::Trace as u8 => Ok(Self::Trace),
+            x if x == Self::Debug as u8 => Ok(Self::Debug),
+            x if x == Self::Info as u8 => Ok(Self::Info),
+            x if x == Self::Notice as u8 => Ok(Self::Notice),
+            x if x == Self::Warning as u8 => Ok(Self::Warning),
+            x if x == Self::Error as u8 => Ok(Self::Error),
+            x if x == Self::Fatal as u8 => Ok(Self::Fatal),
             x => Err(ParseLogLevelError::InvalidValue(x)),
         }
     }

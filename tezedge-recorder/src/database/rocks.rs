@@ -1,7 +1,11 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, path::Path, sync::atomic::{Ordering, AtomicU64}};
+use std::{
+    net::SocketAddr,
+    path::Path,
+    sync::atomic::{Ordering, AtomicU64},
+};
 use rocksdb::{Cache, DB, ReadOptions};
 use storage::{
     Direction, IteratorMode,
@@ -131,11 +135,11 @@ impl Database for Db {
             index,
         };
         let addr_index = message_addr::Item {
-            addr: item.remote_addr.clone(),
+            addr: item.remote_addr,
             index,
         };
         let timestamp_index = timestamp::Item {
-            timestamp: item.timestamp.clone(),
+            timestamp: item.timestamp,
             index,
         };
         let inner = || -> Result<(), DbError> {
@@ -144,9 +148,9 @@ impl Database for Db {
                 .put(&sender_index, &())?;
             self.as_kv::<message_initiator::Schema>()
                 .put(&initiator_index, &())?;
-            self.as_kv::<message_addr::Schema>()
-                .put(&addr_index, &())?;
-            self.as_kv::<timestamp::MessageSchema>().put(&timestamp_index, &())?;
+            self.as_kv::<message_addr::Schema>().put(&addr_index, &())?;
+            self.as_kv::<timestamp::MessageSchema>()
+                .put(&timestamp_index, &())?;
             self.as_kv::<message::Schema>().put(&index, &item)?;
             Ok(())
         };
@@ -162,12 +166,13 @@ impl Database for Db {
             index,
         };
         let timestamp_index = timestamp::Item {
-            timestamp: (item.timestamp.clone() / 1_000_000_000) as u64,
+            timestamp: (item.timestamp / 1_000_000_000) as u64,
             index,
         };
         let inner = || -> Result<(), DbError> {
             self.as_kv::<log_level::Schema>().put(&lv_index, &())?;
-            self.as_kv::<timestamp::LogSchema>().put(&timestamp_index, &())?;
+            self.as_kv::<timestamp::LogSchema>()
+                .put(&timestamp_index, &())?;
             self.as_kv::<node_log::Schema>().put(&index, &item)?;
             Ok(())
         };
@@ -291,17 +296,19 @@ impl DatabaseFetch for Db {
                 .filter_map(|(k, v)| match (k, v) {
                     (Ok(key), Ok(value)) => {
                         let preview = match details(&value, key, self.as_kv()) {
-                            Ok(details) => {
-                                match details.json_string() {
-                                    Ok(p) => p.map(|mut s| {
-                                        s.truncate(100);
-                                        s
-                                    }),
-                                    Err(error) => {
-                                        log::error!("Failed to deserialize message {:?}, error: {}", value, error);
-                                        None
-                                    }
-                                }
+                            Ok(details) => match details.json_string() {
+                                Ok(p) => p.map(|mut s| {
+                                    s.truncate(100);
+                                    s
+                                }),
+                                Err(error) => {
+                                    log::error!(
+                                        "Failed to deserialize message {:?}, error: {}",
+                                        value,
+                                        error
+                                    );
+                                    None
+                                },
                             },
                             Err(error) => {
                                 log::error!("Failed to chunks for {:?}, error: {}", value, error);
@@ -402,12 +409,13 @@ impl DatabaseFetch for Db {
                 iters.push(Box::new(it));
             }
             if let Some(addr) = &filter.remote_addr {
-                let addr = addr.parse::<SocketAddr>()
+                let addr = addr
+                    .parse::<SocketAddr>()
                     .map_err(|e| DBError::SchemaError {
                         error: SchemaError::DecodeValidationError(e.to_string()),
                     })?;
                 let key = message_addr::Item {
-                    addr: addr.clone(),
+                    addr,
                     index: cursor,
                 };
                 let key = key
@@ -433,16 +441,17 @@ impl DatabaseFetch for Db {
                     timestamp: u64::MAX,
                     index: u64::MAX,
                 };
-                let mode = if let Some(end) = filter.to.clone() {
+                let mode = if let Some(end) = filter.to {
                     timestamp.timestamp = end;
                     IteratorMode::From(&timestamp, Direction::Reverse)
                 } else {
                     IteratorMode::End
                 };
-                let it = self.as_kv::<timestamp::MessageSchema>()
+                let it = self
+                    .as_kv::<timestamp::MessageSchema>()
                     .iterator(mode)?
                     .filter_map(|(k, _)| k.ok());
-                if let Some(begin) = filter.from.clone() {
+                if let Some(begin) = filter.from {
                     let it = it
                         .take_while(move |k| k.timestamp >= begin)
                         .map(|k| k.index);
@@ -458,20 +467,26 @@ impl DatabaseFetch for Db {
                     move |index| match self.as_kv::<message::Schema>().get(&index) {
                         Ok(Some(value)) => {
                             let preview = match details(&value, index, self.as_kv()) {
-                                Ok(details) => {
-                                    match details.json_string() {
-                                        Ok(p) => p.map(|mut s| {
-                                            s.truncate(100);
-                                            s
-                                        }),
-                                        Err(error) => {
-                                            log::error!("Failed to deserialize message {:?}, error: {}", value, error);
-                                            None
-                                        }
-                                    }
+                                Ok(details) => match details.json_string() {
+                                    Ok(p) => p.map(|mut s| {
+                                        s.truncate(100);
+                                        s
+                                    }),
+                                    Err(error) => {
+                                        log::error!(
+                                            "Failed to deserialize message {:?}, error: {}",
+                                            value,
+                                            error
+                                        );
+                                        None
+                                    },
                                 },
                                 Err(error) => {
-                                    log::error!("Failed to chunks for {:?}, error: {}", value, error);
+                                    log::error!(
+                                        "Failed to chunks for {:?}, error: {}",
+                                        value,
+                                        error
+                                    );
                                     None
                                 },
                             };
@@ -564,16 +579,17 @@ impl DatabaseFetch for Db {
                     timestamp: u64::MAX,
                     index: u64::MAX,
                 };
-                let mode = if let Some(end) = filter.to.clone() {
+                let mode = if let Some(end) = filter.to {
                     timestamp.timestamp = end;
                     IteratorMode::From(&timestamp, Direction::Reverse)
                 } else {
                     IteratorMode::End
                 };
-                let it = self.as_kv::<timestamp::LogSchema>()
+                let it = self
+                    .as_kv::<timestamp::LogSchema>()
                     .iterator(mode)?
                     .filter_map(|(k, _)| k.ok());
-                if let Some(begin) = filter.from.clone() {
+                if let Some(begin) = filter.from {
                     let it = it
                         .take_while(move |k| k.timestamp >= begin)
                         .map(|k| k.index);
