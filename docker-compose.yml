@@ -19,8 +19,9 @@ services:
       - "./target:/tmp/report:rw"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
     ports:
-      - "17732:17732"      # debugger RPC port for tezedge node
-      - "17733:17733"      # debugger RPC port for tezos node
+      - "17732:17732"      # debugger RPC port compatibility server
+      - "17742:17742"      # debugger RPC port for tezos node
+      - "17743:17743"      # debugger RPC port for tezos node
       - "10000:10000/udp"  # debugger syslog port for tezedge node
       - "10001:10001/udp"  # debugger syslog port for tezos node
 
