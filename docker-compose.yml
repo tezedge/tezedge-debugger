@@ -6,9 +6,9 @@ services:
     image: simplestakingcom/tezedge-debugger:latest
     build:
       context: .
-      dockerfile: dev-dir/Dockerfile
+      dockerfile: Dockerfile
     privileged: true
-    init: true
+    #init: true
     environment:
       - RUST_BACKTRACE=1
     volumes:
@@ -27,7 +27,7 @@ services:
   tezedge-node:
     image: simplestakingcom/tezedge:latest
     command: ["--network", "mainnet", "--actions-store-backend", "rocksdb", "file"]
-    init: true
+    #init: true
     logging:
       # Produce syslogs instead of terminal logs
       driver: "syslog"
@@ -66,13 +66,12 @@ services:
   explorer:
     image: simplestakingcom/tezedge-explorer:latest
     environment:
-      - SANDBOX=https://carthage.tezedge.com:3030
-      - API=[{"id":"rust","name":"rust","http":"http://localhost:18732","debugger":"http://localhost:17732","ws":"ws://localhost:4927"},{"id":"ocaml","name":"ocaml","http":"http://localhost:18733","debugger":"http://localhost:17733","ws":false}]
-    depends_on:
-      - tezedge-node
-      - tezos-node
+      - SANDBOX=http://debug.dev.tezedge.com:3030
+      - DEBUGGER=http://debug.dev.tezedge.com:17732
+      # need a better way to provide such information
+      - API=[{"id":"rust","name":"rust.debug.dev.tezedge.com","http":"http://debug.dev.tezedge.com:18732","ws":"ws://debug.dev.tezedge.com:4927","monitoring":"http://debug.dev.tezedge.com:38732/resources/tezedge","p2p_port":9732,"features":["MONITORING","RESOURCES","MEMPOOL_ACTION","STORAGE_BLOCK","NETWORK_ACTION","LOGS_ACTION"]},{"id":"ocaml","name":"ocaml.debug.dev.tezedge.com","http":"http://debug.dev.tezedge.com:18733","ws":false,"monitoring":"http://debug.dev.tezedge.com:38732/resources/ocaml","p2p_port":9733,"features":["MONITORING","RESOURCES","MEMPOOL_ACTION","NETWORK_ACTION","LOGS_ACTION"]}]
     ports:
-      - "8080:80"
+      - "80:80"
 
 volumes:
   tezedge-shared-data:

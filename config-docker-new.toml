@@ -1,4 +1,5 @@
 bpf_sniffer_path = "/tmp/bpf-sniffer.sock"
+# old rpc server (optional)
 rpc_port = 17732
 
 [[nodes]]
@@ -12,9 +13,12 @@ p2p_port = 9732
 # debugger will run syslog server on this port
 # this is an inner port inside docker's virtual network of the debugger's container
 syslog_port = 10000
+# new server (optional)
+rpc_port = 17742
 
 [[nodes]]
 db_path = "/tmp/volume/tezos_debugger"
 identity_path = "/tmp/volume/tezos/data/identity.json"
 p2p_port = 9733
 syslog_port = 10001
+rpc_port = 17743
