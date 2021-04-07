@@ -5,6 +5,6 @@ use super::{system::Identity, database::Database, tables, common};
 
 mod chunk_parser;
 mod message_parser;
-mod processor;
+mod connection;
 
-pub use self::processor::Connection;
+pub use self::connection::Connection;

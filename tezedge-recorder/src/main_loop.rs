@@ -13,7 +13,7 @@ use anyhow::Result;
 use bpf_common::{BpfModuleClient, SnifferEvent, Command, EventId, SocketId};
 
 use super::{
-    connection::Connection,
+    processor::Connection,
     database::{Database, DatabaseNew, DatabaseFetch},
     system::System,
 };

@@ -7,7 +7,7 @@ mod common;
 pub mod tables;
 mod system;
 mod log_client;
-mod connection;
+mod processor;
 pub mod main_loop;
 pub mod database;
 mod server;

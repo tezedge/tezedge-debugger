@@ -36,7 +36,7 @@ impl Buffer {
         use std::convert::TryFrom;
 
         if self.buffer.len() >= offset + 2 {
-            let b = <[u8; 2]>::try_from(&self.buffer[offset..2]).unwrap();
+            let b = <[u8; 2]>::try_from(&self.buffer[offset..(offset + 2)]).unwrap();
             Some(u16::from_be_bytes(b) as usize + 2)
         } else {
             None
