@@ -620,7 +620,7 @@ impl DatabaseFetch for Db {
     }
 }
 
-pub fn details(
+fn details(
     message_item: &message::Item,
     id: u64,
     db: &impl KeyValueStoreWithSchema<chunk::Schema>,

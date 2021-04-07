@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 pub mod rocks;
+pub mod mock;
 
 mod sorted_intersect;
 

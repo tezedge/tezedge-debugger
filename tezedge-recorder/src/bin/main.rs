@@ -10,7 +10,7 @@ fn main() -> anyhow::Result<()> {
         Arc,
         atomic::{Ordering, AtomicBool},
     };
-    use tezedge_recorder::{System, database::rocks, main_loop};
+    use tezedge_recorder::{System, database::rocks::Db, main_loop};
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -22,7 +22,7 @@ fn main() -> anyhow::Result<()> {
         ctrlc::set_handler(move || running.store(false, Ordering::Relaxed))?;
     }
 
-    let mut system = System::<rocks::Db>::load_config()?;
+    let mut system = System::<Db>::load_config()?;
     system.run_dbs(running.clone());
     main_loop::run(system, running)
 }
