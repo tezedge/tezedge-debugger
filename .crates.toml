@@ -1,3 +1,0 @@
-[v1]
-"bpf-sniffer 0.1.0 (path+file:///var/home/vladislav/workspace/simplestaking/tezedge-debugger/bpf-sniffer)" = ["bpf-sniffer"]
-"tezedge_debugger 0.1.0 (path+file:///var/home/vladislav/workspace/simplestaking/tezedge-debugger)" = ["tezedge-debugger"]

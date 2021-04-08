@@ -4,9 +4,8 @@ RUN apt install -y g++ git
 
 COPY . .
 RUN cargo +nightly-2020-12-31 build -p bpf-sniffer --release
-RUN rustup update nightly
-# TODO: freeze the version
-RUN cargo +nightly build -p tezedge-recorder --release
+RUN rustup update nightly-2021-03-23
+RUN cargo +nightly-2021-03-23 build -p tezedge-recorder --release
 
 FROM ubuntu:20.10
 
