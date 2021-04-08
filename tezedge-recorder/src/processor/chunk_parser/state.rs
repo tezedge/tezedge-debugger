@@ -140,7 +140,7 @@ where
         let (counter, bytes) = self.inner.buffer.next().unwrap();
         let remaining = self.inner.buffer.remaining();
         if remaining > 0 {
-            log::warn!(
+            log::info!(
                 "have {} bytes after connection message received, but before got key",
                 remaining,
             );
@@ -301,7 +301,7 @@ where
             Ok(plain) => Some(self.inner.chunk(counter, bytes, plain)),
             Err(_) => {
                 self.error = Some(counter);
-                self.inner.cleanup()
+                None
             },
         }
     }
@@ -327,9 +327,20 @@ impl<S> CannotDecrypt<S>
 where
     S: Bit,
 {
-    pub fn handle_data(&mut self, payload: &[u8]) -> chunk::Item {
+    pub fn handle_data(&mut self, payload: &[u8]) {
         debug_assert!(!payload.is_empty());
         self.inner.handle_data(payload);
-        self.inner.cleanup().unwrap()
+    }
+}
+
+impl<'a, S> Iterator for &'a mut CannotDecrypt<S>
+where
+    S: Bit,
+{
+    type Item = chunk::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (counter, bytes) = self.inner.buffer.next()?;
+        Some(self.inner.chunk(counter, bytes, Vec::new()))
     }
 }

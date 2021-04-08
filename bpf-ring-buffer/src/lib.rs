@@ -344,16 +344,21 @@ impl RingBufferSync {
     where
         D: RingBufferData,
     {
-        match self.read() {
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                self.wait(running);
-                if running.load(Ordering::Relaxed) {
-                    self.read_blocking(running)
-                } else {
-                    Ok(SmallVec::new())
-                }
-            },
-            x => x,
+        let mut tries = 0;
+        loop {
+            if tries > 10 {
+                log::warn!("cannot read ring buffer: {} attempts", tries);
+            }
+            match self.read() {
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    self.wait(running);
+                    if !running.load(Ordering::Relaxed) {
+                        break Ok(SmallVec::new());
+                    }
+                },
+                x => break x,
+            }
+            tries += 1;
         }
     }
 }

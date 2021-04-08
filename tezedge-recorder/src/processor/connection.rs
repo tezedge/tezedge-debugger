@@ -99,7 +99,7 @@ where
 
     pub fn warn_fd_changed(&self) {
         if !matches!(&self.state, &Some(ConnectionState::Handshake(ref h)) if h.is_empty()) {
-            log::warn!(
+            log::info!(
                 "fd of: {} has took for other file, the connection is closed",
                 self.item.remote_addr
             );

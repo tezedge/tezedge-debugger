@@ -212,9 +212,13 @@ where
                 }
                 match temp_state.over() {
                     Ok(state) => HandshakeDone::HaveKey(state),
-                    Err((state, position)) => {
+                    Err((mut state, position)) => {
                         cn.mark_cannot_decrypt::<S>(position);
                         handler.update_cn(cn);
+                        for mut chunk in &mut state {
+                            chunk.net(net);
+                            handler.handle_chunk(chunk, cn);        
+                        }
                         HandshakeDone::CannotDecrypt(state)
                     },
                 }
@@ -226,10 +230,12 @@ where
                 HandshakeDone::HaveNotKey(state)
             },
             HandshakeDone::CannotDecrypt(mut state) => {
-                let mut chunk = state.handle_data(payload);
-                chunk.net(net);
-                handler.handle_chunk(chunk, cn);
-                HandshakeDone::CannotDecrypt(state)
+                state.handle_data(payload);
+                for mut chunk in &mut state {
+                    chunk.net(net);
+                    handler.handle_chunk(chunk, cn);        
+                }
+                HandshakeDone::CannotDecrypt(state)    
             },
         }
     }

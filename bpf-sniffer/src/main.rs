@@ -1,6 +1,8 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+#![forbid(unsafe_code)]
+
 use std::{
     fs,
     io::{BufReader, BufRead},
