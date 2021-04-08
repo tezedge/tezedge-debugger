@@ -197,7 +197,7 @@ fn kretprobe_accept(regs: Registers) {
     App.on_ret(&regs)
 }
 
-#[kprobe("close_fd")]
+#[kprobe("__close_fd")]
 fn kprobe_close(regs: Registers) {
     App.on_close(&regs)
 }
