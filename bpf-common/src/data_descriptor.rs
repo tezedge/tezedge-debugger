@@ -20,7 +20,7 @@ pub struct EventId {
 impl EventId {
     pub fn new(socket_id: SocketId, _ts_start: u64, ts_finish: u64) -> Self {
         EventId {
-            socket_id: socket_id,
+            socket_id,
             ts: ts_finish,
         }
     }
@@ -80,8 +80,9 @@ impl TryFrom<&[u8]> for DataDescriptor {
 #[derive(Debug)]
 pub enum DataTag {
     Write,
-
     Read,
+    Send,
+    Recv,
 
     Connect,
     Bind,
@@ -89,6 +90,7 @@ pub enum DataTag {
     Accept,
     Close,
 
+    GetFd,
     Debug,
 }
 
@@ -99,6 +101,10 @@ impl DataTag {
             Some(Self::Write)
         } else if v == Self::Read as u32 {
             Some(Self::Read)
+        } else if v == Self::Send as u32 {
+            Some(Self::Send)
+        } else if v == Self::Recv as u32 {
+            Some(Self::Recv)
         } else if v == Self::Connect as u32 {
             Some(Self::Connect)
         } else if v == Self::Bind as u32 {
@@ -109,6 +115,8 @@ impl DataTag {
             Some(Self::Accept)
         } else if v == Self::Close as u32 {
             Some(Self::Close)
+        } else if v == Self::GetFd as u32 {
+            Some(Self::GetFd)
         } else if v == Self::Debug as u32 {
             Some(Self::Debug)
         } else {

@@ -4,8 +4,7 @@
 use std::{
     convert::TryFrom,
     io::{self, Write},
-    fmt,
-    mem,
+    fmt, mem,
     net::{SocketAddr, IpAddr},
     os::unix::net::UnixStream,
     path::Path,
@@ -16,21 +15,44 @@ use passfd::FdPassingExt;
 use super::{EventId, DataDescriptor, DataTag};
 
 pub enum SnifferEvent {
-    Write { id: EventId, data: Vec<u8> },
-    Read { id: EventId, data: Vec<u8> },
-    Connect { id: EventId, address: SocketAddr },
-    Bind { id: EventId, address: SocketAddr },
-    Listen { id: EventId },
-    Accept { id: EventId, listen_on_fd: u32, address: SocketAddr },
-    Close { id: EventId },
-    Debug { id: EventId, msg: String },
+    Data {
+        id: EventId,
+        data: Vec<u8>,
+        net: bool,
+        incoming: bool,
+    },
+    Connect {
+        id: EventId,
+        address: SocketAddr,
+    },
+    Bind {
+        id: EventId,
+        address: SocketAddr,
+    },
+    Listen {
+        id: EventId,
+    },
+    Accept {
+        id: EventId,
+        listen_on_fd: u32,
+        address: SocketAddr,
+    },
+    Close {
+        id: EventId,
+    },
+    GetFd {
+        id: EventId,
+    },
+    Debug {
+        id: EventId,
+        msg: String,
+    },
 }
 
 #[derive(Debug)]
 pub enum SnifferError {
     SliceTooShort(usize),
-    Write { id: EventId, code: SnifferErrorCode },
-    Read { id: EventId, code: SnifferErrorCode },
+    Data { id: EventId, code: SnifferErrorCode, net: bool, incoming: bool },
     Debug { id: EventId, code: SnifferErrorCode },
 }
 
@@ -46,16 +68,12 @@ impl SnifferError {
             e if actual_length < (e as usize) => {
                 Err(SnifferErrorCode::SliceTooShort(actual_length, e as usize))
             },
-            _ => return Ok((id, code as usize)),
+            _ => Ok((id, code as usize)),
         }
     }
 
-    fn write(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
-        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Write { id, code })
-    }
-
-    fn read(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
-        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Read { id, code })
+    fn data(id: EventId, code: i32, actual_length: usize, net: bool, incoming: bool) -> Result<(EventId, usize), Self> {
+        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Data { id, code, net, incoming })
     }
 
     fn debug(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
@@ -95,18 +113,42 @@ impl RingBufferData for SnifferEvent {
         let data = &value[mem::size_of::<DataDescriptor>()..];
         match descriptor.tag {
             DataTag::Write => {
-                SnifferError::write(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
-                    SnifferEvent::Write {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), false, false).map(|(id, size)| {
+                    SnifferEvent::Data {
                         id,
                         data: data[..size].to_vec(),
+                        net: false,
+                        incoming: false,
                     }
                 })
             },
             DataTag::Read => {
-                SnifferError::read(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
-                    SnifferEvent::Read {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), false, true).map(|(id, size)| {
+                    SnifferEvent::Data {
                         id,
                         data: data[..size].to_vec(),
+                        net: false,
+                        incoming: true,
+                    }
+                })
+            },
+            DataTag::Send => {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), true, false).map(|(id, size)| {
+                    SnifferEvent::Data {
+                        id,
+                        data: data[..size].to_vec(),
+                        net: true,
+                        incoming: false,
+                    }
+                })
+            },
+            DataTag::Recv => {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), true, true).map(|(id, size)| {
+                    SnifferEvent::Data {
+                        id,
+                        data: data[..size].to_vec(),
+                        net: true,
+                        incoming: true,
                     }
                 })
             },
@@ -125,14 +167,13 @@ impl RingBufferData for SnifferEvent {
                 })
             },
             DataTag::Listen => Ok(SnifferEvent::Listen { id: descriptor.id }),
-            DataTag::Accept => {
-                Ok(SnifferEvent::Accept {
-                    id: descriptor.id,
-                    listen_on_fd: u32::from_le_bytes(TryFrom::try_from(&data[0..4]).unwrap()),
-                    address: parse_socket_address(&data[4..]).unwrap(),
-                })
-            },
+            DataTag::Accept => Ok(SnifferEvent::Accept {
+                id: descriptor.id,
+                listen_on_fd: u32::from_le_bytes(TryFrom::try_from(&data[0..4]).unwrap()),
+                address: parse_socket_address(&data[4..]).unwrap(),
+            }),
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
+            DataTag::GetFd => Ok(SnifferEvent::GetFd { id: descriptor.id }),
             DataTag::Debug => {
                 SnifferError::debug(descriptor.id, descriptor.size, data.len()).map(|(id, size)| {
                     let msg = hex::encode(&data[..size]);
@@ -144,13 +185,8 @@ impl RingBufferData for SnifferEvent {
 }
 
 pub enum Command {
-    WatchPort {
-        port: u16,
-    },
-    IgnoreConnection {
-        pid: u32,
-        fd: u32,
-    },
+    WatchPort { port: u16 },
+    IgnoreConnection { pid: u32, fd: u32 },
     FetchCounter,
 }
 
@@ -161,26 +197,27 @@ impl FromStr for Command {
         let mut words = s.split(' ');
         match words.next() {
             Some("watch_port") => {
-                let port = words.next()
-                    .ok_or("bad port".to_string())?
+                let port = words
+                    .next()
+                    .ok_or_else(|| "bad port".to_string())?
                     .parse()
                     .map_err(|e| format!("failed to parse port: {}", e))?;
                 Ok(Command::WatchPort { port })
             },
             Some("ignore_connection") => {
-                let pid = words.next()
-                    .ok_or("bad pid".to_string())?
+                let pid = words
+                    .next()
+                    .ok_or_else(|| "bad pid".to_string())?
                     .parse()
                     .map_err(|e| format!("failed to parse pid: {}", e))?;
-                let fd = words.next()
-                    .ok_or("bad fd".to_string())?
+                let fd = words
+                    .next()
+                    .ok_or_else(|| "bad fd".to_string())?
                     .parse()
                     .map_err(|e| format!("failed to parse fd: {}", e))?;
                 Ok(Command::IgnoreConnection { pid, fd })
             },
-            Some("fetch_counter") => {
-                Ok(Command::FetchCounter)
-            },
+            Some("fetch_counter") => Ok(Command::FetchCounter),
             _ => Err("unexpected command".to_string()),
         }
     }
@@ -189,9 +226,9 @@ impl FromStr for Command {
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            &Command::WatchPort { port } => write!(f, "watch_port {}", port),
-            &Command::IgnoreConnection { pid, fd } => write!(f, "ignore_connection {} {}", pid, fd),
-            &Command::FetchCounter => write!(f, "fetch_counter"),
+            Command::WatchPort { port } => write!(f, "watch_port {}", port),
+            Command::IgnoreConnection { pid, fd } => write!(f, "ignore_connection {} {}", pid, fd),
+            Command::FetchCounter => write!(f, "fetch_counter"),
         }
     }
 }

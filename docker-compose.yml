@@ -6,27 +6,28 @@ services:
     image: simplestakingcom/tezedge-debugger:latest
     build:
       context: .
-      dockerfile: dev-dir/Dockerfile
+      dockerfile: Dockerfile
     privileged: true
-    init: true
+    #init: true
     environment:
       - RUST_BACKTRACE=1
     volumes:
       - "tezedge-shared-data:/tmp/volume/tezedge:ro"
       - "tezos-shared-data:/tmp/volume/tezos:ro"
-      # - "./target/debugger_db:/tmp/volume/debugger_db:rw"
       - "./config-docker.toml:/home/appuser/config.toml:ro"
       - "./target:/tmp/report:rw"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
     ports:
-      - "17732:17732"      # debugger RPC port
+      - "17732:17732"      # debugger RPC port compatibility server
+      - "17742:17742"      # debugger RPC port for tezos node
+      - "17743:17743"      # debugger RPC port for tezos node
       - "10000:10000/udp"  # debugger syslog port for tezedge node
       - "10001:10001/udp"  # debugger syslog port for tezos node
 
   tezedge-node:
     image: simplestakingcom/tezedge:latest
     command: ["--network", "mainnet", "--actions-store-backend", "rocksdb", "file"]
-    init: true
+    #init: true
     logging:
       # Produce syslogs instead of terminal logs
       driver: "syslog"
@@ -65,13 +66,12 @@ services:
   explorer:
     image: simplestakingcom/tezedge-explorer:latest
     environment:
-      - SANDBOX=https://carthage.tezedge.com:3030
-      - API=[{"id":"rust","name":"rust","http":"http://localhost:18732","debugger":"http://localhost:17732","ws":"ws://localhost:4927"},{"id":"ocaml","name":"ocaml","http":"http://localhost:18733","debugger":"http://localhost:17733","ws":false}]
-    depends_on:
-      - tezedge-node
-      - tezos-node
+      - SANDBOX=http://localhost:3030
+      - DEBUGGER=http://localhost:17732
+      # need a better way to provide such information
+      - API=[{"id":"rust","name":"rust.localhost","http":"http://localhost:18732","ws":"ws://localhost:4927","monitoring":"http://localhost:38732/resources/tezedge","p2p_port":9732,"features":["MONITORING","RESOURCES","MEMPOOL_ACTION","STORAGE_BLOCK","NETWORK_ACTION","LOGS_ACTION"]}]
     ports:
-      - "8080:80"
+      - "80:80"
 
 volumes:
   tezedge-shared-data:

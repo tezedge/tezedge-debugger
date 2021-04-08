@@ -30,8 +30,9 @@ pub trait AppProbes {
     fn on_listen(&mut self, regs: &Registers);
     fn on_connect(&mut self, regs: &Registers, incoming: bool);
     fn on_close(&mut self, regs: &Registers);
-    fn on_data(&mut self, regs: &Registers, incoming: bool);
+    fn on_data(&mut self, regs: &Registers, incoming: bool, net: bool);
 
+    fn on_ret_get_fd(&mut self, regs: &Registers);
     fn on_ret(&mut self, regs: &Registers);
 }
 
@@ -112,7 +113,7 @@ impl<App: AppIo> AppProbes for App {
         }
     }
 
-    fn on_data(&mut self, regs: &Registers, incoming: bool) {
+    fn on_data(&mut self, regs: &Registers, incoming: bool, net: bool) {
         let fd = regs.parm1() as u32;
         let data_ptr = regs.parm2() as usize;
 
@@ -126,12 +127,25 @@ impl<App: AppIo> AppProbes for App {
             return;
         }
 
-        let context = if incoming {
-            SyscallContext::Read { fd, data_ptr }
-        } else {
-            SyscallContext::Write { fd, data_ptr }
+        let context = match (net, incoming) {
+            (false, false) => SyscallContext::Write { fd, data_ptr },
+            (false, true) => SyscallContext::Read { fd, data_ptr },
+            (true, false) => SyscallContext::Send { fd, data_ptr },
+            (true, true) => SyscallContext::Recv { fd, data_ptr },
         };
         self.push_context(thread_id, pid, ts, context);
+    }
+
+    fn on_ret_get_fd(&mut self, regs: &Registers) {
+        let pid = (helpers::bpf_get_current_pid_tgid() >> 32) as u32;
+        if !self.is_process(pid) {
+            return;
+        }
+
+        let fd = regs.rc() as u32;
+        let ts = helpers::bpf_ktime_get_ns();
+        let id = EventId::new(SocketId { pid, fd }, ts, ts);
+        send::sized::<typenum::U0, typenum::B0>(id, DataTag::GetFd, &[], self.rb());
     }
 
     fn on_ret(&mut self, regs: &Registers) {
@@ -241,21 +255,39 @@ impl<App: AppIo> AppProbes for App {
             },
             SyscallContext::Read { fd, data_ptr } => {
                 let read = regs.rc();
+                let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                 if regs.is_syscall_success() && read as i64 > 0 {
                     let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
-                    let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                     send::dyn_sized::<typenum::B0>(id, DataTag::Read, data, app.rb());
-                    app.inc_counter();
                 }
+                app.inc_counter();
             },
             SyscallContext::Write { fd, data_ptr } => {
                 let written = regs.rc();
+                let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                 if regs.is_syscall_success() && written as i64 > 0 {
                     let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
-                    let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                     send::dyn_sized::<typenum::B0>(id, DataTag::Write, data, app.rb());
-                    app.inc_counter();
                 }
+                app.inc_counter();
+            },
+            SyscallContext::Recv { fd, data_ptr } => {
+                let read = regs.rc();
+                let id = EventId::new(SocketId { pid, fd }, ts0, ts);
+                if regs.is_syscall_success() && read as i64 > 0 {
+                    let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, read as usize) };
+                    send::dyn_sized::<typenum::B0>(id, DataTag::Recv, data, app.rb());
+                }
+                app.inc_counter();
+            },
+            SyscallContext::Send { fd, data_ptr } => {
+                let written = regs.rc();
+                let id = EventId::new(SocketId { pid, fd }, ts0, ts);
+                if regs.is_syscall_success() && written as i64 > 0 {
+                    let data = unsafe { slice::from_raw_parts(data_ptr as *mut u8, written as usize) };
+                    send::dyn_sized::<typenum::B0>(id, DataTag::Send, data, app.rb());
+                }
+                app.inc_counter();
             },
             _ => (),
         })

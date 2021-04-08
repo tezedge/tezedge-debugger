@@ -35,4 +35,12 @@ pub enum SyscallContext {
         fd: u32,
         data_ptr: usize,
     },
+    Send {
+        fd: u32,
+        data_ptr: usize,
+    },
+    Recv {
+        fd: u32,
+        data_ptr: usize,
+    },
 }

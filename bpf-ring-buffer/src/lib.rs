@@ -2,10 +2,11 @@ use std::{
     fmt,
     io::{self, Write},
     marker::PhantomData,
-    ptr,
-    slice,
-    mem,
-    sync::{Arc, atomic::{AtomicUsize, Ordering}},
+    ptr, slice, mem,
+    sync::{
+        Arc,
+        atomic::{Ordering, AtomicUsize, AtomicBool},
+    },
     task::{Context, Poll},
     pin::Pin,
     os::unix::io::AsRawFd,
@@ -82,7 +83,7 @@ pub struct RingBufferSync {
 
 impl AsRawFd for RingBufferSync {
     fn as_raw_fd(&self) -> i32 {
-        self.fd.clone()
+        self.fd
     }
 }
 
@@ -102,6 +103,7 @@ impl RingBufferObserver {
         self.producer_pos.load(Ordering::SeqCst)
     }
 
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.data.len() * mem::size_of::<AtomicUsize>()
     }
@@ -166,7 +168,7 @@ impl RingBufferSync {
         // producers page and the buffer itself,
         // currently producers page contains only one integer value,
         // offset where producer has wrote, or still writing;
-        // let's refer buffer data as a slice of `AtomicUsize` array 
+        // let's refer buffer data as a slice of `AtomicUsize` array
         // because we care only about data headers which sized and aligned by 8;
         // map it read only
         let (producer_pos, data) = unsafe {
@@ -192,7 +194,12 @@ impl RingBufferSync {
             )
         };
 
-        log::info!("new RingBuffer: fd: {}, page_size: 0x{:016x}, mask: 0x{:016x}", fd, page_size, max_length - 1);
+        log::info!(
+            "new RingBuffer: fd: {}, page_size: 0x{:016x}, mask: 0x{:016x}",
+            fd,
+            page_size,
+            max_length - 1
+        );
         Ok(RingBufferSync {
             fd,
             mask: max_length - 1,
@@ -200,14 +207,15 @@ impl RingBufferSync {
             last_reported_percent: 0,
             observer: Arc::new(RingBufferObserver {
                 page_size,
+                data,
                 consumer_pos,
                 producer_pos,
-                data,
             }),
         })
     }
 
     // try to read a data slice from the ring buffer, advance our position
+    #[allow(clippy::comparison_chain)]
     fn read<D>(&mut self) -> io::Result<SmallVec<[D; 64]>>
     where
         D: RingBufferData,
@@ -215,15 +223,20 @@ impl RingBufferSync {
         const BUSY_BIT: usize = 1 << 31;
         const DISCARD_BIT: usize = 1 << 30;
         const HEADER_SIZE: usize = 8;
+        const TOTAL_READ_THRESHOLD: usize = 0x1000000; // 16MiB
 
         let mut vec = SmallVec::new();
+        let mut read_total = 0;
 
         // try read something
         loop {
             let pr_pos = self.observer.producer_pos.load(Ordering::Acquire);
             if self.consumer_pos_value > pr_pos {
                 // it means we were read a slice of memory which wasn't written yet
-                return Err(io::Error::new(io::ErrorKind::Other, "read uninitialized data"));
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "read uninitialized data",
+                ));
             } else if self.consumer_pos_value == pr_pos {
                 // nothing to read more
                 // tell the kernel were we are
@@ -274,16 +287,24 @@ impl RingBufferSync {
                     )
                 };
                 match D::from_rb_slice(s) {
-                    Ok(data) => vec.push(data),
+                    Ok(data) => {
+                        vec.push(data);
+                        read_total += s.len();
+                    },
                     Err(error) => log::error!("rb parse data: {:?}", error),
                 }
             }
+            // if kernel decide to discard this slice, go to the next iteration
 
             // store our position to tell kernel it can overwrite memory behind our position
-            self.observer.consumer_pos.store(self.consumer_pos_value, Ordering::Release);
+            self.observer
+                .consumer_pos
+                .store(self.consumer_pos_value, Ordering::Release);
 
-            // if kernel decide to discard this slice, go to the next iteration
-        };
+            if read_total > TOTAL_READ_THRESHOLD {
+                break;
+            }
+        }
 
         if vec.is_empty() {
             Err(io::Error::new(io::ErrorKind::WouldBlock, ""))
@@ -292,38 +313,52 @@ impl RingBufferSync {
         }
     }
 
-    fn wait(&mut self) {
+    fn wait(&self, running: &AtomicBool) {
         let mut fds = libc::pollfd {
             fd: self.as_raw_fd(),
             events: libc::POLLIN,
             revents: 0,
         };
-        loop {
-            match unsafe { libc::poll(&mut fds, 1, 100) } {
+        while running.load(Ordering::Relaxed) {
+            match unsafe { libc::poll(&mut fds, 1, 1_000) } {
                 0 => log::debug!("ringbuf wait timeout"),
                 1 => {
                     if fds.revents & libc::POLLIN != 0 {
                         break;
                     }
                 },
-                i32::MIN..=-1 => log::error!("ringbuf error: {:?}", io::Error::last_os_error()),
+                i32::MIN..=-1 => {
+                    let error = io::Error::last_os_error();
+                    if io::ErrorKind::Interrupted != error.kind() {
+                        log::error!("ringbuf error: {:?}", error);
+                    }
+                },
                 // poll should not return bigger then number of fds, we have 1
-                r @ 2..=i32::MAX => log::error!("ringbuf poll {}, {:?}", r, io::Error::last_os_error()),
+                r @ 2..=i32::MAX => log::error!("ringbuf poll {}", r),
             }
             fds.revents = 0;
         }
     }
 
-    pub fn read_blocking<D>(&mut self) -> io::Result<SmallVec<[D; 64]>>
+    pub fn read_blocking<D>(&mut self, running: &AtomicBool) -> io::Result<SmallVec<[D; 64]>>
     where
         D: RingBufferData,
     {
-        match self.read() {
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                self.wait();
-                self.read()
-            },
-            x => x,
+        let mut tries = 0;
+        loop {
+            if tries > 10 {
+                log::warn!("cannot read ring buffer: {} attempts", tries);
+            }
+            match self.read() {
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    self.wait(running);
+                    if !running.load(Ordering::Relaxed) {
+                        break Ok(SmallVec::new());
+                    }
+                },
+                x => break x,
+            }
+            tries += 1;
         }
     }
 }
@@ -360,9 +395,16 @@ where
                 self.pending_order += 1;
                 if self.pending_order >= 3 {
                     log::warn!("too many pending {}", self.pending_order);
-                    let p_pos = self.inner.get_ref().observer.producer_pos.load(Ordering::SeqCst);
+                    let p_pos = self
+                        .inner
+                        .get_ref()
+                        .observer
+                        .producer_pos
+                        .load(Ordering::SeqCst);
                     let c_pos = self.inner.get_ref().consumer_pos_value;
-                    self.report.as_mut().map(|r| r.on_pos(p_pos, c_pos));
+                    if let Some(r) = &mut self.report {
+                        r.on_pos(p_pos, c_pos);
+                    }
                 }
                 self.report.as_mut().map(RingBufferReport::on_pending);
                 Poll::Pending
