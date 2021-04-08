@@ -131,6 +131,14 @@ where
     )
 }
 
+pub fn version() -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
+    warp::path!("v2" / "version")
+        .and(warp::query::query())
+        .map(move |()| -> WithStatus<Json> {
+            with_status(json(&env!("GIT_HASH")), StatusCode::OK)
+        })
+}
+
 pub fn routes<Db>(
     db: Arc<Db>,
 ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static
@@ -146,7 +154,8 @@ where
                 .or(chunk(db.clone()))
                 .or(messages(db.clone()))
                 .or(message(db.clone()))
-                .or(logs(db)),
+                .or(logs(db))
+                .or(version()),
         )
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
@@ -184,22 +193,24 @@ fn p2p_details<Db>(
 where
     Db: DatabaseFetch + Sync + Send + 'static,
 {
-    warp::path!("v2" / "p2p" / u64).map(move |id: u64| -> reply::WithStatus<Json> {
-        let node_name = 9732;
-        match dbs.get(&node_name) {
-            Some(db) => match db.fetch_message(id) {
-                Ok(message) => reply::with_status(reply::json(&message), StatusCode::OK),
-                Err(err) => {
-                    let r = &format!("database error: {}", err);
-                    reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+    warp::path!("v2" / "p2p" / u64)
+        .and(warp::query::query())
+        .map(move |id: u64, filter: MessagesFilter| -> reply::WithStatus<Json> {
+            let node_name = filter.node_name.unwrap_or(9732);
+            match dbs.get(&node_name) {
+                Some(db) => match db.fetch_message(id) {
+                    Ok(message) => reply::with_status(reply::json(&message), StatusCode::OK),
+                    Err(err) => {
+                        let r = &format!("database error: {}", err);
+                        reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+                    },
                 },
-            },
-            None => {
-                let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
-                reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
-            },
-        }
-    })
+                None => {
+                    let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
+                    reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
+                },
+            }
+        })
 }
 
 fn log_old<Db>(
@@ -240,7 +251,8 @@ where
         .and(
             p2p(dbs.clone())
                 .or(p2p_details(dbs.clone()))
-                .or(log_old(dbs)),
+                .or(log_old(dbs))
+                .or(version()),
         )
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))

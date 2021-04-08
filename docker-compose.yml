@@ -14,8 +14,7 @@ services:
     volumes:
       - "tezedge-shared-data:/tmp/volume/tezedge:ro"
       - "tezos-shared-data:/tmp/volume/tezos:ro"
-      # - "./target/debugger_db:/tmp/volume/debugger_db:rw"
-      - "./config-docker-new.toml:/home/appuser/config-new.toml:ro"
+      - "./config-docker.toml:/home/appuser/config.toml:ro"
       - "./target:/tmp/report:rw"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
     ports:
@@ -72,7 +71,7 @@ services:
       # need a better way to provide such information
       - API=[{"id":"rust","name":"rust.localhost","http":"http://localhost:18732","ws":"ws://localhost:4927","monitoring":"http://localhost:38732/resources/tezedge","p2p_port":9732,"features":["MONITORING","RESOURCES","MEMPOOL_ACTION","STORAGE_BLOCK","NETWORK_ACTION","LOGS_ACTION"]}]
     ports:
-      - "8080:80"
+      - "80:80"
 
 volumes:
   tezedge-shared-data:
