@@ -134,8 +134,8 @@ where
 pub fn version() -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v2" / "version")
         .and(warp::query::query())
-        .map(move |()| -> WithStatus<Json> {
-            with_status(json(&env!("GIT_HASH")), StatusCode::OK)
+        .map(move |()| -> reply::WithStatus<Json> {
+            reply::with_status(reply::json(&env!("GIT_HASH")), StatusCode::OK)
         })
 }
 
