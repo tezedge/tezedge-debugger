@@ -4,4 +4,42 @@ version = "0.1.0"
 authors = ["Vladislav Melnik <vladislav.melnik@viablesystems.io>"]
 edition = "2018"
 
+[[bin]]
+name = "kprobe"
+path = "src/bin/probes.rs"
+required-features = ["probes"]
+
+[[bin]]
+name = "bpf-memprof"
+path = "src/bin/facade.rs"
+required-features = ["facade"]
+
+[build-dependencies]
+cargo-bpf = { version = "1.3", default-features = false, optional = true }
+
 [dependencies]
+# probes
+redbpf-macros = { version = "1.3", default-features = false, optional = true }
+redbpf-probes = { version = "1.3", default-features = false, optional = true }
+cty = { version = "0.2", optional = true }
+# facade
+redbpf = { version = "1.3", default-features = false, optional = true }
+sudo = { version = "0.6", optional = true }
+structopt = { version = "0.3", optional = true }
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.2", optional = true }
+passfd = { version = "0.1", optional = true }
+ctrlc = { version = "3.1", optional = true }
+
+[features]
+probes = ["cargo-bpf/bindings", "redbpf-macros", "redbpf-probes", "cty"]
+facade = [
+    "cargo-bpf/build",
+    "redbpf/load",
+    "sudo",
+    "structopt",
+    "tracing",
+    "tracing-subscriber",
+    "passfd",
+    "ctrlc",
+]

@@ -32,6 +32,8 @@
         "ksys",
         "ktime",
         "memtable",
+        "memprof",
+        "mmap",
         "msvc",
         "munmap",
         "nanos",

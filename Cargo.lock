@@ -195,6 +195,19 @@ dependencies = [
 [[package]]
 name = "bpf-memprof"
 version = "0.1.0"
+dependencies = [
+ "cargo-bpf",
+ "ctrlc",
+ "cty",
+ "passfd",
+ "redbpf",
+ "redbpf-macros",
+ "redbpf-probes",
+ "structopt",
+ "sudo",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "bpf-ring-buffer"
