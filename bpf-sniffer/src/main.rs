@@ -14,7 +14,7 @@ use tracing::Level;
 use structopt::StructOpt;
 use passfd::FdPassingExt;
 use bpf_sniffer_lib::BpfModule;
-use bpf_common::{Command, SocketId};
+use bpf_sniffer_common::{Command, SocketId};
 
 #[derive(StructOpt)]
 pub struct Opts {

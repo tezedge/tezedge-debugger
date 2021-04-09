@@ -1,5 +1,5 @@
 [package]
-name = "bpf-common"
+name = "bpf-sniffer-common"
 version = "0.1.0"
 authors = ["Vladislav Melnik <vladislav.melnik@simplestaking.com>"]
 edition = "2018"

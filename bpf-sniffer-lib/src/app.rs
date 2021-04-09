@@ -1,6 +1,6 @@
 use core::{slice, convert::TryFrom};
 use redbpf_probes::{kprobe::prelude::*, helpers};
-use bpf_common::{DataTag, SocketId, EventId};
+use bpf_sniffer_common::{DataTag, SocketId, EventId};
 use super::{
     syscall_context::SyscallContext,
     send,

@@ -1,5 +1,20 @@
 [workspace]
-members = ["tester", "tezedge-recorder", "bpf-sniffer-lib", "bpf-sniffer", "bpf-common", "bpf-ring-buffer"]
+members = [
+    "tester",
+
+    # recorder and its bpf tools
+    "tezedge-recorder",
+    "bpf-sniffer-lib",
+    "bpf-sniffer",
+    "bpf-sniffer-common",
+
+    #memprof and its bpf tools
+    "tezedge-memprof",
+    "bpf-memprof",
+
+    # common bpf related
+    "bpf-ring-buffer",
+]
 
 [patch.crates-io]
 
