@@ -196,9 +196,11 @@ dependencies = [
 name = "bpf-memprof"
 version = "0.1.0"
 dependencies = [
+ "bpf-ring-buffer",
  "cargo-bpf",
  "ctrlc",
  "cty",
+ "log",
  "passfd",
  "redbpf",
  "redbpf-macros",
@@ -2557,6 +2559,13 @@ dependencies = [
 [[package]]
 name = "tezedge-memprof"
 version = "0.1.0"
+dependencies = [
+ "bpf-memprof",
+ "ctrlc",
+ "log",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "tezedge-recorder"

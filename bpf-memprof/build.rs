@@ -27,11 +27,12 @@ mod facade {
         cargo_bpf::build_ext(&cargo, &module, &target.join("target"), p, k)
             .expect("couldn't compile module");
 
-        cargo_bpf::probe_files(&module)
+        /*cargo_bpf::probe_files(&module)
             .expect("couldn't list module files")
             .iter()
             .for_each(|file| {
                 println!("cargo:rerun-if-changed={}", file);
-            });
+            });*/
+        println!("cargo:rerun-if-changed=src/bin/probes.rs");
     }
 }

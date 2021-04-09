@@ -24,6 +24,7 @@ redbpf-probes = { version = "1.3", default-features = false, optional = true }
 cty = { version = "0.2", optional = true }
 # facade
 redbpf = { version = "1.3", default-features = false, optional = true }
+log = { version = "0.4", optional = true }
 sudo = { version = "0.6", optional = true }
 structopt = { version = "0.3", optional = true }
 tracing = { version = "0.1", optional = true }
@@ -31,11 +32,15 @@ tracing-subscriber = { version = "0.2", optional = true }
 passfd = { version = "0.1", optional = true }
 ctrlc = { version = "3.1", optional = true }
 
+# client
+bpf-ring-buffer = { path = "../bpf-ring-buffer", optional = true }
+
 [features]
 probes = ["cargo-bpf/bindings", "redbpf-macros", "redbpf-probes", "cty"]
 facade = [
     "cargo-bpf/build",
     "redbpf/load",
+    "log",
     "sudo",
     "structopt",
     "tracing",
@@ -43,3 +48,4 @@ facade = [
     "passfd",
     "ctrlc",
 ]
+client = ["bpf-ring-buffer", "passfd"]

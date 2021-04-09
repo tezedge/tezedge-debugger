@@ -72,7 +72,10 @@ pub fn main() {
     let stream = BufReader::new(stream);
     for line in stream.lines() {
         // handle line
-        let _ = line;
+        match line {
+            Ok(line) => log::info!("received command: {}", line),
+            Err(error) => log::error!("{:?}", error),
+        }
     }
 }
 

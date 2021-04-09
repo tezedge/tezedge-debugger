@@ -6,27 +6,41 @@
 #![cfg(feature = "probes")]
 
 use redbpf_probes::kprobe::prelude::*;
+use bpf_memprof::Event;
 
 program!(0xFFFFFFFE, "Dual BSD/GPL");
 
 #[map]
 static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x40000000); // 1GiB buffer
 
-#[kprobe("kprobe/do_brk_flags")]
+#[kprobe("do_brk_flags")]
 fn kprobe_brk(regs: Registers) {
     let addr = regs.parm1();
-    match unsafe { &mut main_buffer }.reserve(8, 0) {
-        Ok(mut data) => data.as_mut().copy_from_slice(&addr.to_be_bytes()),
+    let event = Event::Brk { addr };
+    match unsafe { &mut main_buffer }.reserve(40, 0) {
+        Ok(mut data) => {
+            data.as_mut().copy_from_slice(&event.to_bytes());
+            data.submit(0);
+        },
         Err(()) => (),
     }
 }
 
-#[kprobe("kprobe/ksys_mmap_pgoff")]
+#[kprobe("ksys_mmap_pgoff")]
 fn kprobe_mmap(regs: Registers) {
     let _ = regs;
 }
 
-#[kprobe("kprobe/__vm_munmap")]
+#[kprobe("__vm_munmap")]
 fn kprobe_munmap(regs: Registers) {
-    let _ = regs;
+    let addr = regs.parm1();
+    let len = regs.parm2();
+    let event = Event::MUnmap { addr, len };
+    match unsafe { &mut main_buffer }.reserve(40, 0) {
+        Ok(mut data) => {
+            data.as_mut().copy_from_slice(&event.to_bytes());
+            data.submit(0);
+        },
+        Err(()) => (),
+    }
 }
