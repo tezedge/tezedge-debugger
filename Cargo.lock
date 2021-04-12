@@ -669,6 +669,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "extractor"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio 1.4.0",
+]
+
+[[package]]
 name = "failure"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2754,6 +2765,7 @@ dependencies = [
  "mio 0.7.11",
  "num_cpus",
  "once_cell",
+ "parking_lot",
  "pin-project-lite 0.2.6",
  "signal-hook-registry",
  "tokio-macros 1.1.0",

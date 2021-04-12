@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "tester",
+    "extractor",
 
     # recorder and its bpf tools
     "tezedge-recorder",
