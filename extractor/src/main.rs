@@ -9,6 +9,7 @@ async fn main() {
         ("p2p", "PeerMessageResponse"),
         ("connection", "ConnectionMessage"),
         ("meta", "Metadata"),
+        ("ack", "AckMessage"),
     ]
     .iter()
     .cloned()
