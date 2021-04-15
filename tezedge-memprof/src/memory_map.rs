@@ -16,6 +16,10 @@ impl ProcessMap {
                 }
                 let filename = entry.relevant()?;
 
+                if !entry.exec() {
+                    log::warn!("have non exec pointer in stacktrace {:016x}@{:?}", ip, filename);
+                }
+
                 Some((filename, entry.offset + ip - entry.range.start))
             })
     }
@@ -52,9 +56,6 @@ impl MemoryMapEntry {
     }
 
     fn relevant(&self) -> Option<PathBuf> {
-        if !self.exec() {
-            return None;
-        }
         match &self.name {
             &EntryName::FileName(ref filename) => Some(filename.clone()),
             _ => None,
@@ -67,7 +68,7 @@ impl FromStr for MemoryMapEntry {
     type Err = io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut columns = s.split(' ');
+        let mut columns = s.split_ascii_whitespace();
 
         let range_str = columns.next().ok_or(io::ErrorKind::Other)?;
         let range = {

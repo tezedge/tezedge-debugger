@@ -3,7 +3,7 @@
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{sync::{Arc, atomic::{Ordering, AtomicBool}}, fs::File, io::Write};
-    use serde::Serialize;
+    use serde::{Serialize, ser};
     use bpf_memprof::{Client, Event, EventKind};
     use tezedge_memprof::ProcessMap;
 
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Unknown,
         Symbol {
             filename: String,
-            address: usize,
+            address: Address,
         },
     }
 
@@ -25,6 +25,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     struct Record {
         event: EventKind,
         stack: Vec<StackEntry>,
+    }
+
+    struct Address(usize);
+
+    impl Serialize for Address {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: ser::Serializer,
+        {
+            serializer.serialize_str(&format!("{:016x}", self.0))
+        }
     }
 
     let running = Arc::new(AtomicBool::new(true));
@@ -62,10 +73,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             None => {
                                 record.stack.push(StackEntry::Unknown);
                             },
-                            Some((path, address)) => {
+                            Some((path, addr)) => {
                                 let entry = StackEntry::Symbol {
                                     filename: format!("{:?}", path),
-                                    address,
+                                    address: Address(addr),
                                 };
                                 record.stack.push(entry);
                             },
