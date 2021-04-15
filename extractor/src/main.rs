@@ -23,15 +23,15 @@ async fn main() {
     }
 
     impl Message {
-        fn get_file_name(&self) -> String {
+        fn get_file_name(&self, prefix: &str) -> String {
             if self.category == "p2p" {
                 format!(
                     "{}.{}.msg",
-                    self.id,
+                    prefix,
                     self.kind.as_ref().expect("kind is expected")
                 )
             } else {
-                format!("{}.msg", self.id)
+                format!("{}.msg", prefix)
             }
         }
     }
@@ -82,6 +82,7 @@ async fn main() {
             if cursor > 0 && message.id > cursor {
                 continue
             }
+            message_id = message.id;
 
             let url = format!(
                 "http://debug.dev.tezedge.com:17742/v3/message/{}",
@@ -95,6 +96,7 @@ async fn main() {
                 .unwrap();
 
             let decrypted: Vec<u8> = decrypted.into();
+            let hash = sha1::Sha1::from(&decrypted).hexdigest();
             let path = PathBuf::from(mapping[message.category.as_str()]);
             if !path.exists() {
                 create_dir(&path).await.expect("cannot create dir");
@@ -102,7 +104,10 @@ async fn main() {
                 assert!(path.is_dir());
             }
 
-            let path = path.join(message.get_file_name());
+            let path = path.join(message.get_file_name(&hash));
+            if path.exists() {
+                continue;
+            }
 
             println!("-> {}", path.to_string_lossy());
             File::create(path)
@@ -112,7 +117,6 @@ async fn main() {
                 .await
                 .expect("cannot write data");
 
-            message_id = message.id;
         }
         if message_id == 0 {
             break;
