@@ -9,4 +9,4 @@ mod client;
 pub use self::client::Client;
 
 mod event;
-pub use self::event::Event;
+pub use self::event::{Event, EventKind};

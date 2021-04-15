@@ -55,6 +55,9 @@ pub fn main() {
             .attach_kprobe_namespace("default", &probe.name(), 0)
             .expect(&format!("error attaching kprobe program {}", probe.name()));
     }
+    for tp in loaded.module.trace_points_mut() {
+        tp.attach_trace_point("syscall", &tp.name()).unwrap();
+    }
 
     tracing::info!("load bpf module");
 

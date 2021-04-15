@@ -34,6 +34,7 @@ ctrlc = { version = "3.1", optional = true }
 
 # client
 bpf-ring-buffer = { path = "../bpf-ring-buffer", optional = true }
+serde = { version = "1.0", optional = true }
 
 [features]
 probes = ["cargo-bpf/bindings", "redbpf-macros", "redbpf-probes", "cty"]
@@ -48,4 +49,5 @@ facade = [
     "passfd",
     "ctrlc",
 ]
-client = ["bpf-ring-buffer", "passfd"]
+client = ["bpf-ring-buffer", "passfd", "serde/derive"]
+# default = ["probes"]
