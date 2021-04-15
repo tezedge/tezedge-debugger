@@ -57,7 +57,7 @@ async fn main() {
         hex: String,
     }
 
-    let mut cursor = 0;
+    let mut cursor = std::env::args().nth(1).map(|s| s.parse().unwrap()).unwrap_or(0);
     loop {
         let url = if cursor == 0 {
             format!(
@@ -97,7 +97,14 @@ async fn main() {
 
             let decrypted: Vec<u8> = decrypted.into();
             let hash = sha1::Sha1::from(&decrypted).hexdigest();
-            let path = PathBuf::from(mapping[message.category.as_str()]);
+            let path = {
+                if let Some(name) = mapping.get(message.category.as_str()) {
+                    PathBuf::from(name)
+                } else {
+                    eprintln!("no mapping for {}", message.category);
+                    continue;
+                }
+            };
             if !path.exists() {
                 create_dir(&path).await.expect("cannot create dir");
             } else {
@@ -109,7 +116,7 @@ async fn main() {
                 continue;
             }
 
-            println!("-> {}", path.to_string_lossy());
+            println!("-> {} / {}", message_id, path.to_string_lossy());
             File::create(path)
                 .await
                 .expect("cannot create file")
