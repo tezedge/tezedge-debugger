@@ -8,6 +8,7 @@ use warp::{
     reply::{WithStatus, Json, self},
     http::StatusCode,
 };
+
 use super::{
     database::{DatabaseFetch, ConnectionsFilter, ChunksFilter, MessagesFilter, LogsFilter},
     tables::chunk,
@@ -112,6 +113,31 @@ where
     })
 }
 
+fn message_batch<Db>(
+    db: Arc<Db>,
+) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
+where
+    Db: DatabaseFetch + Sync + Send + 'static,
+{
+    warp::post()
+        .and(warp::path!("v3" / "message"))
+        .and(warp::body::json())
+        .map(move |ids: Vec<u64>| -> reply::WithStatus<Json> {
+            match ids
+                .into_iter()
+                .map(|id| db.fetch_message(id))
+                .filter_map(|m| m.map_or_else(|e| Some(Err(e)), |o| o.map(Ok)))
+                .collect::<Result<Vec<_>, _>>()
+            {
+                Ok(messages) => reply::with_status(reply::json(&messages), StatusCode::OK),
+                Err(err) => {
+                    let r = &format!("database error: {}", err);
+                    reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+                },
+            }
+        })
+}
+
 fn logs<Db>(
     db: Arc<Db>,
 ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
@@ -131,12 +157,13 @@ where
     )
 }
 
-pub fn version() -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
-    warp::path!("v2" / "version")
-        .and(warp::query::query())
-        .map(move |()| -> reply::WithStatus<Json> {
+pub fn version(
+) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
+    warp::path!("v2" / "version").and(warp::query::query()).map(
+        move |()| -> reply::WithStatus<Json> {
             reply::with_status(reply::json(&env!("GIT_HASH")), StatusCode::OK)
-        })
+        },
+    )
 }
 
 pub fn routes<Db>(
@@ -154,6 +181,7 @@ where
                 .or(chunk(db.clone()))
                 .or(messages(db.clone()))
                 .or(message(db.clone()))
+                .or(message_batch(db.clone()))
                 .or(logs(db))
                 .or(version()),
         )
@@ -195,22 +223,24 @@ where
 {
     warp::path!("v2" / "p2p" / u64)
         .and(warp::query::query())
-        .map(move |id: u64, filter: MessagesFilter| -> reply::WithStatus<Json> {
-            let node_name = filter.node_name.unwrap_or(9732);
-            match dbs.get(&node_name) {
-                Some(db) => match db.fetch_message(id) {
-                    Ok(message) => reply::with_status(reply::json(&message), StatusCode::OK),
-                    Err(err) => {
-                        let r = &format!("database error: {}", err);
-                        reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+        .map(
+            move |id: u64, filter: MessagesFilter| -> reply::WithStatus<Json> {
+                let node_name = filter.node_name.unwrap_or(9732);
+                match dbs.get(&node_name) {
+                    Some(db) => match db.fetch_message(id) {
+                        Ok(message) => reply::with_status(reply::json(&message), StatusCode::OK),
+                        Err(err) => {
+                            let r = &format!("database error: {}", err);
+                            reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+                        },
                     },
-                },
-                None => {
-                    let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
-                    reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
-                },
-            }
-        })
+                    None => {
+                        let r = &format!("no such node: {:?}, use `node_name=<port>`", node_name);
+                        reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
+                    },
+                }
+            },
+        )
 }
 
 fn log_old<Db>(
