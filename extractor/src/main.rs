@@ -3,6 +3,35 @@ use std::{collections::HashMap, path::PathBuf};
 use tokio::fs::{File, create_dir};
 use tokio::io::AsyncWriteExt;
 
+enum Error {
+    ReqwestError(reqwest::Error),
+    IOError(std::io::Error),
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(error: reqwest::Error) -> Self {
+        Self::ReqwestError(error)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Self::IOError(error)
+    }
+}
+
+use std::fmt;
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::ReqwestError(e) => write!(f, "reqwest error: {}", e),
+            Self::IOError(e) => write!(f, "io error: {}", e),
+        }
+    }
+}
+
+
 #[tokio::main]
 async fn main() {
     let mapping = [
@@ -79,31 +108,20 @@ async fn main() {
             .unwrap();
 
         let mut message_id = 0;
+
+        let mut handles: Vec<tokio::task::JoinHandle<Result<(), Error>>> = vec![];
         for message in list {
             if cursor > 0 && message.id > cursor {
                 continue
             }
             message_id = message.id;
 
-            let url = format!(
-                "http://debug.dev.tezedge.com:17742/v3/message/{}",
-                message.id
-            );
-            let decrypted = reqwest::get(url)
-                .await
-                .unwrap()
-                .json::<MessageBytes>()
-                .await
-                .unwrap();
-
-            let decrypted: Vec<u8> = decrypted.into();
-            let hash = sha1::Sha1::from(&decrypted).hexdigest();
             let path = {
                 if let Some(name) = mapping.get(message.category.as_str()) {
                     PathBuf::from(name)
                 } else {
                     eprintln!("no mapping for {}", message.category);
-                    continue;
+                    PathBuf::from(&message.category)
                 }
             };
             if !path.exists() {
@@ -112,20 +130,41 @@ async fn main() {
                 assert!(path.is_dir());
             }
 
-            let path = path.join(message.get_file_name(&hash));
-            if path.exists() {
-                continue;
-            }
+            handles.push(tokio::spawn(async move {
+                let url = format!(
+                    "http://debug.dev.tezedge.com:17742/v3/message/{}",
+                    message.id
+                );
+                let decrypted = reqwest::get(url)
+                    .await?
+                    .json::<MessageBytes>()
+                    .await?;
 
-            println!("-> {} / {}", message_id, path.to_string_lossy());
-            File::create(path)
-                .await
-                .expect("cannot create file")
-                .write_all(&decrypted)
-                .await
-                .expect("cannot write data");
+                let decrypted: Vec<u8> = decrypted.into();
+                let hash = sha1::Sha1::from(&decrypted).hexdigest();
+                let path = path.join(message.get_file_name(&hash));
+                if path.exists() {
+                    return Ok(());
+                }
 
+                println!("-> {} / {}", message_id, path.to_string_lossy());
+                File::create(path)
+                    .await?
+                    .write_all(&decrypted)
+                    .await?;
+
+                Ok(())
+            }));
         }
+
+        for handle in handles {
+            match handle.await {
+                Err(e) => eprintln!("Panic in async block: {}", e),
+                Ok(Err(e)) => eprintln!("Error in async block: {}", e),
+                _ => (),
+            }
+        }
+
         if message_id == 0 {
             break;
         } else {
