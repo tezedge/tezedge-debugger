@@ -21,7 +21,7 @@ typenum = { version = "1.12", optional = true }
 # facade
 redbpf = { version = "1.3", default-features = false, optional = true }
 # common
-bpf-common = { path = "../bpf-common" }
+bpf-sniffer-common = { path = "../bpf-sniffer-common" }
 
 [features]
 facade = ["cargo-bpf/build", "redbpf/load"]

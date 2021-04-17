@@ -13,4 +13,4 @@ passfd = "0.1"
 ctrlc = "3.1"
 
 bpf-sniffer-lib = { path = "../bpf-sniffer-lib", features = ["facade"] }
-bpf-common = { path = "../bpf-common", features = ["std"] }
+bpf-sniffer-common = { path = "../bpf-sniffer-common", features = ["std"] }

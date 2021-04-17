@@ -33,7 +33,7 @@ tokio = { version = "1.4", features = ["rt-multi-thread"] }
 jemallocator = { version = "0.3.2", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-bpf-common = { path = "../bpf-common", features = ["std"] }
+bpf-sniffer-common = { path = "../bpf-sniffer-common", features = ["std"] }
 
 crypto = { tag = "v1.1.5", git = "https://github.com/simplestaking/tezedge" }
 storage = { tag = "v1.1.5", git = "htps://github.com/simplestaking/tezedge" }

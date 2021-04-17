@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use redbpf::{load::Loader, Module, HashMap, Map};
-use bpf_common::SocketId;
+use bpf_sniffer_common::SocketId;
 
 pub struct BpfModule {
     inner: Module,

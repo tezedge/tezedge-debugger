@@ -1,0 +1,20 @@
+[package]
+name = "tezedge-memprof"
+version = "0.1.0"
+authors = ["Vladislav Melnik <vladislav.melnik@viablesystems.io>"]
+edition = "2018"
+
+[[bin]]
+name = "tezedge-memprof"
+path = "src/bin/main.rs"
+
+[dependencies]
+log = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+ctrlc = { version = "3.1" }
+tracing-subscriber = "0.2.15"
+tracing = "0.1.25"
+
+bpf-memprof = { path = "../bpf-memprof", features = ["client"] }
