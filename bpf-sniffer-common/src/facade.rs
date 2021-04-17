@@ -53,6 +53,7 @@ pub enum SnifferEvent {
 pub enum SnifferError {
     SliceTooShort(usize),
     Data { id: EventId, code: SnifferErrorCode, net: bool, incoming: bool },
+    AcceptBadAddress { id: EventId },
     Debug { id: EventId, code: SnifferErrorCode },
 }
 
@@ -168,9 +169,12 @@ impl RingBufferData for SnifferEvent {
             },
             DataTag::Listen => Ok(SnifferEvent::Listen { id: descriptor.id }),
             DataTag::Accept => Ok(SnifferEvent::Accept {
-                id: descriptor.id,
+                id: descriptor.id.clone(),
                 listen_on_fd: u32::from_le_bytes(TryFrom::try_from(&data[0..4]).unwrap()),
-                address: parse_socket_address(&data[4..]).unwrap(),
+                // should not fail, already checked inside bpf code
+                // but happens, probably due to old kernel (5.8) has bad sync
+                address: parse_socket_address(&data[4..])
+                    .map_err(|()| SnifferError::AcceptBadAddress { id: descriptor.id })?,
             }),
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
             DataTag::GetFd => Ok(SnifferEvent::GetFd { id: descriptor.id }),
