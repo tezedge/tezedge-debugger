@@ -88,10 +88,17 @@ impl DatabaseNew for Db {
         ];
         let inner = persistent::open_kv(path, cfs, &DbConfiguration::default())?;
 
+        fn counter<S>(db: &DB) -> Option<S::Key>
+        where
+            S: KeyValueSchema,
+        {
+            KeyValueStoreWithSchema::<S>::iterator(db, IteratorMode::End).ok()?.next()?.0.ok()
+        }
+
         Ok(Db {
             //_cache: cache,
-            message_counter: AtomicU64::new(0),
-            log_counter: AtomicU64::new(0),
+            message_counter: AtomicU64::new(counter::<message::Schema>(&inner).unwrap_or(0)),
+            log_counter: AtomicU64::new(counter::<node_log::Schema>(&inner).unwrap_or(0)),
             inner,
         })
     }
