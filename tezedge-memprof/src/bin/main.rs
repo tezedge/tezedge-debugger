@@ -47,19 +47,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (mut client, mut rb) = Client::new("/tmp/bpf-memprof.sock")?;
     client.send_command("dummy command")?;
 
-    let mut cached_map = None;
+    //let mut cached_map = None;
     let mut history = vec![];
     while running.load(Ordering::Relaxed) {
         let events = rb.read_blocking::<Event>(&running)?;
         for event in events {
-            let map = match &cached_map {
+            /*let map = match &cached_map {
                 None => {
                     let map = ProcessMap::new(event.pid)?;
                     cached_map = Some(map);
                     cached_map.as_ref().unwrap()
                 },
                 Some(map) => map,
-            };
+            };*/
+            let map = ProcessMap::new(event.pid)?;
 
             let mut record = Record {
                 event: event.kind,
@@ -89,6 +90,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             history.push(record);
+            if history.len() & 0xfff == 0 {
+                log::info!("processed: {} events", history.len());
+            }
         }
     }
 

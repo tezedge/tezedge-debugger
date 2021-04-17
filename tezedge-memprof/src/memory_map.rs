@@ -8,19 +8,19 @@ impl ProcessMap {
         MemoryMapEntry::new(pid).map(ProcessMap)
     }
 
-    pub fn find(&self, ip: usize) -> Option<(PathBuf, usize)> {
+    pub fn find(&self, ip: usize) -> Option<(EntryName, usize)> {
         self.0.iter()
             .find_map(|entry| {
                 if !entry.range.contains(&ip) {
                     return None;
                 }
-                let filename = entry.relevant()?;
 
+                let name = entry.name.clone();
                 if !entry.exec() {
-                    log::warn!("have non exec pointer in stacktrace {:016x}@{:?}", ip, filename);
+                    log::warn!("have non-exec pointer in stacktrace {:016x}@{:?}", ip, name);
                 }
 
-                Some((filename, entry.offset + ip - entry.range.start))
+                Some((name.clone(), entry.offset + ip - entry.range.start))
             })
     }
 }
@@ -32,7 +32,8 @@ struct MemoryMapEntry {
     name: EntryName,
 }
 
-enum EntryName {
+#[derive(Debug, Clone)]
+pub enum EntryName {
     Nothing,
     FileName(PathBuf),
     Remark(String),
@@ -53,13 +54,6 @@ impl MemoryMapEntry {
 
     fn exec(&self) -> bool {
         self.flags.contains('x')
-    }
-
-    fn relevant(&self) -> Option<PathBuf> {
-        match &self.name {
-            &EntryName::FileName(ref filename) => Some(filename.clone()),
-            _ => None,
-        }
     }
 }
 
