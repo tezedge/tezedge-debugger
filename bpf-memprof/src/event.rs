@@ -16,6 +16,9 @@ pub enum EventKind {
         addr: u64,
         len: u64,
     },
+    PageAlloc {
+        order: u64,
+    },
 }
 
 pub struct Stack {
@@ -62,6 +65,10 @@ impl EventKind {
                 output[0x00] = 3;
                 output[0x08..0x10].clone_from_slice(&addr.to_ne_bytes());
                 output[0x10..0x18].clone_from_slice(&len.to_ne_bytes());
+            },
+            &EventKind::PageAlloc { order } => {
+                output[0x00] = 4;
+                output[0x08..0x10].clone_from_slice(&order.to_ne_bytes());
             },
         }
         output

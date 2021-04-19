@@ -7,7 +7,7 @@
 
 use redbpf_probes::kprobe::prelude::*;
 use redbpf_probes::helpers::{self, gen};
-use bpf_memprof::{Event, EventKind};
+use bpf_memprof::EventKind;
 
 program!(0xFFFFFFFE, "Dual BSD/GPL");
 
@@ -56,7 +56,7 @@ fn try_send_event(regs: &Registers, event: EventKind) {
         Ok(mut data) => {
             data.as_mut()[..0x20].clone_from_slice(&event.to_bytes());
 
-            let (pid, thread_id) = {
+            let (pid, _) = {
                 let x = helpers::bpf_get_current_pid_tgid();
                 ((x >> 32) as u32, (x & 0xffffffff) as u32)
             };
@@ -72,6 +72,31 @@ fn try_send_event(regs: &Registers, event: EventKind) {
         Err(()) => (),
     }
 }
+
+#[link_section = "tracepoint/kmem/mm_page_alloc"]
+fn tp_alloc(/*ctx: *mut cty::c_void*/regs: Registers) {
+    try_send_event(&regs, EventKind::PageAlloc { order: 0 });
+}
+
+/*#[kprobe("__alloc_pages_nodemask")]
+fn p_alloc(regs: Registers) {
+    if !check_name() {
+        return;
+    }
+
+    let order = regs.parm2();
+
+    /*let mut area_: (u64, u64) = (0, 0);
+    unsafe {
+        gen::bpf_probe_read_kernel(
+            &mut area_ as *mut (u64, u64) as *mut _,
+            16,
+            area as *const _,
+        );
+    }*/
+
+    try_send_event(&regs, EventKind::PageAlloc { order });
+}*/
 
 #[kprobe("do_brk_flags")]
 fn kprobe_brk(regs: Registers) {

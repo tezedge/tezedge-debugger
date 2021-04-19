@@ -17,11 +17,15 @@ impl ProcessMap {
 
                 let name = entry.name.clone();
                 if !entry.exec() {
-                    log::warn!("have non-exec pointer in stacktrace {:016x}@{:?}", ip, name);
+                    //log::warn!("have non-exec pointer in stacktrace {:016x}@{:?}", ip, name);
                 }
 
                 Some((name.clone(), entry.offset + ip - entry.range.start))
             })
+    }
+
+    pub fn size(&self) -> usize {
+        self.0.iter().fold(0, |a, e| a + e.range.len())
     }
 }
 

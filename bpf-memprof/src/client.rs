@@ -64,6 +64,12 @@ impl fmt::Debug for EventKind {
                     .field("length", &HexInt(len))
                     .finish()
             },
+            &EventKind::PageAlloc { order } => {
+                f.debug_struct("PageAlloc")
+                    .field("order", &HexInt(order))
+                    .finish()
+
+            }
         }
     }
 }
@@ -106,6 +112,9 @@ impl RingBufferData for Event {
             3 => EventKind::MUnmap {
                 addr: u64::from_ne_bytes(TryFrom::try_from(&slice[0x08..0x10]).unwrap()),
                 len: u64::from_ne_bytes(TryFrom::try_from(&slice[0x10..0x18]).unwrap()),
+            },
+            4 => EventKind::PageAlloc {
+                order: u64::from_ne_bytes(TryFrom::try_from(&slice[0x08..0x10]).unwrap()),
             },
             _ => return Err(1),
         };
