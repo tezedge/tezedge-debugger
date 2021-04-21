@@ -1,12 +1,17 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-#![cfg_attr(not(feature = "client"), no_std)]
+#![cfg_attr(feature = "kern", no_std)]
+
+mod event;
+pub use self::event::{Pod, Hex32, Hex64, CommonHeader};
+pub use self::event::{
+    KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageAllocExtFrag,
+    PageAllocZoneLocked, PageFree, PageFreeBatched, PagePcpuDrain,
+};
+pub use self::event::PageFaultUser;
 
 #[cfg(feature = "client")]
 mod client;
 #[cfg(feature = "client")]
-pub use self::client::Client;
-
-mod event;
-pub use self::event::{Event, EventKind};
+pub use self::client::{Client, EventKind, Event};

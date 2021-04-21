@@ -7,3 +7,6 @@ mod memory_map;
 pub use self::memory_map::ProcessMap;
 
 mod elf;
+
+mod state;
+pub use self::state::AtomicState;

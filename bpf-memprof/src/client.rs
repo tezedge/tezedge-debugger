@@ -9,7 +9,13 @@ use std::{
 };
 use passfd::FdPassingExt;
 use bpf_ring_buffer::{RingBufferData, RingBufferSync};
-use super::event::{Event, EventKind, Stack};
+use serde::{Serialize, ser};
+use super::event::{Pod, Hex32, Hex64, CommonHeader};
+use super::event::{
+    KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageAllocExtFrag,
+    PageAllocZoneLocked, PageFree, PageFreeBatched, PagePcpuDrain,
+};
+use super::event::PageFaultUser;
 
 pub struct Client {
     stream: UnixStream,
@@ -35,57 +41,47 @@ impl Client {
     }
 }
 
-struct HexInt(u64);
-
-impl fmt::Debug for HexInt {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct(&format!("0x{:016x}", self.0))
-            .finish()
+impl Serialize for Hex32 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        serializer.serialize_str(&format!("{:08x}", &self.0))
     }
 }
 
-impl fmt::Debug for EventKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            &EventKind::Brk { addr } => {
-                f.debug_struct("Brk")
-                    .field("addr", &HexInt(addr))
-                    .finish()
-            },
-            &EventKind::MMap { addr, len } => {
-                f.debug_struct("MMap")
-                    .field("addr", &HexInt(addr))
-                    .field("length", &HexInt(len))
-                    .finish()
-            },
-            &EventKind::MUnmap { addr, len } => {
-                f.debug_struct("MUnmap")
-                    .field("addr", &HexInt(addr))
-                    .field("length", &HexInt(len))
-                    .finish()
-            },
-            &EventKind::PageAlloc { order } => {
-                f.debug_struct("PageAlloc")
-                    .field("order", &HexInt(order))
-                    .finish()
-
-            }
-        }
+impl Serialize for Hex64 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        serializer.serialize_str(&format!("{:016x}", &self.0))
     }
 }
 
-impl fmt::Debug for Stack {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut g = f.debug_tuple("Stack");
-        g.field(&self.length);
-        for &s in &self.ips {
-            if s == 0 {
-                break;
-            }
-            g.field(&HexInt(s as u64));
-        }
-        g.finish()
-    }
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EventKind {
+    KFree(KFree),
+    KMAlloc(KMAlloc),
+    KMAllocNode(KMAllocNode),
+    CacheAlloc(CacheAlloc),
+    CacheAllocNode(CacheAllocNode),
+    CacheFree(CacheFree),
+    PageAlloc(PageAlloc),
+    PageAllocExtFrag(PageAllocExtFrag),
+    PageAllocZoneLocked(PageAllocZoneLocked),
+    PageFree(PageFree),
+    PageFreeBatched(PageFreeBatched),
+    PagePcpuDrain(PagePcpuDrain),
+    PageFaultUser(PageFaultUser),
+}
+
+#[derive(Serialize)]
+pub struct Event {
+    pub header: CommonHeader,
+    pub pid: u32,
+    pub event: EventKind,
 }
 
 impl RingBufferData for Event {
@@ -94,48 +90,57 @@ impl RingBufferData for Event {
     fn from_rb_slice(slice: &[u8]) -> Result<Self, Self::Error> {
         use core::convert::TryFrom;
 
-        const STACK_DEPTH: usize = 0x7f;
-        const HEADER_SIZE: usize = 0x28;
-
-        if slice.len() != HEADER_SIZE + (STACK_DEPTH + 1) * 8 {
+        if slice.len() < 0x10 {
             return Err(0);
         }
 
-        let kind = match slice[0] {
-            1 => EventKind::Brk {
-                addr: u64::from_ne_bytes(TryFrom::try_from(&slice[0x08..0x10]).unwrap()),
+        let header = CommonHeader::from_slice(&slice[0x00..0x08]).unwrap();
+        let pid = u32::from_ne_bytes(TryFrom::try_from(&slice[0x08..0x0c]).unwrap());
+        let discriminant = u32::from_ne_bytes(TryFrom::try_from(&slice[0x0c..0x10]).unwrap());
+        let slice = &slice[0x10..];
+        let event = match discriminant {
+            x if Some(x) == KFree::DISCRIMINANT => {
+                EventKind::KFree(KFree::from_slice(slice).ok_or(0)?)
             },
-            2 => EventKind::MMap {
-                addr: u64::from_ne_bytes(TryFrom::try_from(&slice[0x08..0x10]).unwrap()),
-                len: u64::from_ne_bytes(TryFrom::try_from(&slice[0x10..0x18]).unwrap()),
+            x if Some(x) == KMAlloc::DISCRIMINANT => {
+                EventKind::KMAlloc(KMAlloc::from_slice(slice).ok_or(0)?)
             },
-            3 => EventKind::MUnmap {
-                addr: u64::from_ne_bytes(TryFrom::try_from(&slice[0x08..0x10]).unwrap()),
-                len: u64::from_ne_bytes(TryFrom::try_from(&slice[0x10..0x18]).unwrap()),
+            x if Some(x) == KMAllocNode::DISCRIMINANT => {
+                EventKind::KMAllocNode(KMAllocNode::from_slice(slice).ok_or(0)?)
             },
-            4 => EventKind::PageAlloc {
-                order: u64::from_ne_bytes(TryFrom::try_from(&slice[0x08..0x10]).unwrap()),
+            x if Some(x) == CacheAlloc::DISCRIMINANT => {
+                EventKind::CacheAlloc(CacheAlloc::from_slice(slice).ok_or(0)?)
+            },
+            x if Some(x) == CacheAllocNode::DISCRIMINANT => {
+                EventKind::CacheAllocNode(CacheAllocNode::from_slice(slice).ok_or(0)?)
+            },
+            x if Some(x) == CacheFree::DISCRIMINANT => {
+                EventKind::CacheFree(CacheFree::from_slice(slice).ok_or(0)?)
+            },
+            x if Some(x) == PageAlloc::DISCRIMINANT => {
+                EventKind::PageAlloc(PageAlloc::from_slice(slice).ok_or(0)?)
+            },
+            x if Some(x) == PageAllocExtFrag::DISCRIMINANT => {
+                EventKind::PageAllocExtFrag(PageAllocExtFrag::from_slice(slice).ok_or(0)?)
+            },
+            x if Some(x) == PageAllocZoneLocked::DISCRIMINANT => {
+                EventKind::PageAllocZoneLocked(PageAllocZoneLocked::from_slice(slice).ok_or(0)?)
+            },
+            x if Some(x) == PageFree::DISCRIMINANT => {
+                EventKind::PageFree(PageFree::from_slice(slice).ok_or(0)?)
+            },
+            x if Some(x) == PageFreeBatched::DISCRIMINANT => {
+                EventKind::PageFreeBatched(PageFreeBatched::from_slice(slice).ok_or(0)?)
+            },
+            x if Some(x) == PagePcpuDrain::DISCRIMINANT => {
+                EventKind::PagePcpuDrain(PagePcpuDrain::from_slice(slice).ok_or(0)?)
+            },
+            x if Some(x) == PageFaultUser::DISCRIMINANT => {
+                EventKind::PageFaultUser(PageFaultUser::from_slice(slice).ok_or(0)?)
             },
             _ => return Err(1),
         };
-        let pid = u64::from_ne_bytes(TryFrom::try_from(&slice[0x20..0x28]).unwrap()) as _;
 
-        let stack_bytes = &slice[HEADER_SIZE..];
-        let code = i64::from_ne_bytes(TryFrom::try_from(&stack_bytes[..0x08]).unwrap());
-        let stack = if code < 0 {
-            Err(code)
-        } else {
-            let length = code as usize;
-            let mut ips = [0; STACK_DEPTH];
-            for (i, c) in stack_bytes[0x08..].chunks(0x08).enumerate() {
-                ips[i] = u64::from_ne_bytes(TryFrom::try_from(c).unwrap()) as usize;
-            }
-            Ok(Stack {
-                length,
-                ips,
-            })
-        };
-
-        Ok(Event { kind, pid, stack })
+        Ok(Event { header, pid, event })
     }
 }
