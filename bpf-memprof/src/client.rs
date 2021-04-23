@@ -9,13 +9,13 @@ use std::{
 };
 use passfd::FdPassingExt;
 use bpf_ring_buffer::{RingBufferData, RingBufferSync};
-use serde::{Serialize, ser};
+use serde::{Serialize, ser, Deserialize, de};
 use super::event::{Pod, Hex32, Hex64, CommonHeader};
 use super::event::{
     KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageAllocExtFrag,
     PageAllocZoneLocked, PageFree, PageFreeBatched, PagePcpuDrain,
 };
-use super::event::PageFaultUser;
+use super::event::{PageFaultUser, RssStat};
 
 pub struct Client {
     stream: UnixStream,
@@ -41,12 +41,40 @@ impl Client {
     }
 }
 
+impl<'de> Deserialize<'de> for Hex32 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        use self::de::Error;
+
+        let s = String::deserialize(deserializer)?;
+        u32::from_str_radix(&s, 16)
+            .map_err(|e| Error::custom(e))
+            .map(Hex32)
+    }
+}
+
 impl Serialize for Hex32 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: ser::Serializer,
     {
         serializer.serialize_str(&format!("{:08x}", &self.0))
+    }
+}
+
+impl<'de> Deserialize<'de> for Hex64 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        use self::de::Error;
+
+        let s = String::deserialize(deserializer)?;
+        u64::from_str_radix(&s, 16)
+            .map_err(|e| Error::custom(e))
+            .map(Hex64)
     }
 }
 
@@ -59,8 +87,8 @@ impl Serialize for Hex64 {
     }
 }
 
-#[derive(Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum EventKind {
     KFree(KFree),
     KMAlloc(KMAlloc),
@@ -75,9 +103,10 @@ pub enum EventKind {
     PageFreeBatched(PageFreeBatched),
     PagePcpuDrain(PagePcpuDrain),
     PageFaultUser(PageFaultUser),
+    RssStat(RssStat),
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Event {
     pub header: CommonHeader,
     pub pid: u32,
@@ -134,6 +163,9 @@ impl RingBufferData for Event {
             },
             x if Some(x) == PagePcpuDrain::DISCRIMINANT => {
                 EventKind::PagePcpuDrain(PagePcpuDrain::from_slice(slice).ok_or(0)?)
+            },
+            x if Some(x) == RssStat::DISCRIMINANT => {
+                EventKind::RssStat(RssStat::from_slice(slice).ok_or(0)?)
             },
             x if Some(x) == PageFaultUser::DISCRIMINANT => {
                 EventKind::PageFaultUser(PageFaultUser::from_slice(slice).ok_or(0)?)

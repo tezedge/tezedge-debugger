@@ -17,6 +17,7 @@
         "clippy",
         "compat",
         "concat",
+        "curr",
         "entrypoint",
         "extfrag",
         "getsockname",

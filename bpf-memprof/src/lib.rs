@@ -9,7 +9,7 @@ pub use self::event::{
     KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageAllocExtFrag,
     PageAllocZoneLocked, PageFree, PageFreeBatched, PagePcpuDrain,
 };
-pub use self::event::PageFaultUser;
+pub use self::event::{PageFaultUser, RssStat};
 
 #[cfg(feature = "client")]
 mod client;

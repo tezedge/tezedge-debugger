@@ -1,13 +1,28 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use core::convert::TryFrom;
+use core::{convert::TryFrom, fmt};
+
+#[cfg(feature = "client")]
+use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Copy)]
 pub struct Hex64(pub u64);
 
+impl fmt::Debug for Hex64 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:016x}", &self.0)
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Hex32(pub u32);
+
+impl fmt::Debug for Hex32 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:08x}", &self.0)
+    }
+}
 
 pub trait Pod
 where
@@ -19,8 +34,9 @@ where
     fn from_slice(s: &[u8]) -> Option<Self>;
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct CommonHeader {
     ty: u16,
     flags: u8,
@@ -46,8 +62,9 @@ impl Pod for CommonHeader {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct KFree {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -69,8 +86,9 @@ impl Pod for KFree {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct KMAlloc {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -98,8 +116,9 @@ impl Pod for KMAlloc {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct KMAllocNode {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -129,8 +148,9 @@ impl Pod for KMAllocNode {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct CacheAlloc {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -158,8 +178,9 @@ impl Pod for CacheAlloc {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct CacheAllocNode {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -189,8 +210,9 @@ impl Pod for CacheAllocNode {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct CacheFree {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -212,8 +234,9 @@ impl Pod for CacheFree {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct PageAlloc {
     pfn: Hex64,
     pub order: u32,
@@ -239,8 +262,9 @@ impl Pod for PageAlloc {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct PageAllocExtFrag {
     pfn: Hex64,
     pub alloc_order: u32,
@@ -270,8 +294,9 @@ impl Pod for PageAllocExtFrag {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct PageAllocZoneLocked {
     pfn: Hex64,
     pub order: u32,
@@ -295,8 +320,9 @@ impl Pod for PageAllocZoneLocked {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct PageFree {
     pfn: Hex64,
     pub order: u32,
@@ -318,8 +344,9 @@ impl Pod for PageFree {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct PageFreeBatched {
     pfn: Hex64,
 }
@@ -339,8 +366,9 @@ impl Pod for PageFreeBatched {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct PagePcpuDrain {
     pfn: Hex64,
     pub order: u32,
@@ -364,8 +392,37 @@ impl Pod for PagePcpuDrain {
     }
 }
 
-#[cfg_attr(feature = "client", derive(serde::Serialize))]
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
+pub struct RssStat {
+    id: u32,
+    curr: u32,
+    pub member: i32,
+    pub size: i64,
+}
+
+impl Pod for RssStat {
+    const DISCRIMINANT: Option<u32> = Some(13);
+    const SIZE: usize = 0x18;
+
+    #[inline(always)]
+    fn from_slice(s: &[u8]) -> Option<Self> {
+        if s.len() < Self::SIZE {
+            return None;
+        }
+        Some(RssStat {
+            id: u32::from_ne_bytes(TryFrom::try_from(&s[0x00..0x04]).unwrap()),
+            curr: u32::from_ne_bytes(TryFrom::try_from(&s[0x04..0x08]).unwrap()),
+            member: i32::from_ne_bytes(TryFrom::try_from(&s[0x08..0x0c]).unwrap()),
+            size: i64::from_ne_bytes(TryFrom::try_from(&s[0x10..0x18]).unwrap()),
+        })
+    }
+}
+
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug)]
 pub struct PageFaultUser {
     address: Hex64,
     ip: Hex64,
@@ -373,7 +430,7 @@ pub struct PageFaultUser {
 }
 
 impl Pod for PageFaultUser {
-    const DISCRIMINANT: Option<u32> = Some(13);
+    const DISCRIMINANT: Option<u32> = Some(14);
     const SIZE: usize = 0x18;
 
     #[inline(always)]

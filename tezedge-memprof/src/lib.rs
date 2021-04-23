@@ -9,4 +9,4 @@ pub use self::memory_map::ProcessMap;
 mod elf;
 
 mod state;
-pub use self::state::AtomicState;
+pub use self::state::{AtomicState, Reporter};

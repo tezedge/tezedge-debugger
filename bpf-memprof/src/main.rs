@@ -40,6 +40,8 @@ pub struct App {
     pub page_free_batched: ebpf::ProgRef,
     #[prog("tracepoint/kmem/mm_page_pcpu_drain")]
     pub page_pcpu_drain: ebpf::ProgRef,
+    #[prog("tracepoint/kmem/rss_stat")]
+    pub rss_stat: ebpf::ProgRef,
     #[prog("tracepoint/exceptions/page_fault_user")]
     pub page_fault_user: ebpf::ProgRef,
 }
@@ -50,7 +52,7 @@ use {
     bpf_memprof::{
         KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc,
         PageAllocExtFrag, PageAllocZoneLocked, PageFree, PageFreeBatched, PagePcpuDrain,
-        PageFaultUser,
+        PageFaultUser, RssStat,
     },
     ebpf::helpers,
 };
@@ -163,6 +165,12 @@ impl App {
     pub fn page_pcpu_drain(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         Self::check_name()?;
         self.output::<PagePcpuDrain>(ctx)
+    }
+
+    #[inline(always)]
+    pub fn rss_stat(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        Self::check_name()?;
+        self.output::<RssStat>(ctx)
     }
 
     #[inline(always)]
