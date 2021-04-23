@@ -396,7 +396,7 @@ impl Pod for PagePcpuDrain {
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
 #[derive(Debug)]
 pub struct RssStat {
-    id: u32,
+    pub id: u32,
     curr: u32,
     pub member: i32,
     pub size: i64,

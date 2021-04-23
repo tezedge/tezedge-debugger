@@ -14,6 +14,8 @@ ebpf::license!("GPL");
 #[cfg(any(feature = "kern", feature = "user"))]
 #[derive(ebpf::BpfApp)]
 pub struct App {
+    #[hashmap(size = 1)]
+    pub pid: ebpf::HashMapRef<4, 4>,
     #[ringbuf(size = 0x40000000)]
     pub event_queue: ebpf::RingBufferRef,
     #[prog("tracepoint/kmem/kfree")]
@@ -60,22 +62,42 @@ use {
 #[cfg(feature = "kern")]
 impl App {
     #[inline(always)]
-    fn check_name() -> Result<(), i32> {
-        let mut comm = [0; 16];
+    fn check_name(&mut self) -> Result<u32, i32> {
+        let key = 0u32.to_ne_bytes();
+        if let Some(&pid_bytes) = self.pid.get(&key) {
+            let target_pid = u32::from_ne_bytes(pid_bytes);
 
-        let x = unsafe { helpers::get_current_comm(&mut comm as *mut _ as _, 16) };
-        let pass = true
-            && comm[0] == 'l' as i8
-            && comm[1] == 'i' as i8
-            && comm[2] == 'g' as i8
-            && comm[3] == 'h' as i8
-            && comm[4] == 't' as i8
-            && comm[5] == '-' as i8
-            && comm[6] == 'n' as i8
-            && comm[7] == 'o' as i8
-            && comm[8] == 'd' as i8
-            && comm[9] == 'e' as i8;
-        if pass { Ok(()) } else { Err(0) }
+            let x = unsafe { helpers::get_current_pid_tgid() };
+            let pid = (x >> 32) as u32;
+            if pid != target_pid {
+                Err(0)
+            } else {
+                Ok(pid)
+            }
+        } else {
+            let mut comm = [0; 16];
+
+            let x = unsafe { helpers::get_current_comm(&mut comm as *mut _ as _, 16) };
+            let pass = true
+                && comm[0] == 'l' as i8
+                && comm[1] == 'i' as i8
+                && comm[2] == 'g' as i8
+                && comm[3] == 'h' as i8
+                && comm[4] == 't' as i8
+                && comm[5] == '-' as i8
+                && comm[6] == 'n' as i8
+                && comm[7] == 'o' as i8
+                && comm[8] == 'd' as i8
+                && comm[9] == 'e' as i8;
+            if pass {
+                let x = unsafe { helpers::get_current_pid_tgid() };
+                let pid = (x >> 32) as u32;
+                self.pid.insert(key, pid.to_ne_bytes())?;
+                Ok(pid)
+            } else {
+                Err(0)
+            }
+        }
     }
 
     // /sys/kernel/debug/tracing/events/kmem/mm_page_alloc/format
@@ -84,10 +106,9 @@ impl App {
     where
         T: Pod,
     {
+        let pid = self.check_name()?;
         let mut data = self.event_queue.reserve(0x10 + T::SIZE)?;
         ctx.read_into(0, &mut data.as_mut()[0x00..0x10]);
-        let x = unsafe { helpers::get_current_pid_tgid() };
-        let pid = (x >> 32) as u32;
         data.as_mut()[0x08..0x0c].clone_from_slice(&pid.to_ne_bytes());
         data.as_mut()[0x0c..0x10].clone_from_slice(&T::DISCRIMINANT.unwrap_or(0).to_ne_bytes());
         ctx.read_into(0x08, &mut data.as_mut()[0x10..]);
@@ -97,85 +118,71 @@ impl App {
 
     #[inline(always)]
     pub fn kfree(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<KFree>(ctx)
     }
 
     #[inline(always)]
     pub fn kmalloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<KMAlloc>(ctx)
     }
 
     #[inline(always)]
     pub fn kmalloc_node(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<KMAllocNode>(ctx)
     }
 
     #[inline(always)]
     pub fn cache_alloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<CacheAlloc>(ctx)
     }
 
     #[inline(always)]
     pub fn cache_alloc_node(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<CacheAllocNode>(ctx)
     }
 
     #[inline(always)]
     pub fn cache_free(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<CacheFree>(ctx)
     }
 
     #[inline(always)]
     pub fn page_alloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<PageAlloc>(ctx)
     }
 
     #[inline(always)]
     pub fn page_alloc_extfrag(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<PageAllocExtFrag>(ctx)
     }
 
     #[inline(always)]
     pub fn page_alloc_zone_locked(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<PageAllocZoneLocked>(ctx)
     }
 
     #[inline(always)]
     pub fn page_free(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<PageFree>(ctx)
     }
 
     #[inline(always)]
     pub fn page_free_batched(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<PageFreeBatched>(ctx)
     }
 
     #[inline(always)]
     pub fn page_pcpu_drain(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<PagePcpuDrain>(ctx)
     }
 
     #[inline(always)]
     pub fn rss_stat(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<RssStat>(ctx)
     }
 
     #[inline(always)]
     pub fn page_fault_user(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        Self::check_name()?;
         self.output::<PageFaultUser>(ctx)
     }
 }
