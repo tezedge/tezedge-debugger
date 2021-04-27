@@ -55,6 +55,7 @@ use {
         KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc,
         PageAllocExtFrag, PageAllocZoneLocked, PageFree, PageFreeBatched, PagePcpuDrain,
         PageFaultUser, RssStat,
+        STACK_MAX_DEPTH,
     },
     ebpf::helpers,
 };
@@ -77,7 +78,7 @@ impl App {
         } else {
             let mut comm = [0; 16];
 
-            let x = unsafe { helpers::get_current_comm(&mut comm as *mut _ as _, 16) };
+            let _ = unsafe { helpers::get_current_comm(&mut comm as *mut _ as _, 16) };
             let pass = true
                 && comm[0] == 'l' as i8
                 && comm[1] == 'i' as i8
@@ -107,13 +108,27 @@ impl App {
         T: Pod,
     {
         let pid = self.check_name()?;
-        let mut data = self.event_queue.reserve(0x10 + T::SIZE)?;
-        ctx.read_into(0, &mut data.as_mut()[0x00..0x10]);
-        data.as_mut()[0x08..0x0c].clone_from_slice(&pid.to_ne_bytes());
-        data.as_mut()[0x0c..0x10].clone_from_slice(&T::DISCRIMINANT.unwrap_or(0).to_ne_bytes());
-        ctx.read_into(0x08, &mut data.as_mut()[0x10..]);
-        data.submit();
-        Ok(())
+
+        let mut data = self.event_queue.reserve(0x10 + T::SIZE + 0x08 + (8 * STACK_MAX_DEPTH))?;
+        let mut data_mut = data.as_mut();
+        ctx.read_into(0x00, &mut data_mut[..0x08]);
+        data_mut[0x08..0x0c].clone_from_slice(&pid.to_ne_bytes());
+        data_mut[0x0c..0x10].clone_from_slice(&T::DISCRIMINANT.unwrap_or(0).to_ne_bytes());
+        let mut data_mut = &mut data_mut[0x10..];
+        ctx.read_into(0x08, &mut data_mut[..T::SIZE]);
+        let mut data_mut = &mut data_mut[T::SIZE..];
+        match ctx.get_user_stack(&mut data_mut[0x08..]) {
+            Ok(size) => {
+                let length = ((size + 7) / 8) as u64;
+                data_mut[..0x08].clone_from_slice(&length.to_ne_bytes());
+                data.submit();
+                Ok(())
+            },
+            Err(e) => {
+                data.discard();
+                Err(e)
+            },
+        }
     }
 
     #[inline(always)]

@@ -108,17 +108,16 @@ pub struct Report {
 
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let usage = self.current_counters.slab_known_bytes +
-            self.current_counters.slab_unknown_bytes + self.current_counters.page_bytes;
-        let mib = usage as f64 / (0x100000 as f64);
-        let rss_file_mib = self.current_counters.rss_stat_file_bytes as f64 / (0x100000 as f64);
-        let rss_anon_mib = self.current_counters.rss_stat_anon_bytes as f64 / (0x100000 as f64);
-        let rss_swap_mib = self.current_counters.rss_stat_swap_bytes as f64 / (0x100000 as f64);
-        let rss_shared_mib = self.current_counters.rss_stat_shared_bytes as f64 / (0x100000 as f64);
+        let usage = self.current_counters.page_bytes;
+        let mib = usage as f64 / (0x400 as f64);
+        let rss_file_mib = self.current_counters.rss_stat_file_bytes as f64 / (0x400 as f64);
+        let rss_anon_mib = self.current_counters.rss_stat_anon_bytes as f64 / (0x400 as f64);
+        let rss_swap_mib = self.current_counters.rss_stat_swap_bytes as f64 / (0x400 as f64);
+        let rss_shared_mib = self.current_counters.rss_stat_shared_bytes as f64 / (0x400 as f64);
         let _diff = self.current_counters.diff(&self.last_counters, self.elapsed_time);
         write!(
             f,
-            "usage: {:.2} MiB, rss: {:.2} (file: {:.2} + anon: {:.2} + swap: {:.2} + shared: {:.2}) MiB\n{:#?}\n",
+            "usage: {:.2} kiB, rss: {:.2} (file: {:.2} + anon: {:.2} + swap: {:.2} + shared: {:.2}) kiB\n{:#?}\n",
             mib,
             rss_file_mib + rss_anon_mib + rss_swap_mib + rss_shared_mib,
             rss_file_mib,

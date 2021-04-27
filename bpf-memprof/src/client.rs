@@ -15,7 +15,7 @@ use super::event::{
     KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageAllocExtFrag,
     PageAllocZoneLocked, PageFree, PageFreeBatched, PagePcpuDrain,
 };
-use super::event::{PageFaultUser, RssStat};
+use super::{event::{PageFaultUser, RssStat}, STACK_MAX_DEPTH};
 
 pub struct Client {
     stream: UnixStream,
@@ -106,11 +106,109 @@ pub enum EventKind {
     RssStat(RssStat),
 }
 
+pub struct Stack {
+    length: usize,
+    ips: [Hex64; STACK_MAX_DEPTH],
+}
+
+impl fmt::Debug for Stack {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut t = f.debug_tuple("Stack");
+        for ip in self.ips() {
+            t.field(ip);
+        }
+        t.finish()
+    }
+}
+
+impl Serialize for Stack {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        use self::ser::SerializeTuple;
+
+        let mut s = serializer.serialize_tuple(self.length)?;
+        for ip in self.ips() {
+            s.serialize_element(ip)?;
+        }
+        s.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Stack {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        struct V;
+
+        impl<'de> de::Visitor<'de> for V {
+            type Value = Stack;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                write!(formatter, "sequence of Hex64 prefixed by u64 (its count)")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let mut stack = Stack {
+                    length: 0,
+                    ips: [Hex64(0); STACK_MAX_DEPTH],
+                };
+                while let Some(ip) = seq.next_element()? {
+                    stack.ips[stack.length] = ip;
+                    stack.length += 1;
+                }
+
+                Ok(stack)
+            }
+        }
+
+        deserializer.deserialize_seq(V)
+    }
+}
+
+impl Stack {
+    pub fn ips(&self) -> &[Hex64] {
+        &self.ips[..self.length]
+    }
+
+    pub fn from_slice(slice: &[u8]) -> Option<Self> {
+        use std::{convert::TryFrom, mem};
+
+        let s = mem::size_of::<u64>();
+        if slice.len() < s {
+            return None;
+        }
+
+        let mut stack = Stack {
+            length: u64::from_ne_bytes(TryFrom::try_from(&slice[0..s]).unwrap()) as usize,
+            ips: [Hex64(0); STACK_MAX_DEPTH],
+        };
+
+        let slice = &slice[s..];
+        if stack.length > STACK_MAX_DEPTH || slice.len() < stack.length * s {
+            return None;
+        }
+
+        for i in 0..stack.length {
+            let slice = &slice[(i * s)..((i + 1) * s)];
+            stack.ips[i] = Hex64(u64::from_ne_bytes(TryFrom::try_from(slice).unwrap()));
+        }
+
+        Some(stack)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Event {
     pub header: CommonHeader,
     pub pid: u32,
     pub event: EventKind,
+    pub stack: Stack,
 }
 
 impl RingBufferData for Event {
@@ -127,52 +225,54 @@ impl RingBufferData for Event {
         let pid = u32::from_ne_bytes(TryFrom::try_from(&slice[0x08..0x0c]).unwrap());
         let discriminant = u32::from_ne_bytes(TryFrom::try_from(&slice[0x0c..0x10]).unwrap());
         let slice = &slice[0x10..];
-        let event = match discriminant {
+        let (event, size) = match discriminant {
             x if Some(x) == KFree::DISCRIMINANT => {
-                EventKind::KFree(KFree::from_slice(slice).ok_or(0)?)
+                (EventKind::KFree(KFree::from_slice(slice).ok_or(0)?), KFree::SIZE)
             },
             x if Some(x) == KMAlloc::DISCRIMINANT => {
-                EventKind::KMAlloc(KMAlloc::from_slice(slice).ok_or(0)?)
+                (EventKind::KMAlloc(KMAlloc::from_slice(slice).ok_or(0)?), KMAlloc::SIZE)
             },
             x if Some(x) == KMAllocNode::DISCRIMINANT => {
-                EventKind::KMAllocNode(KMAllocNode::from_slice(slice).ok_or(0)?)
+                (EventKind::KMAllocNode(KMAllocNode::from_slice(slice).ok_or(0)?), KMAllocNode::SIZE)
             },
             x if Some(x) == CacheAlloc::DISCRIMINANT => {
-                EventKind::CacheAlloc(CacheAlloc::from_slice(slice).ok_or(0)?)
+                (EventKind::CacheAlloc(CacheAlloc::from_slice(slice).ok_or(0)?), CacheAlloc::SIZE)
             },
             x if Some(x) == CacheAllocNode::DISCRIMINANT => {
-                EventKind::CacheAllocNode(CacheAllocNode::from_slice(slice).ok_or(0)?)
+                (EventKind::CacheAllocNode(CacheAllocNode::from_slice(slice).ok_or(0)?), CacheAllocNode::SIZE)
             },
             x if Some(x) == CacheFree::DISCRIMINANT => {
-                EventKind::CacheFree(CacheFree::from_slice(slice).ok_or(0)?)
+                (EventKind::CacheFree(CacheFree::from_slice(slice).ok_or(0)?), CacheFree::SIZE)
             },
             x if Some(x) == PageAlloc::DISCRIMINANT => {
-                EventKind::PageAlloc(PageAlloc::from_slice(slice).ok_or(0)?)
+                (EventKind::PageAlloc(PageAlloc::from_slice(slice).ok_or(0)?), PageAlloc::SIZE)
             },
             x if Some(x) == PageAllocExtFrag::DISCRIMINANT => {
-                EventKind::PageAllocExtFrag(PageAllocExtFrag::from_slice(slice).ok_or(0)?)
+                (EventKind::PageAllocExtFrag(PageAllocExtFrag::from_slice(slice).ok_or(0)?), PageAllocExtFrag::SIZE)
             },
             x if Some(x) == PageAllocZoneLocked::DISCRIMINANT => {
-                EventKind::PageAllocZoneLocked(PageAllocZoneLocked::from_slice(slice).ok_or(0)?)
+                (EventKind::PageAllocZoneLocked(PageAllocZoneLocked::from_slice(slice).ok_or(0)?), PageAllocZoneLocked::SIZE)
             },
             x if Some(x) == PageFree::DISCRIMINANT => {
-                EventKind::PageFree(PageFree::from_slice(slice).ok_or(0)?)
+                (EventKind::PageFree(PageFree::from_slice(slice).ok_or(0)?), PageFree::SIZE)
             },
             x if Some(x) == PageFreeBatched::DISCRIMINANT => {
-                EventKind::PageFreeBatched(PageFreeBatched::from_slice(slice).ok_or(0)?)
+                (EventKind::PageFreeBatched(PageFreeBatched::from_slice(slice).ok_or(0)?), PageFreeBatched::SIZE)
             },
             x if Some(x) == PagePcpuDrain::DISCRIMINANT => {
-                EventKind::PagePcpuDrain(PagePcpuDrain::from_slice(slice).ok_or(0)?)
+                (EventKind::PagePcpuDrain(PagePcpuDrain::from_slice(slice).ok_or(0)?), PagePcpuDrain::SIZE)
             },
             x if Some(x) == RssStat::DISCRIMINANT => {
-                EventKind::RssStat(RssStat::from_slice(slice).ok_or(0)?)
+                (EventKind::RssStat(RssStat::from_slice(slice).ok_or(0)?), RssStat::SIZE)
             },
             x if Some(x) == PageFaultUser::DISCRIMINANT => {
-                EventKind::PageFaultUser(PageFaultUser::from_slice(slice).ok_or(0)?)
+                (EventKind::PageFaultUser(PageFaultUser::from_slice(slice).ok_or(0)?), PageFaultUser::SIZE)
             },
             _ => return Err(1),
         };
+        let slice = &slice[size..];
+        let stack = Stack::from_slice(slice).ok_or(0)?;
 
-        Ok(Event { header, pid, event })
+        Ok(Event { header, pid, event, stack })
     }
 }

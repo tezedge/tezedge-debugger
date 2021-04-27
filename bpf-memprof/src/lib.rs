@@ -15,3 +15,5 @@ pub use self::event::{PageFaultUser, RssStat};
 mod client;
 #[cfg(feature = "client")]
 pub use self::client::{Client, EventKind, Event};
+
+pub const STACK_MAX_DEPTH: usize = 127;

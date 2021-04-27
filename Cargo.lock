@@ -636,9 +636,9 @@ dependencies = [
 
 [[package]]
 name = "ebpf-kern"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d26dfa8a54abf61a525358958c3cd7aeb4e45ae9d146d0926151b78ce8477239"
+checksum = "c6febb3336175cff592a35dc06ac91ae8f3bebff9f1c8632dc0a16b987918ba9"
 dependencies = [
  "cty",
  "ebpf-kern-macros",
@@ -646,9 +646,9 @@ dependencies = [
 
 [[package]]
 name = "ebpf-kern-macros"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d90b6dd2353f049fa24e34472dcc3965f25aa7fd89a88a1b26c5ae627d0a9282"
+checksum = "bd511f089630314f52cc4d340e8759b9cf79c9069afa23711e6cde4c35b51a79"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -657,9 +657,9 @@ dependencies = [
 
 [[package]]
 name = "ebpf-user"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aaa84825224ca7a7641638b9fd5b888ed0821a56f301005e102184d91fbc94d0"
+checksum = "dac73feef161392dd292e9ce3a422d47137fd8d3044fbd65541f350ee3687f66"
 dependencies = [
  "cty",
  "ebpf-user-macros",
@@ -668,9 +668,9 @@ dependencies = [
 
 [[package]]
 name = "ebpf-user-macros"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f54e6f6de1bf6084aa6f6507db6993129f8e51c34ac506c3378f37ab90f5bd88"
+checksum = "59fd772f6e86d5ef2dfb4937e0c0826f087cbf61f8726cc200b07b588bb26a64"
 dependencies = [
  "quote",
  "syn",
@@ -1309,9 +1309,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.93"
+version = "0.2.94"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9385f66bf6105b241aa65a61cb923ef20efc665cb9f9bb50ac2f0c4b7f378d41"
+checksum = "18794a8ad5b29321f790b55d93dfba91e125cb1a9edbd4f8e3150acc771c1a5e"
 
 [[package]]
 name = "libloading"

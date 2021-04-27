@@ -90,6 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     history.push(event.event);
                 },
             }
+            //log::info!("{:?}", event.stack);
             //history.push(event.event);
         }
     }
