@@ -87,7 +87,7 @@ impl Serialize for Hex64 {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EventKind {
     KFree(KFree),
@@ -106,6 +106,7 @@ pub enum EventKind {
     RssStat(RssStat),
 }
 
+#[derive(Clone, PartialEq, Eq)]
 pub struct Stack {
     length: usize,
     ips: [Hex64; STACK_MAX_DEPTH],
@@ -203,7 +204,7 @@ impl Stack {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Event {
     pub header: CommonHeader,
     pub pid: u32,
@@ -216,6 +217,10 @@ impl RingBufferData for Event {
 
     fn from_rb_slice(slice: &[u8]) -> Result<Self, Self::Error> {
         use core::convert::TryFrom;
+
+        if slice.len() == 0x200 {
+            return Err(2);
+        }
 
         if slice.len() < 0x10 {
             return Err(0);

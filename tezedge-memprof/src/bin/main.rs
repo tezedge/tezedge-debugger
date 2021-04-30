@@ -4,7 +4,7 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{thread, time::Duration, collections::HashMap};
     use bpf_memprof::{Client, Event, EventKind};
-    use tezedge_memprof::{AtomicState, Reporter};
+    use tezedge_memprof::{AtomicState, Reporter, History, PageEvent};
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -16,25 +16,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ctrlc::set_handler(move || state.stop())?;
     }
 
-    {
+    let thread = {
         let mut state = Reporter::new(state.clone());
         thread::spawn(move || {
             let delay = Duration::from_secs(4);
-            while state.running() {
+            let mut cnt = 4;
+            loop {
+                if !state.running() {
+                    if cnt <= 0 {
+                        break;
+                    } else {
+                        cnt -= 1;
+                    }
+                }
                 thread::sleep(delay);
                 log::info!("{}", state.report(delay));
             }
-        });
-    }
+        })
+    };
 
-    let mut history = Vec::new();
+    let mut history = History::default();
     let mut alloc = HashMap::new();
 
     let (mut client, mut rb) = Client::new("/tmp/bpf-memprof.sock")?;
     client.send_command("dummy command")?;
+    let mut last = None::<Event>;
     while state.running() {
         let events = rb.read_blocking::<Event>(state.running_ref())?;
         for event in events {
+            if let Some(last) = &last {
+                if last.eq(&event) {
+                    log::warn!("repeat");
+                    continue;
+                }
+            }
+            last = Some(event.clone());
             match &event.event {
                 &EventKind::KFree(ref v) => {
                     match alloc.get(&v.ptr.0) {
@@ -68,7 +84,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     state.page_alloc(0x1000 << (v.order as u64));
                 },
                 &EventKind::PageAllocExtFrag(ref v) => {
-                    state.page_alloc(0x1000 << (v.alloc_order as u64));
+                    let _ = v;
+                    //state.page_alloc(0x1000 << (v.alloc_order as u64));
                 },
                 &EventKind::PageAllocZoneLocked(ref v) => {
                     state.page_alloc(0x1000 << (v.order as u64));
@@ -80,20 +97,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     state.page_free(0x1000);
                 },
                 &EventKind::PagePcpuDrain(ref v) => {
-                    state.page_free(0x1000 << (v.order as u64));
+                    let _ = v;
+                    //state.page_free(0x1000 << (v.order as u64));
                 },
                 &EventKind::PageFaultUser(_) => {
                     state.page_fault();
                 },
                 &EventKind::RssStat(ref v) => {
                     state.rss_stat(v.size, v.member);
-                    history.push(event.event);
                 },
             }
-            //log::info!("{:?}", event.stack);
-            //history.push(event.event);
+            if let Some(page_event) = PageEvent::try_from(event) {
+                history.push(page_event);
+            }
         }
     }
+
+    thread.join().unwrap();
 
     serde_json::to_writer(std::fs::File::create("target/report.json")?, &history)?;
     //bincode::serialize_into(std::fs::File::create("target/report.bin")?, &history)?;

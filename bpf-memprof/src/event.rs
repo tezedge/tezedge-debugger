@@ -6,7 +6,7 @@ use core::{convert::TryFrom, fmt};
 #[cfg(feature = "client")]
 use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Hex64(pub u64);
 
 impl fmt::Debug for Hex64 {
@@ -15,7 +15,7 @@ impl fmt::Debug for Hex64 {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Hex32(pub u32);
 
 impl fmt::Debug for Hex32 {
@@ -36,7 +36,7 @@ where
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommonHeader {
     ty: u16,
     flags: u8,
@@ -64,7 +64,7 @@ impl Pod for CommonHeader {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KFree {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -88,7 +88,7 @@ impl Pod for KFree {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KMAlloc {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -118,7 +118,7 @@ impl Pod for KMAlloc {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KMAllocNode {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -150,7 +150,7 @@ impl Pod for KMAllocNode {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheAlloc {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -180,7 +180,7 @@ impl Pod for CacheAlloc {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheAllocNode {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -212,7 +212,7 @@ impl Pod for CacheAllocNode {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheFree {
     call_site: Hex64,
     pub ptr: Hex64,
@@ -236,9 +236,9 @@ impl Pod for CacheFree {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageAlloc {
-    pfn: Hex64,
+    pub pfn: Hex64,
     pub order: u32,
     gfp_flags: Hex32,
     migrate_ty: i32,
@@ -264,9 +264,9 @@ impl Pod for PageAlloc {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageAllocExtFrag {
-    pfn: Hex64,
+    pub pfn: Hex64,
     pub alloc_order: u32,
     pub fallback_order: u32,
     alloc_migrate_ty: i32,
@@ -296,9 +296,9 @@ impl Pod for PageAllocExtFrag {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageAllocZoneLocked {
-    pfn: Hex64,
+    pub pfn: Hex64,
     pub order: u32,
     migrate_ty: i32,
 }
@@ -322,9 +322,9 @@ impl Pod for PageAllocZoneLocked {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageFree {
-    pfn: Hex64,
+    pub pfn: Hex64,
     pub order: u32,
 }
 
@@ -346,9 +346,9 @@ impl Pod for PageFree {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageFreeBatched {
-    pfn: Hex64,
+    pub pfn: Hex64,
 }
 
 impl Pod for PageFreeBatched {
@@ -368,9 +368,9 @@ impl Pod for PageFreeBatched {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PagePcpuDrain {
-    pfn: Hex64,
+    pub pfn: Hex64,
     pub order: u32,
     migrate_ty: i32,
 }
@@ -394,7 +394,7 @@ impl Pod for PagePcpuDrain {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RssStat {
     pub id: u32,
     curr: u32,
@@ -422,7 +422,7 @@ impl Pod for RssStat {
 
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageFaultUser {
     address: Hex64,
     ip: Hex64,

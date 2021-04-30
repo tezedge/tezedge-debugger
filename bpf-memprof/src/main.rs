@@ -18,6 +18,10 @@ pub struct App {
     pub pid: ebpf::HashMapRef<4, 4>,
     #[ringbuf(size = 0x40000000)]
     pub event_queue: ebpf::RingBufferRef,
+    #[prog("tracepoint/syscalls/sys_enter_execve")]
+    pub execve: ebpf::ProgRef,
+    #[prog("tracepoint/syscalls/sys_enter_execveat")]
+    pub execveat: ebpf::ProgRef,
     #[prog("tracepoint/kmem/kfree")]
     pub kfree: ebpf::ProgRef,
     #[prog("tracepoint/kmem/kmalloc")]
@@ -76,7 +80,7 @@ impl App {
                 Ok(pid)
             }
         } else {
-            let mut comm = [0; 16];
+            /*let mut comm = [0; 16];
 
             let _ = unsafe { helpers::get_current_comm(&mut comm as *mut _ as _, 16) };
             let pass = true
@@ -97,8 +101,75 @@ impl App {
                 Ok(pid)
             } else {
                 Err(0)
+            }*/
+            Err(0)
+        }
+    }
+
+    #[inline(always)]
+    fn check_filename(&mut self, filename_ptr: *const u8) -> Result<(), i32> {
+        use core::{str, slice};
+
+        let key = 0u32.to_ne_bytes();
+        if let Some(&pid) = self.pid.get(&key) {
+            let pid = u32::from_ne_bytes(pid);
+            if pid != 0 {
+                return Ok(());
+            } else {
+                self.pid.remove(&key)?;
             }
         }
+
+        if filename_ptr.is_null() {
+            return Err(0);
+        }
+
+        let mut buffer = self.event_queue.reserve(0x200)?;
+        let c = unsafe {
+            helpers::probe_read_user_str(
+                buffer.as_mut().as_mut_ptr() as _,
+                0x200,
+                filename_ptr as _,
+            )
+        };
+
+        let pos = if c < 11 || c > 0x200 {
+            buffer.discard();
+            return Err(c as _);
+        } else {
+            c as usize - 11
+        };
+
+        let buffer_ref = &buffer.as_ref()[pos..];
+        let pass = true
+            && buffer_ref[0] == 'l' as u8
+            && buffer_ref[1] == 'i' as u8
+            && buffer_ref[2] == 'g' as u8
+            && buffer_ref[3] == 'h' as u8
+            && buffer_ref[4] == 't' as u8
+            && buffer_ref[5] == '-' as u8
+            && buffer_ref[6] == 'n' as u8
+            && buffer_ref[7] == 'o' as u8
+            && buffer_ref[8] == 'd' as u8
+            && buffer_ref[9] == 'e' as u8;
+        buffer.discard();
+
+        if pass {
+            let x = unsafe { helpers::get_current_pid_tgid() };
+            let pid = (x >> 32) as u32;
+            self.pid.insert(key, pid.to_ne_bytes())?;
+        }
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn execve(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.check_filename(ctx.read_here::<*const u8>(0x10))
+    }
+
+    #[inline(always)]
+    pub fn execveat(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.check_filename(ctx.read_here::<*const u8>(0x18))
     }
 
     // /sys/kernel/debug/tracing/events/kmem/mm_page_alloc/format
@@ -125,7 +196,7 @@ impl App {
                 Ok(())
             },
             Err(e) => {
-                data.discard();
+                data.submit();
                 Err(e)
             },
         }
@@ -213,7 +284,7 @@ fn main() {
     };
     use tracing::Level;
     use passfd::FdPassingExt;
-    
+
     sudo::escalate_if_needed().expect("failed to obtain superuser permission");
     ctrlc::set_handler(move || process::exit(0)).expect("failed to setup ctrl+c handler");
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
