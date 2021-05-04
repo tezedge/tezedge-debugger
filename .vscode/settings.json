@@ -18,6 +18,7 @@
         "compat",
         "concat",
         "curr",
+        "ebpf",
         "entrypoint",
         "execve",
         "execveat",

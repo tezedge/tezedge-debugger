@@ -67,9 +67,21 @@ use {
 #[cfg(feature = "kern")]
 impl App {
     #[inline(always)]
-    fn check_name(&mut self) -> Result<u32, i32> {
-        let key = 0u32.to_ne_bytes();
-        if let Some(&pid_bytes) = self.pid.get(&key) {
+    fn check_no_pid(&self) -> Result<(), i32> {
+        if let Some(&pid_bytes) = self.pid.get(&0u32.to_ne_bytes()) {
+            let target_pid = u32::from_ne_bytes(pid_bytes);
+
+            if target_pid != 0 {
+                return Err(0);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn check_pid(&self) -> Result<u32, i32> {
+        if let Some(&pid_bytes) = self.pid.get(&0u32.to_ne_bytes()) {
             let target_pid = u32::from_ne_bytes(pid_bytes);
 
             let x = unsafe { helpers::get_current_pid_tgid() };
@@ -80,46 +92,12 @@ impl App {
                 Ok(pid)
             }
         } else {
-            /*let mut comm = [0; 16];
-
-            let _ = unsafe { helpers::get_current_comm(&mut comm as *mut _ as _, 16) };
-            let pass = true
-                && comm[0] == 'l' as i8
-                && comm[1] == 'i' as i8
-                && comm[2] == 'g' as i8
-                && comm[3] == 'h' as i8
-                && comm[4] == 't' as i8
-                && comm[5] == '-' as i8
-                && comm[6] == 'n' as i8
-                && comm[7] == 'o' as i8
-                && comm[8] == 'd' as i8
-                && comm[9] == 'e' as i8;
-            if pass {
-                let x = unsafe { helpers::get_current_pid_tgid() };
-                let pid = (x >> 32) as u32;
-                self.pid.insert(key, pid.to_ne_bytes())?;
-                Ok(pid)
-            } else {
-                Err(0)
-            }*/
             Err(0)
         }
     }
 
     #[inline(always)]
     fn check_filename(&mut self, filename_ptr: *const u8) -> Result<(), i32> {
-        use core::{str, slice};
-
-        let key = 0u32.to_ne_bytes();
-        if let Some(&pid) = self.pid.get(&key) {
-            let pid = u32::from_ne_bytes(pid);
-            if pid != 0 {
-                return Ok(());
-            } else {
-                self.pid.remove(&key)?;
-            }
-        }
-
         if filename_ptr.is_null() {
             return Err(0);
         }
@@ -157,18 +135,22 @@ impl App {
         if pass {
             let x = unsafe { helpers::get_current_pid_tgid() };
             let pid = (x >> 32) as u32;
-            self.pid.insert(key, pid.to_ne_bytes())?;
+            self.pid.insert(0u32.to_ne_bytes(), pid.to_ne_bytes())?;
         }
         Ok(())
     }
 
     #[inline(always)]
     pub fn execve(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.check_no_pid()?;
+
         self.check_filename(ctx.read_here::<*const u8>(0x10))
     }
 
     #[inline(always)]
     pub fn execveat(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.check_no_pid()?;
+
         self.check_filename(ctx.read_here::<*const u8>(0x18))
     }
 
@@ -178,7 +160,7 @@ impl App {
     where
         T: Pod,
     {
-        let pid = self.check_name()?;
+        let pid = self.check_pid()?;
 
         let mut data = self.event_queue.reserve(0x10 + T::SIZE + 0x08 + (8 * STACK_MAX_DEPTH))?;
         let mut data_mut = data.as_mut();
