@@ -178,7 +178,7 @@ impl App {
                 Ok(())
             },
             Err(e) => {
-                data.submit();
+                data.discard();
                 Err(e)
             },
         }

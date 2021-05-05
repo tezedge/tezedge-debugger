@@ -1,4 +1,4 @@
-use std::vec::IntoIter;
+use std::{collections::HashMap, slice::Iter, vec::IntoIter};
 use serde::{Serialize, Deserialize};
 use bpf_memprof::{Event, EventKind, Hex64, Stack};
 
@@ -61,6 +61,14 @@ pub struct History {
 }
 
 impl History {
+    pub fn len(&self) -> usize {
+        self.v.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn push(&mut self, event: PageEvent) {
         self.v.push(event)
     }
@@ -83,6 +91,10 @@ impl History {
 
         log::info!("reorder: {}", k);
     }
+
+    pub fn iter(&self) -> Iter<'_, PageEvent> {
+        self.v.iter()
+    }
 }
 
 impl IntoIterator for History {
@@ -91,5 +103,61 @@ impl IntoIterator for History {
 
     fn into_iter(self) -> Self::IntoIter {
         self.v.into_iter()
+    }
+}
+
+#[derive(Serialize)]
+pub struct Frame {
+    value: i64,
+    frames: HashMap<Hex64, Frame>,
+    #[serde(skip)]
+    allocations: Vec<Allocation>,
+}
+
+#[allow(dead_code)]
+#[derive(Serialize)]
+pub struct Allocation {
+    pfn: Hex64,
+    pages: i32,
+    flavour: u32,
+}
+
+impl Allocation {
+    fn new(event: &PageEvent) -> Self {
+        Allocation {
+            pfn: event.pfn,
+            pages: event.pages,
+            flavour: event.flavour,
+        }
+    }
+}
+
+impl Frame {
+    pub fn empty() -> Self {
+        Frame {
+            frames: HashMap::new(),
+            allocations: Vec::new(),
+            value: 0,
+        }
+    }
+
+    pub fn insert(&mut self, event: &PageEvent) {
+        let mut node = self;
+        for stack_frame in event.stack.ips() {
+            node = node.frames.entry(*stack_frame).or_insert(Frame::empty());
+        }
+        node.allocations.push(Allocation::new(event));
+    }
+
+    fn sum(&self) -> i64 {
+        self.allocations.iter().map(|a| a.pages as i64).sum::<i64>()
+    }
+
+    pub fn strip(&mut self) {
+        self.frames.values_mut().for_each(Frame::strip);
+        self.frames.retain(|_, v| {
+            v.value = v.sum() * 4;
+            !(v.value == 0 && v.frames.is_empty())
+        });
     }
 }

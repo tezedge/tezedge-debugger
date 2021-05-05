@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{fs::File, io::Write, collections::HashMap};
     //use bincode::Options;
     use bpf_memprof::Hex64;
-    use tezedge_memprof::{History, PageEvent};
+    use tezedge_memprof::{History, PageEvent, Frame};
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -18,16 +18,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut history = serde_json::from_reader::<_, History>(File::open("target/report.json")?)?;
-    //let opts = bincode::DefaultOptions::default().with_native_endian();
-    //let mut history = opts.deserialize_from::<_, History>(File::open("target/report.bin")?)?;
+    history.reorder(1);
+
     let mut anomalies = File::create("target/anomalies.log")?;
     let mut state = HashMap::new();
     let mut dna = 0;
     let mut dnf = 0;
     let mut total_a = 0;
     let mut total_f = 0;
-    history.reorder(2);
-    for PageEvent { pfn, pages, stack, flavour } in history {
+    for &PageEvent { pfn, pages, ref stack, flavour } in history.iter() {
         if flavour != 0 && flavour != 1 && flavour != 3 && flavour != 4 {
             continue;
         }
@@ -53,6 +52,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     log::info!("does not alloc = {}, does not free = {}, total free = {}, total alloc = {}", -dna, dnf, -total_f, total_a);
+
+    let mut frame = Frame::empty();
+    for event in history {
+        let flavour = event.flavour;
+        if flavour != 0 && flavour != 1 && flavour != 3 && flavour != 4 {
+            continue;
+        }
+        frame.insert(&event);
+    }
+    frame.strip();
+    serde_json::to_writer(File::create("target/tree.json")?, &frame)?;
 
     Ok(())
 }

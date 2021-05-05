@@ -6,7 +6,7 @@ use core::{convert::TryFrom, fmt};
 #[cfg(feature = "client")]
 use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Hex64(pub u64);
 
 impl fmt::Debug for Hex64 {

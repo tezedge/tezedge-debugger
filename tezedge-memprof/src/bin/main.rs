@@ -40,17 +40,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (mut client, mut rb) = Client::new("/tmp/bpf-memprof.sock")?;
     client.send_command("dummy command")?;
-    let mut last = None::<Event>;
+    let mut last = None::<EventKind>;
     while state.running() {
         let events = rb.read_blocking::<Event>(state.running_ref())?;
         for event in events {
             if let Some(last) = &last {
-                if last.eq(&event) {
-                    log::warn!("repeat");
+                if last.eq(&event.event) {
+                    log::debug!("repeat");
                     continue;
                 }
             }
-            last = Some(event.clone());
+            last = Some(event.event.clone());
             match &event.event {
                 &EventKind::KFree(ref v) => {
                     match alloc.get(&v.ptr.0) {
