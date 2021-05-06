@@ -1,4 +1,5 @@
-use std::{fmt, sync::{Arc, atomic::{Ordering, AtomicBool, AtomicU64}}, time::Duration};
+use std::{collections::HashMap, fmt, sync::{Arc, atomic::{Ordering, AtomicBool, AtomicU64}}, time::Duration};
+use bpf_memprof::EventKind;
 
 #[derive(Clone, Default, Debug)]
 struct Counters<T> {
@@ -164,12 +165,70 @@ impl AtomicState {
         self.running.load(Ordering::Relaxed)
     }
 
-    pub fn slab_unknown_alloc(&self, bytes: u64) {
+    pub fn process_event(&self, allocations: &mut HashMap<u64, u64>, event: &EventKind) {
+        match event {
+            &EventKind::KFree(ref v) => {
+                match allocations.get(&v.ptr.0) {
+                    Some(&len) => self.slab_unknown_free(len, true),
+                    None => self.slab_unknown_free(0, false),
+                }
+            },
+            &EventKind::KMAlloc(ref v) => {
+                allocations.insert(v.ptr.0, v.bytes_alloc.0);
+                self.slab_unknown_alloc(v.bytes_alloc.0);
+            },
+            &EventKind::KMAllocNode(ref v) => {
+                allocations.insert(v.ptr.0, v.bytes_alloc.0);
+                self.slab_unknown_alloc(v.bytes_alloc.0);
+            },
+            &EventKind::CacheAlloc(ref v) => {
+                allocations.insert(v.ptr.0, v.bytes_alloc.0);
+                self.slab_known_alloc(v.bytes_alloc.0);
+            },
+            &EventKind::CacheAllocNode(ref v) => {
+                allocations.insert(v.ptr.0, v.bytes_alloc.0);
+                self.slab_known_alloc(v.bytes_alloc.0);
+            },
+            &EventKind::CacheFree(ref v) => {
+                match allocations.get(&v.ptr.0) {
+                    Some(&len) => self.slab_known_free(len, true),
+                    None => self.slab_known_free(0, false),
+                }
+            },
+            &EventKind::PageAlloc(ref v) => {
+                if v.pfn.0 != 0 {
+                    self.page_alloc(0x1000 << (v.order as u64));
+                }
+            },
+            &EventKind::PageFree(ref v) => {
+                if v.pfn.0 != 0 {
+                    self.page_free(0x1000 << (v.order as u64));
+                }
+            },
+            &EventKind::PageFreeBatched(ref v) => {
+                //if v.pfn.0 != 0 {
+                //    self.page_free(0x1000);
+                //}
+                let _ = v;
+            },
+            &EventKind::RssStat(ref v) => {
+                self.rss_stat(v.size, v.member);
+            },
+            &EventKind::PercpuAlloc(ref v) => {
+                let _ = v;
+            },
+            &EventKind::PercpuFree(ref v) => {
+                let _ = v;
+            },
+        }
+    }
+
+    fn slab_unknown_alloc(&self, bytes: u64) {
         self.counters.slab_unknown_alloc_count.fetch_add(1, Ordering::SeqCst);
         self.counters.slab_unknown_bytes.fetch_add(bytes, Ordering::SeqCst);
     }
 
-    pub fn slab_unknown_free(&self, bytes: u64, success: bool) {
+    fn slab_unknown_free(&self, bytes: u64, success: bool) {
         self.counters.slab_unknown_bytes.fetch_sub(bytes, Ordering::SeqCst);
         let ct = if success {
             &self.counters.slab_unknown_free_count
@@ -179,12 +238,12 @@ impl AtomicState {
         ct.fetch_add(1, Ordering::SeqCst);
     }
 
-    pub fn slab_known_alloc(&self, bytes: u64) {
+    fn slab_known_alloc(&self, bytes: u64) {
         self.counters.slab_known_alloc_count.fetch_add(1, Ordering::SeqCst);
         self.counters.slab_known_bytes.fetch_add(bytes, Ordering::SeqCst);
     }
 
-    pub fn slab_known_free(&self, bytes: u64, success: bool) {
+    fn slab_known_free(&self, bytes: u64, success: bool) {
         self.counters.slab_known_bytes.fetch_sub(bytes, Ordering::SeqCst);
         let ct = if success {
             &self.counters.slab_known_free_count
@@ -194,17 +253,17 @@ impl AtomicState {
         ct.fetch_add(1, Ordering::SeqCst);
     }
 
-    pub fn page_alloc(&self, bytes: u64) {
+    fn page_alloc(&self, bytes: u64) {
         self.counters.page_alloc_count.fetch_add(1, Ordering::SeqCst);
         self.counters.page_bytes.fetch_add(bytes, Ordering::SeqCst);
     }
 
-    pub fn page_free(&self, bytes: u64) {
+    fn page_free(&self, bytes: u64) {
         self.counters.page_bytes.fetch_sub(bytes, Ordering::SeqCst);
         self.counters.page_free_count.fetch_add(1, Ordering::SeqCst);
     }
 
-    pub fn rss_stat(&self, bytes: i64, member: i32) {
+    fn rss_stat(&self, bytes: i64, member: i32) {
         self.counters.rss_stat_count.fetch_add(1, Ordering::SeqCst);
         let ct = match member {
             0 => &self.counters.rss_stat_file_bytes,

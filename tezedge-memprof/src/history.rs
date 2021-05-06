@@ -1,145 +1,155 @@
-use std::{collections::HashMap, slice::Iter, vec::IntoIter};
-use serde::{Serialize, Deserialize};
-use bpf_memprof::{Event, EventKind, Hex64, Stack};
+use std::{collections::HashMap, ops::Range, time::{SystemTime, Duration}, fmt};
+use serde::{Serialize, ser};
+use bpf_memprof::{Hex64, Stack};
 
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
-pub struct PageEvent {
-    pub pfn: Hex64,
-    pub pages: i32,
-    pub stack: Stack,
-    pub flavour: u32,
-}
-
-impl PageEvent {
-    pub fn try_from(e: Event) -> Option<Self> {
-        let Event { event, stack, .. } = e;
-        match event {
-            EventKind::PageAlloc(v) if v.pfn.0 != 0 => Some(PageEvent {
-                pfn: v.pfn,
-                pages: (1 << v.order) as i32,
-                stack,
-                flavour: 0,
-            }),
-            EventKind::PageFree(v) if v.pfn.0 != 0 => Some(PageEvent {
-                pfn: v.pfn,
-                pages: -((1 << v.order) as i32),
-                stack,
-                flavour: 3,
-            }),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Default, Serialize, Deserialize)]
-pub struct History {
-    v: Vec<PageEvent>,
-}
-
-impl History {
-    pub fn len(&self) -> usize {
-        self.v.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn push(&mut self, event: PageEvent) {
-        self.v.push(event)
-    }
-
-    pub fn reorder(&mut self, distance: usize) {
-        if self.v.is_empty() || distance == 0 {
-            return;
-        }
-
-        let mut k = 0;
-        let l = self.v.len();
-        for i in 0..(l - 1) {
-            for j in (i + 1)..(i + 1 + distance).min(l) {
-                if self.v[i].pfn == self.v[j].pfn && self.v[i].pages < 0 && self.v[i].pages + self.v[j].pages == 0 {
-                    self.v.swap(i, j);
-                    k += 1;
-                }
-            }
-        }
-
-        log::info!("reorder: {}", k);
-    }
-
-    pub fn iter(&self) -> Iter<'_, PageEvent> {
-        self.v.iter()
-    }
-}
-
-impl IntoIterator for History {
-    type IntoIter = IntoIter<PageEvent>;
-    type Item = PageEvent;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.v.into_iter()
-    }
-}
-
-#[derive(Serialize)]
-pub struct Frame {
-    value: i64,
-    frames: HashMap<Hex64, Frame>,
-    #[serde(skip)]
-    allocations: Vec<Allocation>,
-}
-
-#[allow(dead_code)]
-#[derive(Serialize)]
-pub struct Allocation {
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub struct Page {
     pfn: Hex64,
-    pages: i32,
-    flavour: u32,
+    order: u32,
 }
 
-impl Allocation {
-    fn new(event: &PageEvent) -> Self {
-        Allocation {
-            pfn: event.pfn,
-            pages: event.pages,
-            flavour: event.flavour,
+impl fmt::Display for Page {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}-{}", self.pfn, self.order)
+    }
+}
+
+impl Serialize for Page {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl Page {
+    pub fn new(pfn: Hex64, order: u32) -> Self {
+        Page { pfn, order }
+    }
+}
+
+#[derive(Serialize)]
+pub enum PageError {
+    DoubleFree(Hex64),
+    FreeWithoutAlloc(Hex64),
+    DoubleAlloc(Hex64),
+}
+
+#[derive(Default, Serialize)]
+pub struct PageHistory {
+    errors: Vec<PageError>,
+    inner: HashMap<Page, Vec<Range<u64>>>,
+    frame: Frame,
+}
+
+impl PageHistory {
+    pub fn process(&mut self, page: Page, stack: Option<&Stack>) {
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or(Duration::default())
+            .as_millis() as u64;
+
+        let pfn = page.pfn;
+        let e = self.inner.entry(page).or_default();
+        let new = match (e.last_mut(), stack.is_some()) {
+            (Some(range), false) if range.end == u64::MAX => {
+                range.end = timestamp;
+                None
+            },
+            (Some(range), false) => {
+                self.errors.push(PageError::DoubleFree(pfn));
+                range.end = timestamp;
+                None
+            },
+            (None, false) => {
+                self.errors.push(PageError::FreeWithoutAlloc(pfn));
+                Some(0..timestamp)
+            },
+            (Some(range), true) if range.end == u64::MAX => {
+                self.errors.push(PageError::DoubleAlloc(pfn));
+                None
+            },
+            (_, true) => {
+                Some(timestamp..u64::MAX)
+            },
+        };
+        if let Some(new) = new {
+            e.push(new);
+        }
+
+        if let Some(stack) = stack {
+            self.frame.insert(stack, page);
         }
     }
+
+    pub fn report<F>(&self, filter: &F) -> FrameReport
+    where
+        F: Fn(&[Range<u64>]) -> bool,
+    {
+        self.frame.report(&self.inner, filter)
+    }
+}
+
+#[derive(Default, Serialize)]
+struct Frame {
+    pages: Vec<Page>,
+    frames: HashMap<Hex64, Frame>,
 }
 
 impl Frame {
-    pub fn empty() -> Self {
-        Frame {
-            frames: HashMap::new(),
-            allocations: Vec::new(),
-            value: 0,
-        }
-    }
-
-    pub fn insert(&mut self, event: &PageEvent) {
+    pub fn insert(&mut self, stack: &Stack, page: Page) {
         let mut node = self;
-        for stack_frame in event.stack.ips() {
-            node = node.frames.entry(*stack_frame).or_insert(Frame::empty());
+        for stack_frame in stack.ips() {
+            node = node.frames.entry(*stack_frame).or_insert(Frame::default());
         }
-        node.allocations.push(Allocation::new(event));
+        node.pages.push(page);
     }
 
-    fn sum(&self) -> i64 {
-        self.allocations.iter().map(|a| a.pages as i64).sum::<i64>()
-    }
+    pub fn report<F>(&self, history: &HashMap<Page, Vec<Range<u64>>>, filter: &F) -> FrameReport
+    where
+        F: Fn(&[Range<u64>]) -> bool,
+    {
+        let mut allocated_here = 0; // kilobytes
+        for page in &self.pages {
+            let ranges = history.get(page).unwrap();
+            if filter(ranges) {
+                allocated_here += 1 << (page.order + 2);
+            }
+        }
 
-    fn total_sum(&self) -> (i64, i64) {
-        let s = self.sum();
-        (s, s + self.frames.iter().map(|(_, v)| v.total_sum().1).sum::<i64>())
-    }
+        let mut frames = HashMap::new();
+        for (k, v) in self.frames.iter() {
+            let r = v.report(history, filter);
+            if r.value != 0 {
+                allocated_here += r.value;
+                frames.insert(format!("{:?}", k), r);
+            }
+        }
 
-    pub fn strip(&mut self) {
-        self.frames.values_mut().for_each(Frame::strip);
-        self.frames.retain(|_, v| {
-            let (s, t) = v.total_sum();
-            v.value = t;
-            !(s == 0 && v.frames.is_empty())
-        });
+        FrameReport {
+            value: allocated_here,
+            frames,
+        }
+    }
+}
+
+#[derive(Default, Serialize)]
+pub struct FrameReport {
+    value: u64,
+    frames: HashMap<String, FrameReport>,
+}
+
+// filters
+
+pub struct Filter {
+    pub time_range: Range<u64>,
+}
+
+impl Filter {
+    pub fn not_deallocated_in(&self, history: &[Range<u64>]) -> bool {
+        history.iter()
+            .find(|r| self.time_range.contains(&r.start) && r.end > self.time_range.end)
+            .is_some()
     }
 }

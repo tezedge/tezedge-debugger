@@ -18,6 +18,7 @@
         "compat",
         "concat",
         "curr",
+        "deallocated",
         "ebpf",
         "entrypoint",
         "execve",

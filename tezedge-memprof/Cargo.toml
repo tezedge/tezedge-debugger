@@ -5,12 +5,8 @@ authors = ["Vladislav Melnik <vladislav.melnik@viablesystems.io>"]
 edition = "2018"
 
 [[bin]]
-name = "tezedge-memprof-record"
+name = "tezedge-memprof"
 path = "src/bin/main.rs"
-
-[[bin]]
-name = "tezedge-memprof-analyze"
-path = "src/bin/analyze.rs"
 
 [dependencies]
 log = "0.4"

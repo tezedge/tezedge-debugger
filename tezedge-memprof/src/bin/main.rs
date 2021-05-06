@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use std::{thread, time::Duration, collections::HashMap};
+    use std::{thread, time::Duration, collections::HashMap, sync::{Arc, Mutex}, fs::File};
     use bpf_memprof::{Client, Event, EventKind};
-    use tezedge_memprof::{AtomicState, Reporter, History, PageEvent};
+    use tezedge_memprof::{AtomicState, Reporter, Page, PageHistory};
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -35,12 +35,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     };
 
-    let mut history = History::default();
-    let mut alloc = HashMap::new();
+    let history = Arc::new(Mutex::new(PageHistory::default()));
+    let mut allocations = HashMap::new();
+    let mut last = None::<EventKind>;
 
     let (mut client, mut rb) = Client::new("/tmp/bpf-memprof.sock")?;
     client.send_command("dummy command")?;
-    let mut last = None::<EventKind>;
     while state.running() {
         let events = rb.read_blocking::<Event>(state.running_ref())?;
         for event in events {
@@ -50,72 +50,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     continue;
                 }
             }
-            last = Some(event.event.clone());
+            state.process_event(&mut allocations, &event.event);
             match &event.event {
-                &EventKind::KFree(ref v) => {
-                    match alloc.get(&v.ptr.0) {
-                        Some(&len) => state.slab_unknown_free(len, true),
-                        None => state.slab_unknown_free(0, false),
-                    }
-                },
-                &EventKind::KMAlloc(ref v) => {
-                    alloc.insert(v.ptr.0, v.bytes_alloc.0);
-                    state.slab_unknown_alloc(v.bytes_alloc.0);
-                },
-                &EventKind::KMAllocNode(ref v) => {
-                    alloc.insert(v.ptr.0, v.bytes_alloc.0);
-                    state.slab_unknown_alloc(v.bytes_alloc.0);
-                },
-                &EventKind::CacheAlloc(ref v) => {
-                    alloc.insert(v.ptr.0, v.bytes_alloc.0);
-                    state.slab_known_alloc(v.bytes_alloc.0);
-                },
-                &EventKind::CacheAllocNode(ref v) => {
-                    alloc.insert(v.ptr.0, v.bytes_alloc.0);
-                    state.slab_known_alloc(v.bytes_alloc.0);
-                },
-                &EventKind::CacheFree(ref v) => {
-                    match alloc.get(&v.ptr.0) {
-                        Some(&len) => state.slab_known_free(len, true),
-                        None => state.slab_known_free(0, false),
-                    }
-                },
-                &EventKind::PageAlloc(ref v) => {
-                    if v.pfn.0 != 0 {
-                        state.page_alloc(0x1000 << (v.order as u64));
-                    }
-                },
-                &EventKind::PageFree(ref v) => {
-                    if v.pfn.0 != 0 {
-                        state.page_free(0x1000 << (v.order as u64));
-                    }
-                },
-                &EventKind::PageFreeBatched(ref v) => {
-                    //if v.pfn.0 != 0 {
-                    //    state.page_free(0x1000);
-                    //}
-                    let _ = v;
-                },
-                &EventKind::RssStat(ref v) => {
-                    state.rss_stat(v.size, v.member);
-                },
-                &EventKind::PercpuAlloc(ref v) => {
-                    let _ = v;
-                },
-                &EventKind::PercpuFree(ref v) => {
-                    let _ = v;
-                },
+                &EventKind::PageAlloc(ref v) if v.pfn.0 != 0 =>
+                    history.lock().unwrap().process(Page::new(v.pfn, v.order), Some(&event.stack)),
+                &EventKind::PageFree(ref v) if v.pfn.0 != 0 =>
+                    history.lock().unwrap().process(Page::new(v.pfn, v.order), None),
+                _ => (),
             }
-            if let Some(page_event) = PageEvent::try_from(event) {
-                history.push(page_event);
-            }
+            last = Some(event.event);
         }
     }
 
     thread.join().unwrap();
 
-    serde_json::to_writer(std::fs::File::create("target/report.json")?, &history)?;
-    //bincode::serialize_into(std::fs::File::create("target/report.bin")?, &history)?;
+    let history = history.lock().unwrap();
+    serde_json::to_writer(File::create("target/history.json")?, &*history)?;
+    serde_json::to_writer(File::create("target/tree.json")?, &history.report(&|_| true))?;
 
     Ok(())
 }
