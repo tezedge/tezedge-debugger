@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use std::{thread, time::Duration, collections::HashMap, sync::{Arc, Mutex}, fs::File};
+    use std::{thread, time::Duration, collections::HashMap, sync::{Arc, Mutex}};
     use bpf_memprof::{Client, Event, EventKind};
     use tezedge_memprof::{AtomicState, Reporter, Page, PageHistory};
 
@@ -36,6 +36,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let history = Arc::new(Mutex::new(PageHistory::default()));
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let server = runtime.spawn(warp::serve(server::routes(history.clone())).run(([0, 0, 0, 0], 17832)));
+
     let mut allocations = HashMap::new();
     let mut last = None::<EventKind>;
 
@@ -64,9 +68,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     thread.join().unwrap();
 
-    let history = history.lock().unwrap();
-    serde_json::to_writer(File::create("target/history.json")?, &*history)?;
-    serde_json::to_writer(File::create("target/tree.json")?, &history.report(&|_| true))?;
+    //let history = history.lock().unwrap();
+    //serde_json::to_writer(std::fs::File::create("target/history.json")?, &*history)?;
+
+    let _ = (server, runtime);
 
     Ok(())
+}
+
+mod server {
+    use std::sync::{Arc, Mutex};
+    use warp::{
+        Filter, Rejection, Reply,
+        reply::{WithStatus, Json, self},
+        http::StatusCode,
+    };
+    use tezedge_memprof::PageHistory;
+
+    pub fn routes(
+        history: Arc<Mutex<PageHistory>>,
+    ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static {
+        use warp::reply::with;
+    
+        warp::get()
+            .and(
+                tree(history)
+            )
+            .with(with::header("Content-Type", "application/json"))
+            .with(with::header("Access-Control-Allow-Origin", "*"))
+    }
+
+    fn tree(
+        history: Arc<Mutex<PageHistory>>,
+    ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
+        warp::path!("v1" / "tree")
+            .and(warp::query::query())
+            .map(move |()| -> WithStatus<Json> {
+                let report = history.lock()
+                    .unwrap()
+                    .report(&|ranges| ranges.last().unwrap_or(&(0..0)).end == u64::MAX);
+                reply::with_status(reply::json(&report), StatusCode::OK)
+            })
+    }
 }

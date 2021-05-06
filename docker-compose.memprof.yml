@@ -1,0 +1,34 @@
+version: "3"
+
+services:
+
+  memprof:
+    image: simplestakingcom/tezedge-memprof:latest
+    build:
+      context: .
+      dockerfile: memprof.dockerfile
+    privileged: true
+    volumes:
+      - "/sys/kernel/debug:/sys/kernel/debug:rw"
+    ports:
+      - "17832:17832"
+
+  tezedge-node:
+    depends_on:
+      - memprof
+    image: simplestakingcom/tezedge:latest
+    command: ["--network", "mainnet", "--actions-store-backend", "file"]
+    #init: true
+    logging:
+      # Produce syslogs instead of terminal logs
+      driver: "syslog"
+      options:
+        # Send the logs to syslog (UDP only) server (running on debugger)
+        syslog-address: "udp://0.0.0.0:10000"  # Port must match debugger syslog port in 'ports' section
+        # Always in same RFC 5424 format (with microseconds precision)
+        syslog-format: "rfc5424micro"
+    ports:
+      - "4927:4927"       # node WS port (required only for tezedge)
+      - "9732:9732"       # node P2P port
+      - "18732:18732"     # node RPC port
+      - "3030:3030"       # sandbox launcher port

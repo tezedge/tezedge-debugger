@@ -116,14 +116,13 @@ impl fmt::Display for Report {
         let _diff = c.diff(&self.last_counters, self.elapsed_time);
         write!(
             f,
-            "usage: {:.2} kiB, rss: {:.2} (file: {:.2} + anon: {:.2} + swap: {:.2} + shared: {:.2}) kiB\n{:#?}\n",
+            "usage: {:.2} kiB, rss: {:.2} (file: {:.2} + anon: {:.2} + swap: {:.2} + shared: {:.2}) kiB]",
             mib,
             rss_file_mib + rss_anon_mib + rss_swap_mib + rss_shared_mib,
             rss_file_mib,
             rss_anon_mib,
             rss_swap_mib,
             rss_shared_mib,
-            &c,
         )
     }
 }

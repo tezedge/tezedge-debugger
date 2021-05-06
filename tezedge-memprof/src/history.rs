@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Range, time::{SystemTime, Duration}, fmt};
+use std::{collections::{HashMap, HashSet}, fmt, ops::Range, time::{SystemTime, Duration}};
 use serde::{Serialize, ser};
 use bpf_memprof::{Hex64, Stack};
 
@@ -93,7 +93,7 @@ impl PageHistory {
 
 #[derive(Default, Serialize)]
 struct Frame {
-    pages: Vec<Page>,
+    pages: HashSet<Page>,
     frames: HashMap<Hex64, Frame>,
 }
 
@@ -103,7 +103,7 @@ impl Frame {
         for stack_frame in stack.ips() {
             node = node.frames.entry(*stack_frame).or_insert(Frame::default());
         }
-        node.pages.push(page);
+        node.pages.insert(page);
     }
 
     pub fn report<F>(&self, history: &HashMap<Page, Vec<Range<u64>>>, filter: &F) -> FrameReport
