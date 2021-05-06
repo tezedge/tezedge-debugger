@@ -6,10 +6,10 @@
 mod event;
 pub use self::event::{Pod, Hex32, Hex64, CommonHeader};
 pub use self::event::{
-    KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageAllocExtFrag,
-    PageAllocZoneLocked, PageFree, PageFreeBatched, PagePcpuDrain,
+    KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageFree,
+    PageFreeBatched,
 };
-pub use self::event::{PageFaultUser, RssStat};
+pub use self::event::{RssStat, PercpuAlloc, PercpuFree};
 
 #[cfg(feature = "client")]
 mod client;

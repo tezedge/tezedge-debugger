@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut state = Reporter::new(state.clone());
         thread::spawn(move || {
             let delay = Duration::from_secs(4);
-            let mut cnt = 4;
+            let mut cnt = 2;
             loop {
                 if !state.running() {
                     if cnt <= 0 {
@@ -81,30 +81,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 },
                 &EventKind::PageAlloc(ref v) => {
-                    state.page_alloc(0x1000 << (v.order as u64));
-                },
-                &EventKind::PageAllocExtFrag(ref v) => {
-                    let _ = v;
-                    //state.page_alloc(0x1000 << (v.alloc_order as u64));
-                },
-                &EventKind::PageAllocZoneLocked(ref v) => {
-                    state.page_alloc(0x1000 << (v.order as u64));
+                    if v.pfn.0 != 0 {
+                        state.page_alloc(0x1000 << (v.order as u64));
+                    }
                 },
                 &EventKind::PageFree(ref v) => {
-                    state.page_free(0x1000 << (v.order as u64));
+                    if v.pfn.0 != 0 {
+                        state.page_free(0x1000 << (v.order as u64));
+                    }
                 },
-                &EventKind::PageFreeBatched(_) => {
-                    state.page_free(0x1000);
-                },
-                &EventKind::PagePcpuDrain(ref v) => {
+                &EventKind::PageFreeBatched(ref v) => {
+                    //if v.pfn.0 != 0 {
+                    //    state.page_free(0x1000);
+                    //}
                     let _ = v;
-                    //state.page_free(0x1000 << (v.order as u64));
-                },
-                &EventKind::PageFaultUser(_) => {
-                    state.page_fault();
                 },
                 &EventKind::RssStat(ref v) => {
                     state.rss_stat(v.size, v.member);
+                },
+                &EventKind::PercpuAlloc(ref v) => {
+                    let _ = v;
+                },
+                &EventKind::PercpuFree(ref v) => {
+                    let _ = v;
                 },
             }
             if let Some(page_event) = PageEvent::try_from(event) {

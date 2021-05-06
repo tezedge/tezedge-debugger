@@ -12,10 +12,10 @@ use bpf_ring_buffer::{RingBufferData, RingBufferSync};
 use serde::{Serialize, ser, Deserialize, de};
 use super::event::{Pod, Hex32, Hex64, CommonHeader};
 use super::event::{
-    KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageAllocExtFrag,
-    PageAllocZoneLocked, PageFree, PageFreeBatched, PagePcpuDrain,
+    KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageFree,
+    PageFreeBatched,
 };
-use super::{event::{PageFaultUser, RssStat}, STACK_MAX_DEPTH};
+use super::{event::{RssStat, PercpuAlloc, PercpuFree}, STACK_MAX_DEPTH};
 
 pub struct Client {
     stream: UnixStream,
@@ -97,13 +97,11 @@ pub enum EventKind {
     CacheAllocNode(CacheAllocNode),
     CacheFree(CacheFree),
     PageAlloc(PageAlloc),
-    PageAllocExtFrag(PageAllocExtFrag),
-    PageAllocZoneLocked(PageAllocZoneLocked),
     PageFree(PageFree),
     PageFreeBatched(PageFreeBatched),
-    PagePcpuDrain(PagePcpuDrain),
-    PageFaultUser(PageFaultUser),
     RssStat(RssStat),
+    PercpuAlloc(PercpuAlloc),
+    PercpuFree(PercpuFree),
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -252,26 +250,20 @@ impl RingBufferData for Event {
             x if Some(x) == PageAlloc::DISCRIMINANT => {
                 (EventKind::PageAlloc(PageAlloc::from_slice(slice).ok_or(0)?), PageAlloc::SIZE)
             },
-            x if Some(x) == PageAllocExtFrag::DISCRIMINANT => {
-                (EventKind::PageAllocExtFrag(PageAllocExtFrag::from_slice(slice).ok_or(0)?), PageAllocExtFrag::SIZE)
-            },
-            x if Some(x) == PageAllocZoneLocked::DISCRIMINANT => {
-                (EventKind::PageAllocZoneLocked(PageAllocZoneLocked::from_slice(slice).ok_or(0)?), PageAllocZoneLocked::SIZE)
-            },
             x if Some(x) == PageFree::DISCRIMINANT => {
                 (EventKind::PageFree(PageFree::from_slice(slice).ok_or(0)?), PageFree::SIZE)
             },
             x if Some(x) == PageFreeBatched::DISCRIMINANT => {
                 (EventKind::PageFreeBatched(PageFreeBatched::from_slice(slice).ok_or(0)?), PageFreeBatched::SIZE)
             },
-            x if Some(x) == PagePcpuDrain::DISCRIMINANT => {
-                (EventKind::PagePcpuDrain(PagePcpuDrain::from_slice(slice).ok_or(0)?), PagePcpuDrain::SIZE)
-            },
             x if Some(x) == RssStat::DISCRIMINANT => {
                 (EventKind::RssStat(RssStat::from_slice(slice).ok_or(0)?), RssStat::SIZE)
             },
-            x if Some(x) == PageFaultUser::DISCRIMINANT => {
-                (EventKind::PageFaultUser(PageFaultUser::from_slice(slice).ok_or(0)?), PageFaultUser::SIZE)
+            x if Some(x) == PercpuAlloc::DISCRIMINANT => {
+                (EventKind::PercpuAlloc(PercpuAlloc::from_slice(slice).ok_or(0)?), PercpuAlloc::SIZE)
+            },
+            x if Some(x) == PercpuFree::DISCRIMINANT => {
+                (EventKind::PercpuFree(PercpuFree::from_slice(slice).ok_or(0)?), PercpuFree::SIZE)
             },
             _ => return Err(1),
         };

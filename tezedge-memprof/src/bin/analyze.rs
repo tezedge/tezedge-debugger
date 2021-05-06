@@ -15,21 +15,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     enum Anomaly {
         DoesNotAlloc(Hex64),
         DoesNotFree(Hex64),
+        Leak(Hex64),
     }
 
     let mut history = serde_json::from_reader::<_, History>(File::open("target/report.json")?)?;
-    history.reorder(1);
+    history.reorder(0);
 
     let mut anomalies = File::create("target/anomalies.log")?;
     let mut state = HashMap::new();
     let mut dna = 0;
     let mut dnf = 0;
+    let mut leak = 0;
     let mut total_a = 0;
     let mut total_f = 0;
-    for &PageEvent { pfn, pages, ref stack, flavour } in history.iter() {
-        if flavour != 0 && flavour != 1 && flavour != 3 && flavour != 4 {
-            continue;
-        }
+    for &PageEvent { pfn, pages, ref stack, .. } in history.iter() {
         let _ = stack;
         if pages > 0 {
             total_a += pages;
@@ -46,19 +45,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     for (pfn, pages) in state {
-        anomalies.write_fmt(format_args!("{:?}\n", Anomaly::DoesNotFree(Hex64(pfn))))?;
+        anomalies.write_fmt(format_args!("{:?}\n", Anomaly::Leak(Hex64(pfn))))?;
         if pages > 0 {
-            dnf += pages;
+            leak += pages;
         }
     }
-    log::info!("does not alloc = {}, does not free = {}, total free = {}, total alloc = {}", -dna, dnf, -total_f, total_a);
+    log::info!("does not alloc = {}, does not free = {}, leak = {}, total free = {}, total alloc = {}", -dna, dnf, leak, -total_f, total_a);
 
     let mut frame = Frame::empty();
     for event in history {
-        let flavour = event.flavour;
-        if flavour != 0 && flavour != 1 && flavour != 3 && flavour != 4 {
-            continue;
-        }
         frame.insert(&event);
     }
     frame.strip();

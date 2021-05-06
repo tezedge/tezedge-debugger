@@ -265,64 +265,6 @@ impl Pod for PageAlloc {
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PageAllocExtFrag {
-    pub pfn: Hex64,
-    pub alloc_order: u32,
-    pub fallback_order: u32,
-    alloc_migrate_ty: i32,
-    fallback_migrate_ty: i32,
-    change_ownership: i32,
-}
-
-impl Pod for PageAllocExtFrag {
-    const DISCRIMINANT: Option<u32> = Some(8);
-    const SIZE: usize = 0x1c;
-
-    #[inline(always)]
-    fn from_slice(s: &[u8]) -> Option<Self> {
-        if s.len() < Self::SIZE {
-            return None;
-        }
-        Some(PageAllocExtFrag {
-            pfn: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
-            alloc_order: u32::from_ne_bytes(TryFrom::try_from(&s[0x08..0x0c]).unwrap()),
-            fallback_order: u32::from_ne_bytes(TryFrom::try_from(&s[0x0c..0x10]).unwrap()),
-            alloc_migrate_ty: i32::from_ne_bytes(TryFrom::try_from(&s[0x10..0x14]).unwrap()),
-            fallback_migrate_ty: i32::from_ne_bytes(TryFrom::try_from(&s[0x14..0x18]).unwrap()),
-            change_ownership: i32::from_ne_bytes(TryFrom::try_from(&s[0x18..0x1c]).unwrap()),
-        })
-    }
-}
-
-#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
-#[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PageAllocZoneLocked {
-    pub pfn: Hex64,
-    pub order: u32,
-    migrate_ty: i32,
-}
-
-impl Pod for PageAllocZoneLocked {
-    const DISCRIMINANT: Option<u32> = Some(9);
-    const SIZE: usize = 0x10;
-
-    #[inline(always)]
-    fn from_slice(s: &[u8]) -> Option<Self> {
-        if s.len() < Self::SIZE {
-            return None;
-        }
-        Some(PageAllocZoneLocked {
-            pfn: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
-            order: u32::from_ne_bytes(TryFrom::try_from(&s[0x08..0x0c]).unwrap()),
-            migrate_ty: i32::from_ne_bytes(TryFrom::try_from(&s[0x0c..0x10]).unwrap()),
-        })
-    }
-}
-
-#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
-#[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageFree {
     pub pfn: Hex64,
     pub order: u32,
@@ -369,32 +311,6 @@ impl Pod for PageFreeBatched {
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PagePcpuDrain {
-    pub pfn: Hex64,
-    pub order: u32,
-    migrate_ty: i32,
-}
-
-impl Pod for PagePcpuDrain {
-    const DISCRIMINANT: Option<u32> = Some(12);
-    const SIZE: usize = 0x10;
-
-    #[inline(always)]
-    fn from_slice(s: &[u8]) -> Option<Self> {
-        if s.len() < Self::SIZE {
-            return None;
-        }
-        Some(PagePcpuDrain {
-            pfn: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
-            order: u32::from_ne_bytes(TryFrom::try_from(&s[0x08..0x0c]).unwrap()),
-            migrate_ty: i32::from_ne_bytes(TryFrom::try_from(&s[0x0c..0x10]).unwrap()),
-        })
-    }
-}
-
-#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
-#[cfg_attr(not(feature = "client"), allow(dead_code))]
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RssStat {
     pub id: u32,
     curr: u32,
@@ -423,14 +339,48 @@ impl Pod for RssStat {
 #[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
 #[cfg_attr(not(feature = "client"), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PageFaultUser {
-    address: Hex64,
-    ip: Hex64,
-    error_code: u64,
+pub struct PercpuAlloc {
+    reserved: bool,
+    is_atomic: bool,
+    size: Hex64,
+    align: Hex64,
+    base_address: Hex64,
+    off: i32,
+    ptr: Hex64,
 }
 
-impl Pod for PageFaultUser {
-    const DISCRIMINANT: Option<u32> = Some(14);
+impl Pod for PercpuAlloc {
+    const DISCRIMINANT: Option<u32> = Some(15);
+    const SIZE: usize = 0x30;
+
+    #[inline(always)]
+    fn from_slice(s: &[u8]) -> Option<Self> {
+        if s.len() < Self::SIZE {
+            return None;
+        }
+        Some(PercpuAlloc {
+            reserved: s[0x00] != 0,
+            is_atomic: s[0x01] != 0,
+            size: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x08..0x10]).unwrap())),
+            align: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x10..0x18]).unwrap())),
+            base_address: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x18..0x20]).unwrap())),
+            off: i32::from_ne_bytes(TryFrom::try_from(&s[0x20..0x24]).unwrap()),
+            ptr: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x28..0x30]).unwrap())),
+        })
+    }
+}
+
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PercpuFree {
+    base_address: Hex64,
+    off: i32,
+    ptr: Hex64,
+}
+
+impl Pod for PercpuFree {
+    const DISCRIMINANT: Option<u32> = Some(15);
     const SIZE: usize = 0x18;
 
     #[inline(always)]
@@ -438,10 +388,10 @@ impl Pod for PageFaultUser {
         if s.len() < Self::SIZE {
             return None;
         }
-        Some(PageFaultUser {
-            address: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
-            ip: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x08..0x10]).unwrap())),
-            error_code: u64::from_ne_bytes(TryFrom::try_from(&s[0x10..0x18]).unwrap()),
+        Some(PercpuFree {
+            base_address: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
+            off: i32::from_ne_bytes(TryFrom::try_from(&s[0x08..0x0c]).unwrap()),
+            ptr: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x10..0x18]).unwrap())),
         })
     }
 }

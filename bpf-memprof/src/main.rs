@@ -36,30 +36,24 @@ pub struct App {
     pub cache_free: ebpf::ProgRef,
     #[prog("tracepoint/kmem/mm_page_alloc")]
     pub page_alloc: ebpf::ProgRef,
-    #[prog("tracepoint/kmem/mm_page_alloc_extfrag")]
-    pub page_alloc_extfrag: ebpf::ProgRef,
-    #[prog("tracepoint/kmem/mm_page_alloc_zone_locked")]
-    pub page_alloc_zone_locked: ebpf::ProgRef,
     #[prog("tracepoint/kmem/mm_page_free")]
     pub page_free: ebpf::ProgRef,
     #[prog("tracepoint/kmem/mm_page_free_batched")]
     pub page_free_batched: ebpf::ProgRef,
-    #[prog("tracepoint/kmem/mm_page_pcpu_drain")]
-    pub page_pcpu_drain: ebpf::ProgRef,
     #[prog("tracepoint/kmem/rss_stat")]
     pub rss_stat: ebpf::ProgRef,
-    #[prog("tracepoint/exceptions/page_fault_user")]
-    pub page_fault_user: ebpf::ProgRef,
+    #[prog("tracepoint/percpu/percpu_alloc_percpu")]
+    pub percpu_alloc: ebpf::ProgRef,
+    #[prog("tracepoint/percpu/percpu_free_percpu")]
+    pub percpu_free: ebpf::ProgRef,
 }
 
 #[cfg(feature = "kern")]
 use {
-    bpf_memprof::Pod,
+    bpf_memprof::{Pod, STACK_MAX_DEPTH},
     bpf_memprof::{
-        KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc,
-        PageAllocExtFrag, PageAllocZoneLocked, PageFree, PageFreeBatched, PagePcpuDrain,
-        PageFaultUser, RssStat,
-        STACK_MAX_DEPTH,
+        KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageFree,
+        PageFreeBatched, RssStat, PercpuAlloc, PercpuFree,
     },
     ebpf::helpers,
 };
@@ -163,13 +157,13 @@ impl App {
         let pid = self.check_pid()?;
 
         let mut data = self.event_queue.reserve(0x10 + T::SIZE + 0x08 + (8 * STACK_MAX_DEPTH))?;
-        let mut data_mut = data.as_mut();
+        let data_mut = data.as_mut();
         ctx.read_into(0x00, &mut data_mut[..0x08]);
         data_mut[0x08..0x0c].clone_from_slice(&pid.to_ne_bytes());
         data_mut[0x0c..0x10].clone_from_slice(&T::DISCRIMINANT.unwrap_or(0).to_ne_bytes());
-        let mut data_mut = &mut data_mut[0x10..];
+        let data_mut = &mut data_mut[0x10..];
         ctx.read_into(0x08, &mut data_mut[..T::SIZE]);
-        let mut data_mut = &mut data_mut[T::SIZE..];
+        let data_mut = &mut data_mut[T::SIZE..];
         match ctx.get_user_stack(&mut data_mut[0x08..]) {
             Ok(size) => {
                 let length = ((size + 7) / 8) as u64;
@@ -220,16 +214,6 @@ impl App {
     }
 
     #[inline(always)]
-    pub fn page_alloc_extfrag(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<PageAllocExtFrag>(ctx)
-    }
-
-    #[inline(always)]
-    pub fn page_alloc_zone_locked(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<PageAllocZoneLocked>(ctx)
-    }
-
-    #[inline(always)]
     pub fn page_free(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.output::<PageFree>(ctx)
     }
@@ -240,18 +224,18 @@ impl App {
     }
 
     #[inline(always)]
-    pub fn page_pcpu_drain(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<PagePcpuDrain>(ctx)
-    }
-
-    #[inline(always)]
     pub fn rss_stat(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.output::<RssStat>(ctx)
     }
 
     #[inline(always)]
-    pub fn page_fault_user(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<PageFaultUser>(ctx)
+    pub fn percpu_alloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.output::<PercpuAlloc>(ctx)
+    }
+
+    #[inline(always)]
+    pub fn percpu_free(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.output::<PercpuFree>(ctx)
     }
 }
 

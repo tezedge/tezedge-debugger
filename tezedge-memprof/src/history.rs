@@ -14,41 +14,17 @@ impl PageEvent {
     pub fn try_from(e: Event) -> Option<Self> {
         let Event { event, stack, .. } = e;
         match event {
-            EventKind::PageAlloc(v) => Some(PageEvent {
+            EventKind::PageAlloc(v) if v.pfn.0 != 0 => Some(PageEvent {
                 pfn: v.pfn,
                 pages: (1 << v.order) as i32,
                 stack,
                 flavour: 0,
             }),
-            EventKind::PageAllocZoneLocked(v) => Some(PageEvent {
-                pfn: v.pfn,
-                pages: (1 << v.order) as i32,
-                stack,
-                flavour: 1,
-            }),
-            EventKind::PageAllocExtFrag(v) => Some(PageEvent {
-                pfn: v.pfn,
-                pages: 1,
-                stack,
-                flavour: 2,
-            }),
-            EventKind::PageFree(v) => Some(PageEvent {
+            EventKind::PageFree(v) if v.pfn.0 != 0 => Some(PageEvent {
                 pfn: v.pfn,
                 pages: -((1 << v.order) as i32),
                 stack,
                 flavour: 3,
-            }),
-            EventKind::PageFreeBatched(v) => Some(PageEvent {
-                pfn: v.pfn,
-                pages: -1,
-                stack,
-                flavour: 4,
-            }),
-            EventKind::PagePcpuDrain(v) => Some(PageEvent {
-                pfn: v.pfn,
-                pages: -((1 << v.order) as i32),
-                stack,
-                flavour: 5,
             }),
             _ => None,
         }
@@ -153,11 +129,17 @@ impl Frame {
         self.allocations.iter().map(|a| a.pages as i64).sum::<i64>()
     }
 
+    fn total_sum(&self) -> (i64, i64) {
+        let s = self.sum();
+        (s, s + self.frames.iter().map(|(_, v)| v.total_sum().1).sum::<i64>())
+    }
+
     pub fn strip(&mut self) {
         self.frames.values_mut().for_each(Frame::strip);
         self.frames.retain(|_, v| {
-            v.value = v.sum() * 4;
-            !(v.value == 0 && v.frames.is_empty())
+            let (s, t) = v.total_sum();
+            v.value = t;
+            !(s == 0 && v.frames.is_empty())
         });
     }
 }

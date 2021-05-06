@@ -13,7 +13,6 @@ struct Counters<T> {
     page_bytes: T,
     page_alloc_count: T,
     page_free_count: T,
-    page_fault_count: T,
     rss_stat_count: T,
     rss_stat_file_bytes: T,
     rss_stat_anon_bytes: T,
@@ -35,7 +34,6 @@ impl Counters<AtomicU64> {
             page_bytes: self.page_bytes.load(Ordering::SeqCst),
             page_alloc_count: self.page_alloc_count.load(Ordering::SeqCst),
             page_free_count: self.page_free_count.load(Ordering::SeqCst),
-            page_fault_count: self.page_fault_count.load(Ordering::SeqCst),
             rss_stat_count: self.rss_stat_count.load(Ordering::SeqCst),
             rss_stat_file_bytes: self.rss_stat_file_bytes.load(Ordering::SeqCst),
             rss_stat_anon_bytes: self.rss_stat_anon_bytes.load(Ordering::SeqCst),
@@ -60,7 +58,6 @@ impl Counters<u64> {
             page_bytes: d(self.page_bytes, other.page_bytes),
             page_alloc_count: d(self.page_alloc_count, other.page_alloc_count),
             page_free_count: d(self.page_free_count, other.page_free_count),
-            page_fault_count: d(self.page_fault_count, other.page_fault_count),
             rss_stat_count: d(self.rss_stat_count, self.rss_stat_count),
             rss_stat_file_bytes: d(self.rss_stat_file_bytes, self.rss_stat_file_bytes),
             rss_stat_anon_bytes: d(self.rss_stat_anon_bytes, self.rss_stat_anon_bytes),
@@ -108,13 +105,14 @@ pub struct Report {
 
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let usage = self.current_counters.page_bytes;
+        let c = &self.current_counters;
+        let usage = c.page_bytes;
         let mib = usage as f64 / (0x400 as f64);
-        let rss_file_mib = self.current_counters.rss_stat_file_bytes as f64 / (0x400 as f64);
-        let rss_anon_mib = self.current_counters.rss_stat_anon_bytes as f64 / (0x400 as f64);
-        let rss_swap_mib = self.current_counters.rss_stat_swap_bytes as f64 / (0x400 as f64);
-        let rss_shared_mib = self.current_counters.rss_stat_shared_bytes as f64 / (0x400 as f64);
-        let _diff = self.current_counters.diff(&self.last_counters, self.elapsed_time);
+        let rss_file_mib = c.rss_stat_file_bytes as f64 / (0x400 as f64);
+        let rss_anon_mib = c.rss_stat_anon_bytes as f64 / (0x400 as f64);
+        let rss_swap_mib = c.rss_stat_swap_bytes as f64 / (0x400 as f64);
+        let rss_shared_mib = c.rss_stat_shared_bytes as f64 / (0x400 as f64);
+        let _diff = c.diff(&self.last_counters, self.elapsed_time);
         write!(
             f,
             "usage: {:.2} kiB, rss: {:.2} (file: {:.2} + anon: {:.2} + swap: {:.2} + shared: {:.2}) kiB\n{:#?}\n",
@@ -124,7 +122,7 @@ impl fmt::Display for Report {
             rss_anon_mib,
             rss_swap_mib,
             rss_shared_mib,
-            &self.current_counters,
+            &c,
         )
     }
 }
@@ -145,7 +143,6 @@ impl AtomicState {
                 page_bytes: AtomicU64::new(0),
                 page_alloc_count: AtomicU64::new(0),
                 page_free_count: AtomicU64::new(0),
-                page_fault_count: AtomicU64::new(0),
                 rss_stat_count: AtomicU64::new(0),
                 rss_stat_file_bytes: AtomicU64::new(0),
                 rss_stat_anon_bytes: AtomicU64::new(0),
@@ -205,10 +202,6 @@ impl AtomicState {
     pub fn page_free(&self, bytes: u64) {
         self.counters.page_bytes.fetch_sub(bytes, Ordering::SeqCst);
         self.counters.page_free_count.fetch_add(1, Ordering::SeqCst);
-    }
-
-    pub fn page_fault(&self) {
-        self.counters.page_fault_count.fetch_add(1, Ordering::SeqCst);
     }
 
     pub fn rss_stat(&self, bytes: i64, member: i32) {
