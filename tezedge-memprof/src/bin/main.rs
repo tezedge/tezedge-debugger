@@ -44,7 +44,7 @@ impl ClientCallback for MemprofClient {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{thread, time::Duration, io};
-    use tezedge_memprof::Reporter;
+    use tezedge_memprof::{Reporter, default_filter};
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -59,6 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let thread = {
         let mut state = Reporter::new(cli.state.clone());
+        let history = cli.history.clone();
         thread::spawn(move || {
             let delay = Duration::from_secs(4);
             let mut cnt = 2;
@@ -72,6 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 thread::sleep(delay);
                 log::info!("{}", state.report(delay));
+                log::info!("{}", history.lock().unwrap().short_report(&default_filter()));
             }
         })
     };
@@ -80,6 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = runtime.spawn(warp::serve(server::routes(cli.history.clone())).run(([0, 0, 0, 0], 17832)));
 
     let state = cli.state.clone();
+    let history = cli.history.clone();
     let rb = Client::connect("/tmp/bpf-memprof.sock", cli)?;
     while state.running() {
         match rb.poll(Duration::from_secs(1)) {
@@ -94,8 +97,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     thread.join().unwrap();
 
-    //let history = history.lock().unwrap();
-    //serde_json::to_writer(std::fs::File::create("target/history.json")?, &*history)?;
+    let history = history.lock().unwrap();
+    serde_json::to_writer(std::fs::File::create("target/history.json")?, &*history)?;
 
     let _ = (server, runtime);
 
@@ -109,7 +112,7 @@ mod server {
         reply::{WithStatus, Json, self},
         http::StatusCode,
     };
-    use tezedge_memprof::History;
+    use tezedge_memprof::{History, default_filter};
 
     pub fn routes(
         history: Arc<Mutex<History>>,
@@ -117,9 +120,7 @@ mod server {
         use warp::reply::with;
     
         warp::get()
-            .and(
-                tree(history)
-            )
+            .and(tree(history.clone()).or(short(history)))
             .with(with::header("Content-Type", "application/json"))
             .with(with::header("Access-Control-Allow-Origin", "*"))
     }
@@ -132,7 +133,20 @@ mod server {
             .map(move |()| -> WithStatus<Json> {
                 let report = history.lock()
                     .unwrap()
-                    .report(&|ranges| ranges.last().unwrap_or(&(0..0)).end == u64::MAX);
+                    .tree_report(&default_filter());
+                reply::with_status(reply::json(&report), StatusCode::OK)
+            })
+    }
+
+    fn short(
+        history: Arc<Mutex<History>>,
+    ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
+        warp::path!("v1" / "short")
+            .and(warp::query::query())
+            .map(move |()| -> WithStatus<Json> {
+                let report = history.lock()
+                    .unwrap()
+                    .short_report(&default_filter());
                 reply::with_status(reply::json(&report), StatusCode::OK)
             })
     }
