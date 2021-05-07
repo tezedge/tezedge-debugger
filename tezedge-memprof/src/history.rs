@@ -37,18 +37,18 @@ pub enum PageError {
 }
 
 #[derive(Default, Serialize)]
-struct PageHistoryStack {
+struct PageHistory {
     ranges: Vec<Range<u64>>,
     stack: Vec<Hex64>,
 }
 
 #[derive(Default, Serialize)]
-pub struct PageHistory {
+pub struct History {
     errors: Vec<PageError>,
-    inner: HashMap<Page, PageHistoryStack>,
+    inner: HashMap<Page, PageHistory>,
 }
 
-impl PageHistory {
+impl History {
     pub fn process(&mut self, page: Page, stack: Option<&Stack>) {
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)

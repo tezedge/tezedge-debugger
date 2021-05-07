@@ -12,4 +12,4 @@ mod state;
 pub use self::state::{AtomicState, Reporter};
 
 mod history;
-pub use self::history::{Page, PageHistory, FrameReport, Filter};
+pub use self::history::{Page, History, FrameReport, Filter};

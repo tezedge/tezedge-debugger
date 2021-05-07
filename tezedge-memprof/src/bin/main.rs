@@ -1,23 +1,64 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+use std::{collections::HashMap, sync::{Arc, Mutex}};
+use bpf_memprof::{Client, ClientCallback, Event, EventKind};
+use tezedge_memprof::{AtomicState, Page, History};
+
+#[derive(Default)]
+struct MemprofClient {
+    state: Arc<AtomicState>,
+    allocations: HashMap<u64, u64>,
+    history: Arc<Mutex<History>>,
+    last: Option<EventKind>,
+}
+
+impl ClientCallback for MemprofClient {
+    fn arrive(&mut self, client: &mut Client, data: &[u8]) {
+        let _ = client;
+        let event = match Event::from_slice(data) {
+            Ok(v) => v,
+            Err(error) => {
+                log::error!("failed to read ring buffer slice: {}", error);
+                return;
+            }
+        };
+
+        if let Some(last) = &self.last {
+            if last.eq(&event.event) {
+                log::debug!("repeat");
+                return;
+            }
+        }
+        self.state.process_event(&mut self.allocations, &event.event);
+        match &event.event {
+            &EventKind::PageAlloc(ref v) if v.pfn.0 != 0 =>
+                self.history.lock().unwrap().process(Page::new(v.pfn, v.order), Some(&event.stack)),
+            &EventKind::PageFree(ref v) if v.pfn.0 != 0 =>
+                self.history.lock().unwrap().process(Page::new(v.pfn, v.order), None),
+            _ => (),
+        }
+        self.last = Some(event.event);
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use std::{thread, time::Duration, collections::HashMap, sync::{Arc, Mutex}};
-    use bpf_memprof::{Client, Event, EventKind};
-    use tezedge_memprof::{AtomicState, Reporter, Page, PageHistory};
+    use std::{thread, time::Duration, io};
+    use tezedge_memprof::Reporter;
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    let state = AtomicState::new();
+    let cli = MemprofClient::default();
+
     {
-        let state = state.clone();
+        let state = cli.state.clone();
         ctrlc::set_handler(move || state.stop())?;
     }
 
     let thread = {
-        let mut state = Reporter::new(state.clone());
+        let mut state = Reporter::new(cli.state.clone());
         thread::spawn(move || {
             let delay = Duration::from_secs(4);
             let mut cnt = 2;
@@ -35,34 +76,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     };
 
-    let history = Arc::new(Mutex::new(PageHistory::default()));
-
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let server = runtime.spawn(warp::serve(server::routes(history.clone())).run(([0, 0, 0, 0], 17832)));
+    let server = runtime.spawn(warp::serve(server::routes(cli.history.clone())).run(([0, 0, 0, 0], 17832)));
 
-    let mut allocations = HashMap::new();
-    let mut last = None::<EventKind>;
-
-    let (mut client, mut rb) = Client::new("/tmp/bpf-memprof.sock")?;
-    client.send_command("dummy command")?;
+    let state = cli.state.clone();
+    let rb = Client::connect("/tmp/bpf-memprof.sock", cli)?;
     while state.running() {
-        let events = rb.read_blocking::<Event>(state.running_ref())?;
-        for event in events {
-            if let Some(last) = &last {
-                if last.eq(&event.event) {
-                    log::debug!("repeat");
-                    continue;
-                }
+        match rb.poll(Duration::from_secs(1)) {
+            Ok(_) => (),
+            Err(c) if c == -4 => break,
+            Err(c) => {
+                log::error!("code: {}, error: {}", c, io::Error::last_os_error());
+                break;
             }
-            state.process_event(&mut allocations, &event.event);
-            match &event.event {
-                &EventKind::PageAlloc(ref v) if v.pfn.0 != 0 =>
-                    history.lock().unwrap().process(Page::new(v.pfn, v.order), Some(&event.stack)),
-                &EventKind::PageFree(ref v) if v.pfn.0 != 0 =>
-                    history.lock().unwrap().process(Page::new(v.pfn, v.order), None),
-                _ => (),
-            }
-            last = Some(event.event);
         }
     }
 
@@ -83,10 +109,10 @@ mod server {
         reply::{WithStatus, Json, self},
         http::StatusCode,
     };
-    use tezedge_memprof::PageHistory;
+    use tezedge_memprof::History;
 
     pub fn routes(
-        history: Arc<Mutex<PageHistory>>,
+        history: Arc<Mutex<History>>,
     ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static {
         use warp::reply::with;
     
@@ -99,7 +125,7 @@ mod server {
     }
 
     fn tree(
-        history: Arc<Mutex<PageHistory>>,
+        history: Arc<Mutex<History>>,
     ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
         warp::path!("v1" / "tree")
             .and(warp::query::query())

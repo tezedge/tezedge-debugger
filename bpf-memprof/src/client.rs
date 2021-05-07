@@ -8,7 +8,7 @@ use std::{
     path::Path,
 };
 use passfd::FdPassingExt;
-use bpf_ring_buffer::{RingBufferData, RingBufferSync};
+use ebpf_user::RingBufferRegistry;
 use serde::{Serialize, ser, Deserialize, de};
 use super::event::{Pod, Hex32, Hex64, CommonHeader};
 use super::event::{
@@ -21,16 +21,25 @@ pub struct Client {
     stream: UnixStream,
 }
 
+pub trait ClientCallback {
+    fn arrive(&mut self, client: &mut Client, data: &[u8]);
+}
+
 impl Client {
-    pub fn new<P>(path: P) -> io::Result<(Self, RingBufferSync)>
+    pub fn connect<P, F>(path: P, cb: F) -> io::Result<RingBufferRegistry>
     where
         P: AsRef<Path>,
+        F: ClientCallback + 'static,
     {
         let stream = UnixStream::connect(path)?;
         let fd = stream.recv_fd()?;
-        let rb = RingBufferSync::new(fd, 0x40000000)?;
+        let mut rb = RingBufferRegistry::default();
+        let mut client = Client { stream };
+        let mut cb = cb;
+        rb.add_fd(fd, move |data| cb.arrive(&mut client, data))
+            .map_err(|_| io::Error::last_os_error())?;
 
-        Ok((Client { stream }, rb))
+        Ok(rb)
     }
 
     pub fn send_command<C>(&mut self, cmd: C) -> io::Result<()>
@@ -210,10 +219,8 @@ pub struct Event {
     pub stack: Stack,
 }
 
-impl RingBufferData for Event {
-    type Error = u8;
-
-    fn from_rb_slice(slice: &[u8]) -> Result<Self, Self::Error> {
+impl Event {
+    pub fn from_slice(slice: &[u8]) -> Result<Self, u8> {
         use core::convert::TryFrom;
 
         if slice.len() == 0x200 {

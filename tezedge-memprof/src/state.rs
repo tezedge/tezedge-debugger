@@ -127,9 +127,9 @@ impl fmt::Display for Report {
     }
 }
 
-impl AtomicState {
-    pub fn new() -> Arc<Self> {
-        Arc::new(AtomicState {
+impl Default for AtomicState {
+    fn default() -> Self {
+        AtomicState {
             running: AtomicBool::new(true),
             counters: Counters {
                 slab_unknown_bytes: AtomicU64::new(0),
@@ -149,9 +149,11 @@ impl AtomicState {
                 rss_stat_swap_bytes: AtomicU64::new(0),
                 rss_stat_shared_bytes: AtomicU64::new(0),
             },
-        })
+        }
     }
+}
 
+impl AtomicState {
     pub fn running_ref(&self) -> &AtomicBool {
         &self.running
     }
