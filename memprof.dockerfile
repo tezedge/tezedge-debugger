@@ -1,7 +1,7 @@
 FROM simplestakingcom/tezedge-bpf-builder:latest as builder
 
-COPY . .
 RUN cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
+COPY . .
 RUN cargo build -p bpf-memprof --release
 RUN cargo build -p tezedge-memprof --release
 
