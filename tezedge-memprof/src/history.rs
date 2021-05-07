@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, fmt, ops::Range, time::{SystemTime, Duration}};
+use std::{collections::HashMap, fmt, ops::Range, time::{SystemTime, Duration}};
 use serde::{Serialize, ser};
 use bpf_memprof::{Hex64, Stack};
 
@@ -37,10 +37,15 @@ pub enum PageError {
 }
 
 #[derive(Default, Serialize)]
+struct PageHistoryStack {
+    ranges: Vec<Range<u64>>,
+    stack: Vec<Hex64>,
+}
+
+#[derive(Default, Serialize)]
 pub struct PageHistory {
     errors: Vec<PageError>,
-    inner: HashMap<Page, Vec<Range<u64>>>,
-    frame: Frame,
+    inner: HashMap<Page, PageHistoryStack>,
 }
 
 impl PageHistory {
@@ -52,7 +57,7 @@ impl PageHistory {
 
         let pfn = page.pfn;
         let e = self.inner.entry(page).or_default();
-        let new = match (e.last_mut(), stack.is_some()) {
+        let new = match (e.ranges.last_mut(), stack.is_some()) {
             (Some(range), false) if range.end == u64::MAX => {
                 range.end = timestamp;
                 None
@@ -75,11 +80,11 @@ impl PageHistory {
             },
         };
         if let Some(new) = new {
-            e.push(new);
+            e.ranges.push(new);
         }
 
         if let Some(stack) = stack {
-            self.frame.insert(stack, page);
+            e.stack = stack.ips().to_vec();
         }
     }
 
@@ -87,50 +92,14 @@ impl PageHistory {
     where
         F: Fn(&[Range<u64>]) -> bool,
     {
-        self.frame.report(&self.inner, filter)
-    }
-}
-
-#[derive(Default, Serialize)]
-struct Frame {
-    pages: HashSet<Page>,
-    frames: HashMap<Hex64, Frame>,
-}
-
-impl Frame {
-    pub fn insert(&mut self, stack: &Stack, page: Page) {
-        let mut node = self;
-        for stack_frame in stack.ips() {
-            node = node.frames.entry(*stack_frame).or_insert(Frame::default());
-        }
-        node.pages.insert(page);
-    }
-
-    pub fn report<F>(&self, history: &HashMap<Page, Vec<Range<u64>>>, filter: &F) -> FrameReport
-    where
-        F: Fn(&[Range<u64>]) -> bool,
-    {
-        let mut allocated_here = 0; // kilobytes
-        for page in &self.pages {
-            let ranges = history.get(page).unwrap();
-            if filter(ranges) {
-                allocated_here += 1 << (page.order + 2);
+        let mut report = FrameReport::default();
+        // TODO: optimize it, group pages in the same stack frame, and insert batch
+        for (page, history) in &self.inner {
+            if filter(&history.ranges) {
+                report.insert(&history.stack, 1 << (page.order + 2));
             }
         }
-
-        let mut frames = HashMap::new();
-        for (k, v) in self.frames.iter() {
-            let r = v.report(history, filter);
-            if r.value != 0 {
-                allocated_here += r.value;
-                frames.insert(format!("{:?}", k), r);
-            }
-        }
-
-        FrameReport {
-            value: allocated_here,
-            frames,
-        }
+        report
     }
 }
 
@@ -138,6 +107,18 @@ impl Frame {
 pub struct FrameReport {
     value: u64,
     frames: HashMap<String, FrameReport>,
+}
+
+impl FrameReport {
+    fn insert(&mut self, stack: &[Hex64], value: u64) {
+        let mut node = self;
+        for stack_frame in stack {
+            let key = format!("{:?}", stack_frame);
+            node.value += value;
+            node = node.frames.entry(key).or_default();
+        }
+        node.value += value;
+    }
 }
 
 // filters
