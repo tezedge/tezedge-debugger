@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt, ops::Range, time::{SystemTime, Duration}};
 use serde::{Serialize, ser};
-use bpf_memprof::{Hex64, Stack};
+use bpf_memprof::{Hex32, Hex64, Stack};
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Page {
@@ -31,8 +31,12 @@ impl Page {
 
 #[derive(Default, Serialize)]
 struct PageHistory {
-    ranges: Vec<Range<u64>>,
+    ranges: Vec<(Range<u64>, Hex32)>,
     stack: Vec<Hex64>,
+}
+
+pub trait HistoryFilter {
+    fn keep(&self, history: impl Iterator<Item = Range<u64>>) -> bool;
 }
 
 #[derive(Default, Serialize)]
@@ -44,52 +48,52 @@ pub struct History {
 }
 
 impl History {
-    pub fn process(&mut self, page: Page, stack: Option<&Stack>) {
+    pub fn process(&mut self, page: Page, misc: Option<(&Stack, Hex32)>) {
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or(Duration::default())
             .as_millis() as u64;
 
         let e = self.inner.entry(page.clone()).or_default();
-        let new = match (e.ranges.last_mut(), stack.is_some()) {
-            (Some(range), false) if range.end == u64::MAX => {
+        let new = match (e.ranges.last_mut(), &misc) {
+            (Some((range, _)), &None) if range.end == u64::MAX => {
                 range.end = timestamp;
                 None
             },
-            (Some(range), false) => {
+            (Some((range, _)), &None) => {
                 self.double_free.push(page);
                 range.end = timestamp;
                 None
             },
-            (None, false) => {
+            (None, &None) => {
                 self.free_without_alloc.push(page);
-                Some(0..timestamp)
+                Some((0..timestamp, Hex32(0)))
             },
-            (Some(range), true) if range.end == u64::MAX => {
+            (Some((range, _)), &Some(_)) if range.end == u64::MAX => {
                 self.double_alloc.push(page);
                 None
             },
-            (_, true) => {
-                Some(timestamp..u64::MAX)
+            (_, &Some((_, ref flags))) => {
+                Some((timestamp..u64::MAX, *flags))
             },
         };
         if let Some(new) = new {
             e.ranges.push(new);
         }
 
-        if let Some(stack) = stack {
+        if let Some((stack, _)) = misc {
             e.stack = stack.ips().to_vec();
         }
     }
 
     pub fn tree_report<F>(&self, filter: &F) -> FrameReport
     where
-        F: Fn(&[Range<u64>]) -> bool,
+        F: HistoryFilter,
     {
         let mut report = FrameReport::default();
         // TODO: optimize it, group pages in the same stack frame, and insert batch
         for (page, history) in &self.inner {
-            if filter(&history.ranges) {
+            if filter.keep(history.ranges.iter().map(|&(ref r, _)| r.clone())) {
                 report.insert(&history.stack, 1 << (page.order + 2));
             }
         }
@@ -99,18 +103,18 @@ impl History {
 
     pub fn short_report<F>(&self, filter: &F) -> ShortReport
     where
-        F: Fn(&[Range<u64>]) -> bool,
+        F: HistoryFilter,
     {
         let mut report = ShortReport::default();
         for (page, history) in &self.inner {
-            if filter(&history.ranges) {
+            if filter.keep(history.ranges.iter().map(|&(ref r, _)| r.clone())) {
                 report.kilobytes += 1 << (page.order + 2);
             }
             report.alloc_count += history.ranges.len() as u64;
             report.free_count += history.ranges.len() as u64 -
                 history.ranges
                     .last()
-                    .map(|r| if r.end == u64::MAX { 1 } else { 0 })
+                    .map(|&(ref r, _)| if r.end == u64::MAX { 1 } else { 0 })
                     .unwrap_or(0);
         }
 
@@ -120,10 +124,29 @@ impl History {
 
         report
     }
+
+    pub fn flags_report(&self) -> FlagsReport {
+        let mut report = FlagsReport::default();
+        for (_, history) in &self.inner {
+            if let Some(&(ref r, flags)) = history.ranges.last() {
+                if r.end == u64::MAX {
+                    *report.leak.entry(flags).or_default() += 1;
+                } else {
+                    *report.ok.entry(flags).or_default() += 1;
+                }
+            } 
+        }
+        
+        report
+    }
 }
 
-pub fn default_filter() -> impl Fn(&[Range<u64>]) -> bool {
-    |ranges| ranges.last().unwrap_or(&(0..0)).end == u64::MAX
+pub struct DefaultFilter;
+
+impl HistoryFilter for DefaultFilter {
+    fn keep(&self, history: impl Iterator<Item = Range<u64>>) -> bool {
+        history.last().unwrap_or(0..0).end == u64::MAX
+    }
 }
 
 #[derive(Default, Serialize)]
@@ -172,15 +195,27 @@ impl fmt::Display for ShortReport {
     }
 }
 
+#[derive(Default, Serialize)]
+pub struct FlagsReport {
+    ok: HashMap<Hex32, u32>,
+    leak: HashMap<Hex32, u32>,
+}
+
 // filters
 
 pub struct Filter {
-    pub time_range: Range<u64>,
+    time_range: Range<u64>,
 }
 
 impl Filter {
-    pub fn not_deallocated_in(&self, history: &[Range<u64>]) -> bool {
-        history.iter()
+    pub fn new(time_range: Range<u64>) -> Self {
+        Filter { time_range }
+    }
+}
+
+impl HistoryFilter for Filter {
+    fn keep(&self, mut history: impl Iterator<Item = Range<u64>>) -> bool {
+        history
             .find(|r| self.time_range.contains(&r.start) && r.end > self.time_range.end)
             .is_some()
     }

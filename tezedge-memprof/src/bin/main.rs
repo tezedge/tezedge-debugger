@@ -33,7 +33,7 @@ impl ClientCallback for MemprofClient {
         self.state.process_event(&mut self.allocations, &event.event);
         match &event.event {
             &EventKind::PageAlloc(ref v) if v.pfn.0 != 0 =>
-                self.history.lock().unwrap().process(Page::new(v.pfn, v.order), Some(&event.stack)),
+                self.history.lock().unwrap().process(Page::new(v.pfn, v.order), Some((&event.stack, v.gfp_flags))),
             &EventKind::PageFree(ref v) if v.pfn.0 != 0 =>
                 self.history.lock().unwrap().process(Page::new(v.pfn, v.order), None),
             _ => (),
@@ -44,7 +44,7 @@ impl ClientCallback for MemprofClient {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{thread, time::Duration, io};
-    use tezedge_memprof::{Reporter, default_filter};
+    use tezedge_memprof::{Reporter, DefaultFilter};
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 thread::sleep(delay);
                 log::info!("{}", state.report(delay));
-                log::info!("{}", history.lock().unwrap().short_report(&default_filter()));
+                log::info!("{}", history.lock().unwrap().short_report(&DefaultFilter));
             }
         })
     };
@@ -99,6 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let history = history.lock().unwrap();
     serde_json::to_writer(std::fs::File::create("target/history.json")?, &*history)?;
+    serde_json::to_writer(std::fs::File::create("target/misc.json")?, &history.flags_report())?;
 
     let _ = (server, runtime);
 
@@ -112,7 +113,7 @@ mod server {
         reply::{WithStatus, Json, self},
         http::StatusCode,
     };
-    use tezedge_memprof::{History, default_filter};
+    use tezedge_memprof::{History, DefaultFilter};
 
     pub fn routes(
         history: Arc<Mutex<History>>,
@@ -133,7 +134,7 @@ mod server {
             .map(move |()| -> WithStatus<Json> {
                 let report = history.lock()
                     .unwrap()
-                    .tree_report(&default_filter());
+                    .tree_report(&DefaultFilter);
                 reply::with_status(reply::json(&report), StatusCode::OK)
             })
     }
@@ -146,7 +147,7 @@ mod server {
             .map(move |()| -> WithStatus<Json> {
                 let report = history.lock()
                     .unwrap()
-                    .short_report(&default_filter());
+                    .short_report(&DefaultFilter);
                 reply::with_status(reply::json(&report), StatusCode::OK)
             })
     }

@@ -15,7 +15,7 @@ impl fmt::Debug for Hex64 {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Hex32(pub u32);
 
 impl fmt::Debug for Hex32 {
@@ -240,7 +240,7 @@ impl Pod for CacheFree {
 pub struct PageAlloc {
     pub pfn: Hex64,
     pub order: u32,
-    gfp_flags: Hex32,
+    pub gfp_flags: Hex32,
     migrate_ty: i32,
 }
 
