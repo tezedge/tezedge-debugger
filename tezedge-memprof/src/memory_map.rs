@@ -1,6 +1,6 @@
+use std::{ops::Range, num::Wrapping, str::FromStr, io::{self, Read}, fs::File, path::PathBuf};
 
-use std::{ops::Range, str::FromStr, io::{self, Read}, fs::File, path::PathBuf};
-
+#[derive(Default, Clone, PartialEq, Eq)]
 pub struct ProcessMap(Vec<MemoryMapEntry>);
 
 impl ProcessMap {
@@ -8,7 +8,14 @@ impl ProcessMap {
         MemoryMapEntry::new(pid).map(ProcessMap)
     }
 
-    pub fn find(&self, ip: usize) -> Option<(EntryName, usize)> {
+    pub fn files(&self) -> Vec<String> {
+        self.0
+            .iter()
+            .filter_map(|entry| entry.name.string())
+            .collect()
+    }
+
+    pub fn find(&self, ip: usize) -> Option<(String, usize)> {
         self.0.iter()
             .find_map(|entry| {
                 if !entry.range.contains(&ip) {
@@ -18,17 +25,18 @@ impl ProcessMap {
                 let name = entry.name.clone();
                 if !entry.exec() {
                     //log::warn!("have non-exec pointer in stacktrace {:016x}@{:?}", ip, name);
+                    return None;
                 }
 
-                Some((name.clone(), entry.offset + ip - entry.range.start))
-            })
-    }
+                let s = name.string()?;
 
-    pub fn size(&self) -> usize {
-        self.0.iter().fold(0, |a, e| a + e.range.len())
+                let Wrapping(ptr) = Wrapping(entry.offset) + Wrapping(ip) - Wrapping(entry.range.start);
+                Some((s, ptr))
+            })
     }
 }
 
+#[derive(Clone, PartialEq, Eq)]
 struct MemoryMapEntry {
     range: Range<usize>,
     flags: String,
@@ -36,11 +44,28 @@ struct MemoryMapEntry {
     name: EntryName,
 }
 
-#[derive(Debug, Clone)]
-pub enum EntryName {
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum EntryName {
     Nothing,
     FileName(PathBuf),
     Remark(String),
+}
+
+impl EntryName {
+    pub fn string(&self) -> Option<String> {
+        match self {
+            EntryName::FileName(filename) => {
+                if let Some(s) = filename.to_str() {
+                    Some(s.to_string())
+                } else {
+                    // WARNING: os string could be invalid utf-8
+                    // handle this case
+                    None
+                }
+            },
+            _ => None,
+        }
+    }
 }
 
 impl MemoryMapEntry {
@@ -94,6 +119,8 @@ impl FromStr for MemoryMapEntry {
             Some(name) => {
                 if name.is_empty() {
                     EntryName::Nothing
+                } else if name.starts_with('[') {
+                    EntryName::Remark(name.to_string())
                 } else {
                     match PathBuf::from_str(name) {
                         Ok(path) => EntryName::FileName(path),

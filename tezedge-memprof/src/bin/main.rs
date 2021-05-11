@@ -1,12 +1,13 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{collections::HashMap, sync::{Arc, Mutex, atomic::{Ordering, AtomicU32}}};
 use bpf_memprof::{Client, ClientCallback, Event, EventKind};
 use tezedge_memprof::{AtomicState, Page, History};
 
 #[derive(Default)]
 struct MemprofClient {
+    pid: Arc<AtomicU32>,
     state: Arc<AtomicState>,
     allocations: HashMap<u64, u64>,
     history: Arc<Mutex<History>>,
@@ -23,6 +24,8 @@ impl ClientCallback for MemprofClient {
                 return;
             }
         };
+
+        self.pid.store(event.pid, Ordering::Relaxed);
 
         if let Some(last) = &self.last {
             if last.eq(&event.event) {
@@ -44,7 +47,8 @@ impl ClientCallback for MemprofClient {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{thread, time::Duration, io};
-    use tezedge_memprof::{Reporter, DefaultFilter};
+    use tezedge_memprof::{Reporter, DefaultFilter, StackResolver};
+    use tokio::runtime::Runtime;
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -78,8 +82,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     };
 
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let server = runtime.spawn(warp::serve(server::routes(cli.history.clone())).run(([0, 0, 0, 0], 17832)));
+    let resolver = StackResolver::spawn(cli.pid.clone());
+
+    let runtime = Runtime::new().unwrap();
+    let server = runtime.spawn(warp::serve(server::routes(cli.history.clone(), resolver)).run(([0, 0, 0, 0], 17832)));
 
     let state = cli.state.clone();
     let history = cli.history.clone();
@@ -107,34 +113,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 mod server {
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, RwLock};
     use warp::{
         Filter, Rejection, Reply,
         reply::{WithStatus, Json, self},
         http::StatusCode,
     };
-    use tezedge_memprof::{History, DefaultFilter};
+    use tezedge_memprof::{History, DefaultFilter, StackResolver};
 
     pub fn routes(
         history: Arc<Mutex<History>>,
+        resolver: Arc<RwLock<StackResolver>>,
     ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static {
         use warp::reply::with;
     
         warp::get()
-            .and(tree(history.clone()).or(short(history)))
+            .and(tree(history.clone(), resolver).or(short(history)))
             .with(with::header("Content-Type", "application/json"))
             .with(with::header("Access-Control-Allow-Origin", "*"))
     }
 
     fn tree(
         history: Arc<Mutex<History>>,
+        resolver: Arc<RwLock<StackResolver>>,
     ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
         warp::path!("v1" / "tree")
             .and(warp::query::query())
             .map(move |()| -> WithStatus<Json> {
+                let resolver = resolver.read().unwrap();
                 let report = history.lock()
                     .unwrap()
-                    .tree_report(&DefaultFilter);
+                    .tree_report(&resolver, &DefaultFilter);
                 reply::with_status(reply::json(&report), StatusCode::OK)
             })
     }

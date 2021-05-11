@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt, ops::Range, time::{SystemTime, Duration}};
 use serde::{Serialize, ser};
 use bpf_memprof::{Hex32, Hex64, Stack};
+use super::stack::StackResolver;
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Page {
@@ -86,7 +87,7 @@ impl History {
         }
     }
 
-    pub fn tree_report<F>(&self, filter: &F) -> FrameReport
+    pub fn tree_report<F>(&self, resolver: &StackResolver, filter: &F) -> FrameReport
     where
         F: HistoryFilter,
     {
@@ -94,7 +95,7 @@ impl History {
         // TODO: optimize it, group pages in the same stack frame, and insert batch
         for (page, history) in &self.inner {
             if filter.keep(history.ranges.iter().map(|&(ref r, _)| r.clone())) {
-                report.insert(&history.stack, 1 << (page.order + 2));
+                report.insert(resolver, &history.stack, 1 << (page.order + 2));
             }
         }
 
@@ -156,10 +157,10 @@ pub struct FrameReport {
 }
 
 impl FrameReport {
-    fn insert(&mut self, stack: &[Hex64], value: u64) {
+    fn insert(&mut self, resolver: &StackResolver, stack: &[Hex64], value: u64) {
         let mut node = self;
         for stack_frame in stack {
-            let key = format!("{:?}", stack_frame);
+            let key = resolver.resolve(stack_frame.0);
             node.value += value;
             node = node.frames.entry(key).or_default();
         }
