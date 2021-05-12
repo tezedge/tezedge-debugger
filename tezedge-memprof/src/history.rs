@@ -33,7 +33,6 @@ impl Page {
 #[derive(Default, Serialize)]
 struct PageHistory {
     ranges: Vec<(Range<u64>, Hex32)>,
-    stack: Vec<Hex64>,
 }
 
 pub trait HistoryFilter {
@@ -46,6 +45,7 @@ pub struct History {
     free_without_alloc: Vec<Page>,
     double_alloc: Vec<Page>,
     inner: HashMap<Page, PageHistory>,
+    group: HashMap<Vec<Hex64>, Vec<Page>>,
 }
 
 impl History {
@@ -62,16 +62,16 @@ impl History {
                 None
             },
             (Some((range, _)), &None) => {
-                self.double_free.push(page);
+                self.double_free.push(page.clone());
                 range.end = timestamp;
                 None
             },
             (None, &None) => {
-                self.free_without_alloc.push(page);
+                self.free_without_alloc.push(page.clone());
                 Some((0..timestamp, Hex32(0)))
             },
             (Some((range, _)), &Some(_)) if range.end == u64::MAX => {
-                self.double_alloc.push(page);
+                self.double_alloc.push(page.clone());
                 None
             },
             (_, &Some((_, ref flags))) => {
@@ -79,23 +79,37 @@ impl History {
             },
         };
         if let Some(new) = new {
+            // keep only last record in the history, remove this line to preserve
+            e.ranges.clear();
             e.ranges.push(new);
         }
 
         if let Some((stack, _)) = misc {
-            e.stack = stack.ips().to_vec();
+            let pages_group = self.group.entry(stack.ips().to_vec()).or_default();
+            pages_group.push(page);
         }
     }
 
-    pub fn tree_report<F>(&self, resolver: &StackResolver, filter: &F) -> FrameReport
+    pub fn tree_report<F>(
+        &self,
+        resolver: &StackResolver,
+        filter: &F,
+        threshold: u64,
+    ) -> FrameReport
     where
         F: HistoryFilter,
     {
         let mut report = FrameReport::default();
-        // TODO: optimize it, group pages in the same stack frame, and insert batch
-        for (page, history) in &self.inner {
-            if filter.keep(history.ranges.iter().map(|&(ref r, _)| r.clone())) {
-                report.insert(resolver, &history.stack, 1 << (page.order + 2));
+        for (stack, group) in &self.group {
+            let mut value = 0;
+            for page in group {
+                let history = self.inner.get(page).unwrap();
+                if filter.keep(history.ranges.iter().map(|&(ref r, _)| r.clone())) {
+                    value += 1u64 << (page.order + 2);
+                }
+            }
+            if value >= threshold {
+                report.insert(resolver, &stack, value);
             }
         }
 

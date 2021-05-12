@@ -119,6 +119,7 @@ mod server {
         reply::{WithStatus, Json, self},
         http::StatusCode,
     };
+    use serde::Deserialize;
     use tezedge_memprof::{History, DefaultFilter, StackResolver};
 
     pub fn routes(
@@ -137,13 +138,18 @@ mod server {
         history: Arc<Mutex<History>>,
         resolver: Arc<RwLock<StackResolver>>,
     ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
+        #[derive(Deserialize)]
+        struct Params {
+            threshold: Option<u64>,
+        }
+
         warp::path!("v1" / "tree")
             .and(warp::query::query())
-            .map(move |()| -> WithStatus<Json> {
+            .map(move |params: Params| -> WithStatus<Json> {
                 let resolver = resolver.read().unwrap();
                 let report = history.lock()
                     .unwrap()
-                    .tree_report(&resolver, &DefaultFilter);
+                    .tree_report(&resolver, &DefaultFilter, params.threshold.unwrap_or(512));
                 reply::with_status(reply::json(&report), StatusCode::OK)
             })
     }
