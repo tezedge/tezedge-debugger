@@ -62,7 +62,7 @@ impl MessageFrontend {
         let (category, kind) = item.ty.split();
         MessageFrontend {
             id,
-            timestamp: (item.timestamp as u128) * 1_000_000_000,
+            timestamp: (item.timestamp as u128) * 1_000_000,
             remote_addr: item.remote_addr,
             source_type: item.initiator,
             incoming: item.sender.incoming(),
@@ -255,7 +255,7 @@ impl MessageBuilderFull {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs();
+            .as_millis() as u64;
 
         Item {
             cn_ts: connection.ts,
