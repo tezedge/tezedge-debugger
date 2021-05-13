@@ -3,14 +3,14 @@
 
 use std::{collections::HashMap, sync::{Arc, Mutex, atomic::{Ordering, AtomicU32}}};
 use bpf_memprof::{Client, ClientCallback, Event, EventKind};
-use tezedge_memprof::{AtomicState, Page, History};
+use tezedge_memprof::{AtomicState, Page, History, EventLast};
 
 #[derive(Default)]
 struct MemprofClient {
     pid: Arc<AtomicU32>,
     state: Arc<AtomicState>,
     allocations: HashMap<u64, u64>,
-    history: Arc<Mutex<History>>,
+    history: Arc<Mutex<History<EventLast>>>,
     last: Option<EventKind>,
 }
 
@@ -36,9 +36,9 @@ impl ClientCallback for MemprofClient {
         self.state.process_event(&mut self.allocations, &event.event);
         match &event.event {
             &EventKind::PageAlloc(ref v) if v.pfn.0 != 0 =>
-                self.history.lock().unwrap().process(Page::new(v.pfn, v.order), Some((&event.stack, v.gfp_flags))),
+                self.history.lock().unwrap().track_alloc(Page::new(v.pfn, v.order), &event.stack, v.gfp_flags),
             &EventKind::PageFree(ref v) if v.pfn.0 != 0 =>
-                self.history.lock().unwrap().process(Page::new(v.pfn, v.order), None),
+                self.history.lock().unwrap().track_free(Page::new(v.pfn, v.order)),
             _ => (),
         }
         self.last = Some(event.event);
@@ -47,7 +47,7 @@ impl ClientCallback for MemprofClient {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{thread, time::Duration, io};
-    use tezedge_memprof::{Reporter, DefaultFilter, StackResolver};
+    use tezedge_memprof::{Reporter, StackResolver};
     use tokio::runtime::Runtime;
 
     tracing_subscriber::fmt()
@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 thread::sleep(delay);
                 log::info!("{}", state.report(delay));
-                log::info!("{}", history.lock().unwrap().short_report(&DefaultFilter));
+                log::info!("{}", history.lock().unwrap().short_report());
             }
         })
     };
@@ -105,7 +105,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let history = history.lock().unwrap();
     serde_json::to_writer(std::fs::File::create("target/history.json")?, &*history)?;
-    serde_json::to_writer(std::fs::File::create("target/misc.json")?, &history.flags_report())?;
 
     let _ = (server, runtime);
 
@@ -120,22 +119,22 @@ mod server {
         http::StatusCode,
     };
     use serde::Deserialize;
-    use tezedge_memprof::{History, DefaultFilter, StackResolver};
+    use tezedge_memprof::{History, EventLast, StackResolver};
 
     pub fn routes(
-        history: Arc<Mutex<History>>,
+        history: Arc<Mutex<History<EventLast>>>,
         resolver: Arc<RwLock<StackResolver>>,
     ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static {
         use warp::reply::with;
     
         warp::get()
-            .and(tree(history.clone(), resolver).or(short(history)))
+            .and(tree(history, resolver))
             .with(with::header("Content-Type", "application/json"))
             .with(with::header("Access-Control-Allow-Origin", "*"))
     }
 
     fn tree(
-        history: Arc<Mutex<History>>,
+        history: Arc<Mutex<History<EventLast>>>,
         resolver: Arc<RwLock<StackResolver>>,
     ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
         #[derive(Deserialize)]
@@ -149,20 +148,7 @@ mod server {
                 let resolver = resolver.read().unwrap();
                 let report = history.lock()
                     .unwrap()
-                    .tree_report(&resolver, &DefaultFilter, params.threshold.unwrap_or(512));
-                reply::with_status(reply::json(&report), StatusCode::OK)
-            })
-    }
-
-    fn short(
-        history: Arc<Mutex<History>>,
-    ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
-        warp::path!("v1" / "short")
-            .and(warp::query::query())
-            .map(move |()| -> WithStatus<Json> {
-                let report = history.lock()
-                    .unwrap()
-                    .short_report(&DefaultFilter);
+                    .tree_report(resolver, params.threshold.unwrap_or(512));
                 reply::with_status(reply::json(&report), StatusCode::OK)
             })
     }
