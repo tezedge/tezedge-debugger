@@ -48,7 +48,6 @@ impl ClientCallback for MemprofClient {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{thread, time::Duration, io};
     use tezedge_memprof::{Reporter, StackResolver};
-    use tokio::runtime::Runtime;
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -56,12 +55,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let running = Arc::new(AtomicBool::new(true));
     let cli = MemprofClient::default();
+    let history = cli.history.clone();
 
+    // spawn a thread monitoring process map from `/proc/<pid>/maps` and loading symbol tables
+    let resolver = StackResolver::spawn(cli.pid.clone());
+
+    // spawn a thread-pool serving http requests, using tokio
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let server = runtime
+        .spawn(warp::serve(server::routes(history.clone(), resolver)).run(([0, 0, 0, 0], 17832)));
+
+    // spawn a thread listening ctrl+c
     {
         let running = running.clone();
         ctrlc::set_handler(move || running.store(false, Ordering::Relaxed))?;
     }
 
+    // spawn a thread reporting status in log each few seconds
     let thread = {
         let running = running.clone();
         let mut state = Reporter::new(cli.state.clone());
@@ -84,12 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     };
 
-    let resolver = StackResolver::spawn(cli.pid.clone());
-
-    let runtime = Runtime::new().unwrap();
-    let server = runtime.spawn(warp::serve(server::routes(cli.history.clone(), resolver)).run(([0, 0, 0, 0], 17832)));
-
-    let history = cli.history.clone();
+    // polling ebpf events
     let rb = Client::connect("/tmp/bpf-memprof.sock", cli)?;
     while running.load(Ordering::Relaxed) {
         match rb.poll(Duration::from_secs(1)) {
@@ -107,7 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let history = history.lock().unwrap();
     serde_json::to_writer(std::fs::File::create("target/history.json")?, &*history)?;
 
-    let _ = (server, runtime);
+    let _ = server;
 
     Ok(())
 }

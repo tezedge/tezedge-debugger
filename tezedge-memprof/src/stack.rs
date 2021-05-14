@@ -125,28 +125,33 @@ impl Symbol {
         let symbol_tables = (0..s)
             .filter_map(|i| {
                 let section = elf.section(i).ok()??;
-                match (section.data, section.name) {
-                    (SectionData::SymbolTable { table, .. }, ".symtab") => Some(table),
+                match (section.link, section.data) {
+                    (link, SectionData::SymbolTable { table, .. }) => Some((link, table)),
                     _ => None,
                 }
             });
-        let string_table = (0..s)
-            .filter_map(|i| {
-                let section = elf.section(i).ok()??;
-                match (section.data, section.name) {
-                    (SectionData::StringTable(table), ".strtab") => Some(table),
-                    _ => None,
-                }
-            })
-            .next().ok_or("string table not found".to_string())?;
 
-        for symbol_table in symbol_tables {
-            for i in 0..symbol_table.length() {
-                let symbol = symbol_table.pick(i).map_err(|e| format!("{:?}", e))?;
-                let name = string_table.pick(symbol.name as usize)
+        for (link, symtab) in symbol_tables {
+            let index = u16::from(link) as usize;
+            if index >= elf.section_number() {
+                log::warn!("no strtab table corresponding to symtab");
+            }
+            let strtab = if let Ok(Some(section)) = elf.section(index) {
+                if let SectionData::StringTable(table) = section.data {
+                    table
+                } else {
+                    log::warn!("symtab linked to bad strtab {}", index);
+                    continue;
+                }
+            } else {
+                log::warn!("symtab linked to bad strtab {}", index);
+                continue;
+            };
+            for i in 0..symtab.length() {
+                let symbol = symtab.pick(i).map_err(|e| format!("{:?}", e))?;
+                let name = strtab.pick(symbol.name as usize)
                     .map_err(|e| format!("{:?}", e))?
                     .to_string();
-                //log::info!("got symbol: {}, {}", i, symbol.name);
                 symbols.push(Symbol {
                     code: symbol.value..(symbol.value + symbol.size),
                     name,

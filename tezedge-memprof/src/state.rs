@@ -102,8 +102,6 @@ pub struct Report {
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let c = &self.current_counters;
-        let usage = c.page_bytes;
-        let kib = usage / 0x400;
         let rss_file_mib = c.rss_stat_file_bytes as f64 / (0x400 as f64);
         let rss_anon_mib = c.rss_stat_anon_bytes as f64 / (0x400 as f64);
         let rss_swap_mib = c.rss_stat_swap_bytes as f64 / (0x400 as f64);
@@ -111,10 +109,7 @@ impl fmt::Display for Report {
         let _diff = c.diff(&self.last_counters, self.elapsed_time);
         write!(
             f,
-            "kib: {}, alloc: {}, free: {}, rss: {:.2} (file: {:.2} + anon: {:.2} + swap: {:.2} + shared: {:.2})]",
-            kib,
-            c.page_alloc_count,
-            c.page_free_count,
+            "rss: {:.2} (file: {:.2} + anon: {:.2} + swap: {:.2} + shared: {:.2})]",
             rss_file_mib + rss_anon_mib + rss_swap_mib + rss_shared_mib,
             rss_file_mib,
             rss_anon_mib,
@@ -151,6 +146,16 @@ impl Default for AtomicState {
 
 impl AtomicState {
     pub fn process_event(&self, allocations: &mut HashMap<u64, u64>, event: &EventKind) {
+        let _ = allocations;
+        match event {
+            &EventKind::RssStat(ref v) => {
+                self.rss_stat(v.size, v.member);
+            },
+            _ => (),
+        }
+    }
+
+    pub fn process_event_all(&self, allocations: &mut HashMap<u64, u64>, event: &EventKind) {
         match event {
             &EventKind::KFree(ref v) => {
                 match allocations.get(&v.ptr.0) {
