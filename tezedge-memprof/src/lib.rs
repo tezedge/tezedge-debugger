@@ -13,3 +13,5 @@ pub use self::history::{Page, History, FrameReport, EventLast};
 
 mod stack;
 pub use self::stack::StackResolver;
+
+mod table;
