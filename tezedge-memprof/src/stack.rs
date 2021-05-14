@@ -1,5 +1,16 @@
 use std::{collections::{HashMap, HashSet}, sync::{Arc, RwLock, atomic::{AtomicU32, Ordering}}};
+use bpf_memprof::{Hex64, Hex32};
+use serde::Serialize;
 use super::{memory_map::ProcessMap, table::SymbolTable};
+
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolInfo {
+    offset: Option<Hex32>,
+    executable: Option<String>,
+    virtual_address: Option<Hex64>,
+    function_name: Option<String>,
+}
 
 #[derive(Default)]
 pub struct StackResolver {
@@ -64,18 +75,27 @@ impl StackResolver {
         resolver
     }
 
-    fn try_resolve(&self, address: u64) -> Option<(String, Option<&String>)> {
+    fn try_resolve(&self, address: u64) -> Option<((usize, &str), Option<&String>)> {
         let map = self.map.as_ref()?;
         let (filename, offset) = map.find(address as usize)?;
         let table = self.files.get(&filename)?;
-        Some((format!("{:08x}@{}", offset, table.name()), table.find(offset as u64)))
+        Some(((offset, table.name()), table.find(offset as u64)))
     }
 
-    pub fn resolve(&self, address: u64) -> String {
+    pub fn resolve(&self, address: u64) -> SymbolInfo {
         match self.try_resolve(address) {
-            None => format!("{:016x} - unknown - unknown", address),
-            Some((desc, None)) => format!("{:016x} - {} - unknown", address, desc),
-            Some((desc, Some(name))) => format!("{:016x} - {} - \'{}\'", address, desc, name),
+            None => SymbolInfo {
+                offset: None,
+                executable: None,
+                virtual_address: Some(Hex64(address)),
+                function_name: None,
+            },
+            Some(((offset, file), name)) => SymbolInfo {
+                offset: Some(Hex32(offset as _)),
+                executable: Some(file.to_string()),
+                virtual_address: Some(Hex64(address)),
+                function_name: name.cloned(),
+            },
         }
     }
 }

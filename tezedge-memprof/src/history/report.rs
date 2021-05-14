@@ -1,7 +1,7 @@
 use std::{collections::{HashMap, BTreeMap}, ops::Deref};
 use bpf_memprof::Hex64;
-use serde::ser;
-use super::StackResolver;
+use serde::ser::{self, SerializeSeq};
+use super::stack::{SymbolInfo, StackResolver};
 
 #[derive(Default)]
 pub struct FrameReportInner {
@@ -10,7 +10,7 @@ pub struct FrameReportInner {
 }
 
 pub struct FrameReportSorted {
-    name: String,
+    name: SymbolInfo,
     value: u64,
     frames: BTreeMap<u64, FrameReportSorted>,
 }
@@ -35,7 +35,7 @@ impl FrameReportInner {
         })
     }
 
-    pub fn sorted(&self, resolver: &StackResolver, name: String) -> FrameReportSorted {
+    pub fn sorted(&self, resolver: &StackResolver, name: SymbolInfo) -> FrameReportSorted {
         let mut frames = BTreeMap::new();
         for (key, value) in &self.frames {
             let name = resolver.resolve(key.0);
@@ -71,15 +71,16 @@ impl ser::Serialize for FrameReportSorted {
             where
                 S: ser::Serializer,
             {
-                let mut map = serializer.serialize_map(Some(self.0.len()))?;
+                let mut map = serializer.serialize_seq(Some(self.0.len()))?;
                 for (_, inner_frame) in self.0 {
-                    map.serialize_entry(&inner_frame.name, inner_frame)?
+                    map.serialize_element(inner_frame)?
                 }
                 map.end()
             }
         }        
 
-        let mut map = serializer.serialize_map(Some(2))?;
+        let mut map = serializer.serialize_map(Some(3))?;
+        map.serialize_entry("name", &self.name)?;
         map.serialize_entry("value", &self.value)?;
         map.serialize_entry("frames", &Helper(&self.frames))?;
         map.end()
@@ -94,7 +95,7 @@ where
     where
         S: ser::Serializer,
     {
-        let sorted = self.inner.sorted(&self.resolver, String::new());
+        let sorted = self.inner.sorted(&self.resolver, SymbolInfo::default());
         sorted.serialize(serializer)
     }
 }

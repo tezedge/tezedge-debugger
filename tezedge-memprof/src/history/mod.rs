@@ -1,4 +1,4 @@
-use super::stack::StackResolver;
+use super::stack;
 
 mod page;
 mod allocation;

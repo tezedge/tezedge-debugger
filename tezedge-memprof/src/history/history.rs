@@ -6,7 +6,7 @@ use super::{
     error::ErrorReport,
     allocation::{PageHistory, AllocError, FreeError},
     report::FrameReport,
-    StackResolver,
+    stack::StackResolver,
 };
 
 #[derive(Clone, Hash, PartialEq, Eq)]

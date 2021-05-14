@@ -108,6 +108,5 @@ impl SymbolTable {
             }
         }
         None
-
     }
 }
