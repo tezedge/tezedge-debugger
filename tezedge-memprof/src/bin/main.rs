@@ -146,6 +146,7 @@ mod server {
         #[derive(Deserialize)]
         struct Params {
             threshold: Option<u64>,
+            reverse: Option<bool>,
         }
 
         warp::path!("v1" / "tree")
@@ -154,7 +155,11 @@ mod server {
                 let resolver = resolver.read().unwrap();
                 let report = history.lock()
                     .unwrap()
-                    .tree_report(resolver, params.threshold.unwrap_or(512));
+                    .tree_report(
+                        resolver,
+                        params.threshold.unwrap_or(512),
+                        params.reverse.unwrap_or(false),
+                    );
                 reply::with_status(reply::json(&report), StatusCode::OK)
             })
     }

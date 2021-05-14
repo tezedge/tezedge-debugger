@@ -100,6 +100,7 @@ where
         &self,
         resolver: R,
         threshold: u64,
+        reverse: bool,
     ) -> FrameReport<R>
     where
         R: Deref<Target = StackResolver>,
@@ -112,7 +113,11 @@ where
                     value += page.size_kib();
                 }
             }
-            report.inner.insert(&stack.0, value);
+            if reverse {
+                report.inner.insert(stack.0.iter().rev(), value);
+            } else {
+                report.inner.insert(stack.0.iter(), value);
+            }
         }
         report.inner.strip(threshold);
 

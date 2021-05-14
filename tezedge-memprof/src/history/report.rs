@@ -16,7 +16,10 @@ pub struct FrameReportSorted {
 }
 
 impl FrameReportInner {
-    pub fn insert(&mut self, stack: &[Hex64], value: u64) {
+    pub fn insert<'a, StackIter>(&mut self, stack: StackIter, value: u64)
+    where
+        StackIter: Iterator<Item = &'a Hex64>,
+    {
         let mut node = self;
         for stack_frame in stack {
             node.value += value;
