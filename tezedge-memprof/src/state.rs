@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, sync::{Arc, atomic::{Ordering, AtomicBool, AtomicU64}}, time::Duration};
+use std::{collections::HashMap, fmt, sync::{Arc, atomic::{Ordering, AtomicU64}}, time::Duration};
 use bpf_memprof::EventKind;
 
 #[derive(Clone, Default, Debug)]
@@ -69,7 +69,6 @@ impl Counters<u64> {
 }
 
 pub struct AtomicState {
-    running: AtomicBool,
     counters: Counters<AtomicU64>,
 }
 
@@ -84,10 +83,6 @@ impl Reporter {
             atomic_state,
             counters: Counters::default(),
         }
-    }
-
-    pub fn running(&self) -> bool {
-        self.atomic_state.running.load(Ordering::Relaxed)
     }
 
     pub fn report(&mut self, elapsed_time: Duration) -> Report {
@@ -132,7 +127,6 @@ impl fmt::Display for Report {
 impl Default for AtomicState {
     fn default() -> Self {
         AtomicState {
-            running: AtomicBool::new(true),
             counters: Counters {
                 slab_unknown_bytes: AtomicU64::new(0),
                 slab_unknown_alloc_count: AtomicU64::new(0),
@@ -156,18 +150,6 @@ impl Default for AtomicState {
 }
 
 impl AtomicState {
-    pub fn running_ref(&self) -> &AtomicBool {
-        &self.running
-    }
-
-    pub fn stop(&self) {
-        self.running.store(false, Ordering::Relaxed)
-    }
-
-    pub fn running(&self) -> bool {
-        self.running.load(Ordering::Relaxed)
-    }
-
     pub fn process_event(&self, allocations: &mut HashMap<u64, u64>, event: &EventKind) {
         match event {
             &EventKind::KFree(ref v) => {

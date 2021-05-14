@@ -12,6 +12,12 @@ use super::{
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub struct StackShort(Vec<Hex64>);
 
+impl StackShort {
+    pub fn unknown() -> Self {
+        StackShort(vec![Hex64(0)])
+    }
+}
+
 impl Serialize for StackShort {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -36,36 +42,44 @@ where
     pub fn track_alloc(&mut self, page: Page, stack: &Stack, flags: Hex32) {
         let stack = StackShort(stack.ips().to_vec());
 
+        // if we have a last_stack for some page then `self.group` contains entry for this stack
+        // and the entry contains history for the page, so unwrap here is ok
         if let Some(last_stack) = self.last_stack.get(&page) {
             if last_stack.eq(&stack) {
-                if let Err(AllocError) = self.group.get_mut(&stack).unwrap().get_mut(&page).unwrap().track_alloc(flags) {
-                    self.error_report.double_alloc(&page);
-                }
+                let history = self.group.get_mut(last_stack).unwrap().get_mut(&page).unwrap();
+                Self::track_alloc_error(&mut self.error_report, history, &page, flags);
             } else {
-                let mut history = self.group.get_mut(&last_stack).unwrap().remove(&page).unwrap();
-                if let Err(AllocError) = history.track_alloc(flags) {
-                    self.error_report.double_alloc(&page);
-                }
+                // fix it to track precise history, do not remove it in previous stack
+                let mut history = self.group.get_mut(last_stack).unwrap().remove(&page).unwrap();
+                Self::track_alloc_error(&mut self.error_report, &mut history, &page, flags);
                 self.group.entry(stack.clone()).or_default().insert(page.clone(), history);
                 self.last_stack.insert(page, stack);
             }
         } else {
-            let history = self.group.entry(stack.clone()).or_default().entry(page.clone()).or_default();
-            if let Err(AllocError) = history.track_alloc(flags) {
-                self.error_report.double_alloc(&page);
-            }
+            let group = self.group.entry(stack.clone()).or_default();
+            let history = group.entry(page.clone()).or_default();
+            Self::track_alloc_error(&mut self.error_report, history, &page, flags);
             self.last_stack.insert(page, stack);
         }
     }
 
     pub fn track_free(&mut self, page: Page) {
-        if let Some(stack) = self.last_stack.get(&page) {
-            let history = self.group.entry(stack.clone()).or_default().entry(page.clone()).or_default();
-            match history.track_free() {
-                Ok(()) => (),
-                Err(FreeError::DoubleFree) => self.error_report.double_free(&page),
-                Err(FreeError::WithoutAlloc) => self.error_report.without_alloc(&page),
-            }
+        let stack = self.last_stack.get(&page).cloned().unwrap_or(StackShort::unknown());
+        let history = self.group.entry(stack).or_default().entry(page.clone()).or_default();
+        Self::track_free_error(&mut self.error_report, history, &page);
+    }
+
+    fn track_alloc_error(error_report: &mut ErrorReport, history: &mut H, page: &Page, flags: Hex32) {
+        if let Err(AllocError) = history.track_alloc(flags) {
+            error_report.double_alloc(page);
+        }
+    }
+
+    fn track_free_error(error_report: &mut ErrorReport, history: &mut H, page: &Page) {
+        match history.track_free() {
+            Ok(()) => (),
+            Err(FreeError::DoubleFree) => error_report.double_free(&page),
+            Err(FreeError::WithoutAlloc) => error_report.without_alloc(&page),
         }
     }
 

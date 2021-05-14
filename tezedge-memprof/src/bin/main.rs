@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{collections::HashMap, sync::{Arc, Mutex, atomic::{Ordering, AtomicU32}}};
+use std::{collections::HashMap, sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU32, Ordering}}};
 use bpf_memprof::{Client, ClientCallback, Event, EventKind};
 use tezedge_memprof::{AtomicState, Page, History, EventLast};
 
@@ -54,21 +54,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
+    let running = Arc::new(AtomicBool::new(true));
     let cli = MemprofClient::default();
 
     {
-        let state = cli.state.clone();
-        ctrlc::set_handler(move || state.stop())?;
+        let running = running.clone();
+        ctrlc::set_handler(move || running.store(false, Ordering::Relaxed))?;
     }
 
     let thread = {
+        let running = running.clone();
         let mut state = Reporter::new(cli.state.clone());
         let history = cli.history.clone();
         thread::spawn(move || {
             let delay = Duration::from_secs(4);
             let mut cnt = 2;
             loop {
-                if !state.running() {
+                if !running.load(Ordering::Relaxed) {
                     if cnt <= 0 {
                         break;
                     } else {
@@ -87,10 +89,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = Runtime::new().unwrap();
     let server = runtime.spawn(warp::serve(server::routes(cli.history.clone(), resolver)).run(([0, 0, 0, 0], 17832)));
 
-    let state = cli.state.clone();
     let history = cli.history.clone();
     let rb = Client::connect("/tmp/bpf-memprof.sock", cli)?;
-    while state.running() {
+    while running.load(Ordering::Relaxed) {
         match rb.poll(Duration::from_secs(1)) {
             Ok(_) => (),
             Err(c) if c == -4 => break,
