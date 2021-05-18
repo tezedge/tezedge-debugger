@@ -25,8 +25,6 @@ impl ClientCallback for MemprofClient {
             }
         };
 
-        self.pid.store(event.pid, Ordering::Relaxed);
-
         if let Some(last) = &self.last {
             if last.eq(&event.event) {
                 log::debug!("repeat");
@@ -35,10 +33,12 @@ impl ClientCallback for MemprofClient {
         }
         self.state.process_event(&mut self.allocations, &event.event);
         match &event.event {
-            &EventKind::PageAlloc(ref v) if v.pfn.0 != 0 =>
-                self.history.lock().unwrap().track_alloc(Page::new(v.pfn, v.order), &event.stack, v.gfp_flags),
+            &EventKind::PageAlloc(ref v) if v.pfn.0 != 0 => {
+                self.pid.store(event.pid, Ordering::Relaxed);
+                self.history.lock().unwrap().track_alloc(Page::new(v.pfn, v.order), &event.stack, v.gfp_flags);
+            }
             &EventKind::PageFree(ref v) if v.pfn.0 != 0 =>
-                self.history.lock().unwrap().track_free(Page::new(v.pfn, v.order)),
+                self.history.lock().unwrap().track_free(Page::new(v.pfn, v.order), event.pid),
             _ => (),
         }
         self.last = Some(event.event);

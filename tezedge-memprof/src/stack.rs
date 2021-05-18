@@ -1,14 +1,13 @@
 use std::{collections::{HashMap, HashSet}, sync::{Arc, RwLock, atomic::{AtomicU32, Ordering}}};
-use bpf_memprof::{Hex64, Hex32};
+use bpf_memprof::Hex32;
 use serde::Serialize;
 use super::{memory_map::ProcessMap, table::SymbolTable};
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SymbolInfo {
-    offset: Option<Hex32>,
-    executable: Option<String>,
-    virtual_address: Option<Hex64>,
+    offset: Hex32,
+    executable: String,
     function_name: Option<String>,
 }
 
@@ -82,20 +81,13 @@ impl StackResolver {
         Some(((offset, table.name()), table.find(offset as u64)))
     }
 
-    pub fn resolve(&self, address: u64) -> SymbolInfo {
-        match self.try_resolve(address) {
-            None => SymbolInfo {
-                offset: None,
-                executable: None,
-                virtual_address: Some(Hex64(address)),
-                function_name: None,
-            },
-            Some(((offset, file), name)) => SymbolInfo {
-                offset: Some(Hex32(offset as _)),
-                executable: Some(file.to_string()),
-                virtual_address: Some(Hex64(address)),
-                function_name: name.cloned(),
-            },
-        }
+    pub fn resolve(&self, address: u64) -> Option<SymbolInfo> {
+        let ((offset, filename), name) = self.try_resolve(address)?;
+
+        Some(SymbolInfo {
+            offset: Hex32(offset as _),
+            executable: filename.to_string(),
+            function_name: name.cloned(),
+        })
     }
 }

@@ -7,12 +7,15 @@ use super::stack::{SymbolInfo, StackResolver};
 pub struct FrameReportInner {
     value: u64,
     frames: HashMap<Hex64, FrameReportInner>,
+    under_threshold: u64,
 }
 
 pub struct FrameReportSorted {
-    name: SymbolInfo,
+    name: Option<SymbolInfo>,
     value: u64,
     frames: BTreeMap<u64, FrameReportSorted>,
+    under_threshold: u64,
+    unknown: u64,
 }
 
 impl FrameReportInner {
@@ -29,20 +32,35 @@ impl FrameReportInner {
     }
 
     pub fn strip(&mut self, threshold: u64) {
+        let mut under_threshold = 0;
         self.frames.retain(|_, frame| {
             frame.strip(threshold);
-            frame.value >= threshold
-        })
+            let retain = frame.value >= threshold;
+            if !retain {
+                under_threshold += frame.value;
+            }
+            retain
+        });
+        self.under_threshold = under_threshold;
     }
 
-    pub fn sorted(&self, resolver: &StackResolver, name: SymbolInfo) -> FrameReportSorted {
+    pub fn sorted(&self, resolver: &StackResolver, name: Option<SymbolInfo>) -> FrameReportSorted {
         let mut frames = BTreeMap::new();
+        let mut unknown = self.value - self.under_threshold;
         for (key, value) in &self.frames {
-            let name = resolver.resolve(key.0);
-            frames.insert(!value.value, value.sorted(resolver, name));
+            if let Some(name) = resolver.resolve(key.0) {
+                frames.insert(!value.value, value.sorted(resolver, Some(name)));
+                unknown -= value.value;
+            }
         }
 
-        FrameReportSorted { name, value: self.value, frames }
+        FrameReportSorted {
+            name,
+            value: self.value,
+            frames,
+            under_threshold: self.under_threshold,
+            unknown,
+        }
     }
 }
 
@@ -64,25 +82,77 @@ impl ser::Serialize for FrameReportSorted {
     {
         use self::ser::SerializeMap;
 
-        struct Helper<'a>(&'a BTreeMap<u64, FrameReportSorted>);
+        struct Helper<'a> {
+            inner: &'a BTreeMap<u64, FrameReportSorted>,
+            under_threshold: Option<FakeFrame>,
+            unknown: Option<FakeFrame>,        
+        }
+
+        #[derive(serde::Serialize)]
+        struct FakeFrame {
+            name: String,
+            value: u64,
+        }
+
+        impl FakeFrame {
+            pub fn under_threshold(value: u64) -> Option<Self> {
+                if value != 0 {
+                    Some(FakeFrame {
+                        name: "underThreshold".to_string(),
+                        value,
+                    })
+                } else {
+                    None
+                }
+            }
+
+            pub fn unknown(value: u64) -> Option<Self> {
+                if value != 0 {
+                    Some(FakeFrame {
+                        name: "unknown".to_string(),
+                        value,
+                    })
+                } else {
+                    None
+                }
+            }
+        }
 
         impl<'a> ser::Serialize for Helper<'a> {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
                 S: ser::Serializer,
             {
-                let mut map = serializer.serialize_seq(Some(self.0.len()))?;
-                for (_, inner_frame) in self.0 {
-                    map.serialize_element(inner_frame)?
+                let l = self.inner.len()
+                    + (self.under_threshold.is_some() as usize)
+                    + (self.unknown.is_some() as usize);
+                let mut map = serializer.serialize_seq(Some(l))?;
+                for (_, inner_frame) in self.inner {
+                    map.serialize_element(inner_frame)?;
+                }
+                if let &Some(ref f) = &self.under_threshold {
+                    map.serialize_element(f)?;
+                }
+                if let &Some(ref f) = &self.unknown {
+                    map.serialize_element(f)?;
                 }
                 map.end()
             }
         }        
 
-        let mut map = serializer.serialize_map(Some(3))?;
-        map.serialize_entry("name", &self.name)?;
+        let helper = Helper {
+            inner: &self.frames,
+            under_threshold: FakeFrame::under_threshold(self.under_threshold),
+            unknown: FakeFrame::unknown(self.unknown),
+        };
+
+        let l = 2 + (self.name.is_some() as usize);
+        let mut map = serializer.serialize_map(Some(l))?;
+        if let &Some(ref name) = &self.name {
+            map.serialize_entry("name", name)?;
+        }
         map.serialize_entry("value", &self.value)?;
-        map.serialize_entry("frames", &Helper(&self.frames))?;
+        map.serialize_entry("frames", &helper)?;
         map.end()
     }
 }
@@ -95,7 +165,7 @@ where
     where
         S: ser::Serializer,
     {
-        let sorted = self.inner.sorted(&self.resolver, SymbolInfo::default());
+        let sorted = self.inner.sorted(&self.resolver, None);
         sorted.serialize(serializer)
     }
 }

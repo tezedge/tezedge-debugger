@@ -16,36 +16,18 @@ ebpf::license!("GPL");
 pub struct App {
     #[hashmap(size = 1)]
     pub pid: ebpf::HashMapRef<4, 4>,
-    #[ringbuf(size = 0x40000000)]
+    #[ringbuf(size = 0x10000000)]
     pub event_queue: ebpf::RingBufferRef,
     #[prog("tracepoint/syscalls/sys_enter_execve")]
     pub execve: ebpf::ProgRef,
     #[prog("tracepoint/syscalls/sys_enter_execveat")]
     pub execveat: ebpf::ProgRef,
-    #[prog("tracepoint/kmem/kfree")]
-    pub kfree: ebpf::ProgRef,
-    #[prog("tracepoint/kmem/kmalloc")]
-    pub kmalloc: ebpf::ProgRef,
-    #[prog("tracepoint/kmem/kmalloc_node")]
-    pub kmalloc_node: ebpf::ProgRef,
-    #[prog("tracepoint/kmem/kmem_cache_alloc")]
-    pub cache_alloc: ebpf::ProgRef,
-    #[prog("tracepoint/kmem/kmem_cache_alloc_node")]
-    pub cache_alloc_node: ebpf::ProgRef,
-    #[prog("tracepoint/kmem/kmem_cache_free")]
-    pub cache_free: ebpf::ProgRef,
     #[prog("tracepoint/kmem/mm_page_alloc")]
     pub page_alloc: ebpf::ProgRef,
     #[prog("tracepoint/kmem/mm_page_free")]
     pub page_free: ebpf::ProgRef,
-    #[prog("tracepoint/kmem/mm_page_free_batched")]
-    pub page_free_batched: ebpf::ProgRef,
     #[prog("tracepoint/kmem/rss_stat")]
     pub rss_stat: ebpf::ProgRef,
-    #[prog("tracepoint/percpu/percpu_alloc_percpu")]
-    pub percpu_alloc: ebpf::ProgRef,
-    #[prog("tracepoint/percpu/percpu_free_percpu")]
-    pub percpu_free: ebpf::ProgRef,
 }
 
 #[cfg(feature = "kern")]
@@ -148,14 +130,27 @@ impl App {
         self.check_filename(ctx.read_here::<*const u8>(0x18))
     }
 
-    // /sys/kernel/debug/tracing/events/kmem/mm_page_alloc/format
+    fn output_unconditional<T>(&mut self, ctx: ebpf::Context) -> Result<(), i32>
+    where
+        T: Pod,
+    {
+        let x = unsafe { helpers::get_current_pid_tgid() };
+        let pid = (x >> 32) as u32;
+        self.output_generic::<T>(ctx, pid)
+    }
 
     fn output<T>(&mut self, ctx: ebpf::Context) -> Result<(), i32>
     where
         T: Pod,
     {
         let pid = self.check_pid()?;
+        self.output_generic::<T>(ctx, pid)
+    }
 
+    fn output_generic<T>(&mut self, ctx: ebpf::Context, pid: u32) -> Result<(), i32>
+    where
+        T: Pod,
+    {
         let mut data = self.event_queue.reserve(0x10 + T::SIZE + 0x08 + (8 * STACK_MAX_DEPTH))?;
         let data_mut = data.as_mut();
         ctx.read_into(0x00, &mut data_mut[..0x08]);
@@ -172,40 +167,48 @@ impl App {
                 Ok(())
             },
             Err(e) => {
-                data.discard();
+                data.submit();
                 Err(e)
             },
         }
     }
 
+    // /sys/kernel/debug/tracing/events/kmem/mm_page_alloc/format
+
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn kfree(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<KFree>(ctx)
+        self.output_unconditional::<KFree>(ctx)
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn kmalloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.output::<KMAlloc>(ctx)
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn kmalloc_node(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.output::<KMAllocNode>(ctx)
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn cache_alloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.output::<CacheAlloc>(ctx)
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn cache_alloc_node(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.output::<CacheAllocNode>(ctx)
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn cache_free(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<CacheFree>(ctx)
+        self.output_unconditional::<CacheFree>(ctx)
     }
 
     #[inline(always)]
@@ -215,12 +218,13 @@ impl App {
 
     #[inline(always)]
     pub fn page_free(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<PageFree>(ctx)
+        self.output_unconditional::<PageFree>(ctx)
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn page_free_batched(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<PageFreeBatched>(ctx)
+        self.output_unconditional::<PageFreeBatched>(ctx)
     }
 
     #[inline(always)]
@@ -228,14 +232,16 @@ impl App {
         self.output::<RssStat>(ctx)
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn percpu_alloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.output::<PercpuAlloc>(ctx)
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn percpu_free(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<PercpuFree>(ctx)
+        self.output_unconditional::<PercpuFree>(ctx)
     }
 }
 

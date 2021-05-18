@@ -12,12 +12,6 @@ use super::{
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub struct StackShort(Vec<Hex64>);
 
-impl StackShort {
-    pub fn unknown() -> Self {
-        StackShort(vec![Hex64(0)])
-    }
-}
-
 impl Serialize for StackShort {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -63,10 +57,14 @@ where
         }
     }
 
-    pub fn track_free(&mut self, page: Page) {
-        let stack = self.last_stack.get(&page).cloned().unwrap_or(StackShort::unknown());
-        let history = self.group.entry(stack).or_default().entry(page.clone()).or_default();
-        Self::track_free_error(&mut self.error_report, history, &page);
+    pub fn track_free(&mut self, page: Page, pid: u32) {
+        let _ = pid; // TODO:
+        if let Some(stack) = self.last_stack.get(&page).cloned() {
+            let history = self.group.entry(stack).or_default().entry(page.clone()).or_default();
+            Self::track_free_error(&mut self.error_report, history, &page);
+        } else {
+            // self.error_report.without_alloc(&page);
+        }
     }
 
     fn track_alloc_error(error_report: &mut ErrorReport, history: &mut H, page: &Page, flags: Hex32) {
@@ -79,7 +77,10 @@ where
         match history.track_free() {
             Ok(()) => (),
             Err(FreeError::DoubleFree) => error_report.double_free(&page),
-            Err(FreeError::WithoutAlloc) => error_report.without_alloc(&page),
+            Err(FreeError::WithoutAlloc) => {
+                error_report.without_alloc(&page);
+                debug_assert!(false);
+            },
         }
     }
 
