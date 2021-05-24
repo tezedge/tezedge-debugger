@@ -90,7 +90,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 thread::sleep(delay);
                 let report = state.report(delay);
                 let top = report.rss_anon_kib();
-                let (anon, cache) = history.lock().unwrap().short_report();
+                let (anon_plus_cache, cache) = history.lock().unwrap().short_report();
+                let anon = anon_plus_cache - cache;
                 log::info!("anon: {} kib (diff: {}), cache {} kib", anon, (anon as i64) - (top as i64), cache);
             }
         })
