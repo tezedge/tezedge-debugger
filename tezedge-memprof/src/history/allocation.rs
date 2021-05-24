@@ -39,6 +39,15 @@ pub struct Event {
     flags: Hex32,
 }
 
+impl Event {
+    pub fn page_cache(&self) -> bool {
+        // this flag indicating page cache
+        const GFP_WRITE: u32 = 0x1000;
+
+        (self.flags.0 & GFP_WRITE) != 0
+    }
+}
+
 #[derive(Debug, Error)]
 #[error("double alloc")]
 pub struct AllocError;
@@ -55,6 +64,8 @@ pub trait PageHistory {
     fn track_alloc(&mut self, flags: Hex32) -> Result<(), AllocError>;
     fn track_free(&mut self) -> Result<(), FreeError>;
     fn is_allocated(&self, time: Option<u64>) -> bool;
+
+    fn page_cache(&self) -> bool;
 }
 
 #[derive(Default, Serialize)]
@@ -106,6 +117,14 @@ impl PageHistory for EventLast {
             (_, &None) => false,
             (None, &Some(Event { ref time_range, .. })) => time_range.open_end(),
             (Some(time), &Some(Event { ref time_range, .. })) => time_range.0.contains(&time),
+        }
+    }
+
+    fn page_cache(&self) -> bool {
+        if let &Some(ref event) = &self.0 {
+            event.page_cache()
+        } else {
+            false
         }
     }
 }

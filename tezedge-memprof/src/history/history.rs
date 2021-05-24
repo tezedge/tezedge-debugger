@@ -109,15 +109,19 @@ where
         let mut report = FrameReport::new(resolver);
         for (stack, group) in &self.group {
             let mut value = 0;
+            let mut cache_value = 0;
             for (page, history) in group {
                 if history.is_allocated(None) {
                     value += page.size_kib();
+                    if history.page_cache() {
+                        cache_value += page.size_kib();
+                    }
                 }
             }
             if reverse {
-                report.inner.insert(stack.0.iter().rev(), value);
+                report.inner.insert(stack.0.iter().rev(), value, cache_value);
             } else {
-                report.inner.insert(stack.0.iter(), value);
+                report.inner.insert(stack.0.iter(), value, cache_value);
             }
         }
         report.inner.strip(threshold);

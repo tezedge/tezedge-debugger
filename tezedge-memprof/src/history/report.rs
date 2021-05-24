@@ -6,6 +6,7 @@ use super::stack::{SymbolInfo, StackResolver};
 #[derive(Default)]
 pub struct FrameReportInner {
     value: u64,
+    cache_value: u64,
     frames: HashMap<Hex64, FrameReportInner>,
     under_threshold: u64,
 }
@@ -13,22 +14,25 @@ pub struct FrameReportInner {
 pub struct FrameReportSorted {
     name: Option<SymbolInfo>,
     value: u64,
+    cache_value: u64,
     frames: BTreeMap<u64, FrameReportSorted>,
     under_threshold: u64,
     unknown: u64,
 }
 
 impl FrameReportInner {
-    pub fn insert<'a, StackIter>(&mut self, stack: StackIter, value: u64)
+    pub fn insert<'a, StackIter>(&mut self, stack: StackIter, value: u64, cache_value: u64)
     where
         StackIter: Iterator<Item = &'a Hex64>,
     {
         let mut node = self;
         for stack_frame in stack {
             node.value += value;
+            node.cache_value += cache_value;
             node = node.frames.entry(*stack_frame).or_default();
         }
         node.value += value;
+        node.cache_value += cache_value;
     }
 
     pub fn strip(&mut self, threshold: u64) {
@@ -57,6 +61,7 @@ impl FrameReportInner {
         FrameReportSorted {
             name,
             value: self.value,
+            cache_value: self.cache_value,
             frames,
             under_threshold: self.under_threshold,
             unknown,
@@ -146,12 +151,13 @@ impl ser::Serialize for FrameReportSorted {
             unknown: FakeFrame::unknown(self.unknown),
         };
 
-        let l = 2 + (self.name.is_some() as usize);
+        let l = 3 + (self.name.is_some() as usize);
         let mut map = serializer.serialize_map(Some(l))?;
         if let &Some(ref name) = &self.name {
             map.serialize_entry("name", name)?;
         }
         map.serialize_entry("value", &self.value)?;
+        map.serialize_entry("cache_value", &self.cache_value)?;
         map.serialize_entry("frames", &helper)?;
         map.end()
     }

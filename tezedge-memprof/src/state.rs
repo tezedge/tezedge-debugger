@@ -204,12 +204,7 @@ impl AtomicState {
             &EventKind::RssStat(ref v) => {
                 self.rss_stat(v.size, v.member);
             },
-            &EventKind::PercpuAlloc(ref v) => {
-                let _ = v;
-            },
-            &EventKind::PercpuFree(ref v) => {
-                let _ = v;
-            },
+            _ => (),
         }
     }
 
