@@ -87,7 +87,7 @@ impl StackResolver {
         Some(SymbolInfo {
             offset: Hex32(offset as _),
             executable: filename.to_string(),
-            function_name: name.cloned(),
+            function_name: name.map(|n| rustc_demangle::demangle(n).to_string()),
         })
     }
 }
