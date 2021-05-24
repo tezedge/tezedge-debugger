@@ -157,7 +157,7 @@ impl ser::Serialize for FrameReportSorted {
             map.serialize_entry("name", name)?;
         }
         map.serialize_entry("value", &self.value)?;
-        map.serialize_entry("cache_value", &self.cache_value)?;
+        map.serialize_entry("cacheValue", &self.cache_value)?;
         map.serialize_entry("frames", &helper)?;
         map.end()
     }

@@ -90,9 +90,10 @@ where
         for (_, group) in &self.group {
             for (page, history) in group {
                 if history.is_allocated(None) {
-                    value_kib += page.size_kib();
                     if history.page_cache() {
                         cache_value_kib += page.size_kib();
+                    } else {
+                        value_kib += page.size_kib();
                     }
                 }
             }
@@ -116,9 +117,10 @@ where
             let mut cache_value = 0;
             for (page, history) in group {
                 if history.is_allocated(None) {
-                    value += page.size_kib();
                     if history.page_cache() {
                         cache_value += page.size_kib();
+                    } else {
+                        value += page.size_kib();
                     }
                 }
             }
