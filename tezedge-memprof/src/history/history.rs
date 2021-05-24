@@ -84,17 +84,21 @@ where
         }
     }
 
-    pub fn short_report(&self) -> u64 {
+    pub fn short_report(&self) -> (u64, u64) {
         let mut value_kib = 0;
+        let mut cache_value_kib = 0;
         for (_, group) in &self.group {
             for (page, history) in group {
                 if history.is_allocated(None) {
                     value_kib += page.size_kib();
+                    if history.page_cache() {
+                        cache_value_kib += page.size_kib();
+                    }
                 }
             }
         }
 
-        value_kib
+        (value_kib, cache_value_kib)
     }
 
     pub fn tree_report<R>(

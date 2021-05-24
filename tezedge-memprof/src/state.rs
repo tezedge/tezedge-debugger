@@ -99,6 +99,12 @@ pub struct Report {
     elapsed_time: Duration,
 }
 
+impl Report {
+    pub fn rss_anon_kib(&self) -> u64 {
+        self.current_counters.rss_stat_anon_bytes / 1024
+    }
+}
+
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let c = &self.current_counters;
