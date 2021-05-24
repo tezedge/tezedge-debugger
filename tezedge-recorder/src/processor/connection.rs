@@ -57,10 +57,10 @@ where
                         let mut remote_mp = MessageParser::new(self.db.clone());
                         self.db.store_connection(self.item.clone());
                         if let Some(chunk) = l_chunk {
-                            local_mp.handle_chunk(chunk, &self.item);
+                            local_mp.handle_chunk(chunk, &mut self.item);
                         }
                         if let Some(chunk) = r_chunk {
-                            remote_mp.handle_chunk(chunk, &self.item);
+                            remote_mp.handle_chunk(chunk, &mut self.item);
                         }
                         ConnectionState::HandshakeDone {
                             local,

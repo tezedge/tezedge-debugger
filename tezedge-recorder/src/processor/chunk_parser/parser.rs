@@ -242,6 +242,6 @@ where
 }
 
 pub trait ChunkHandler {
-    fn handle_chunk(&mut self, chunk: chunk::Item, cn: &connection::Item);
+    fn handle_chunk(&mut self, chunk: chunk::Item, cn: &mut connection::Item);
     fn update_cn(&mut self, cn: &connection::Item);
 }
