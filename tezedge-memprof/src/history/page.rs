@@ -1,11 +1,20 @@
-use std::fmt;
+use std::{fmt, hash::{Hash, Hasher}};
 use bpf_memprof::Hex64;
 use serde::{Serialize, ser};
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Page {
     pfn: Hex64,
     order: u32,
+}
+
+impl Hash for Page {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        self.pfn.0.hash::<H>(state)
+    }
 }
 
 impl fmt::Display for Page {

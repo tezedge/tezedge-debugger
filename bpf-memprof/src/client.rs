@@ -10,12 +10,12 @@ use std::{
 use passfd::FdPassingExt;
 use ebpf_user::RingBufferRegistry;
 use serde::{Serialize, ser, Deserialize, de};
-use super::event::{Pod, Hex32, Hex64, CommonHeader};
+use super::{event::{Pod, Hex32, Hex64, CommonHeader}, STACK_MAX_DEPTH};
 use super::event::{
     KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageFree,
     PageFreeBatched,
 };
-use super::{event::{RssStat, PercpuAlloc, PercpuFree}, STACK_MAX_DEPTH};
+use super::event::{RssStat, PercpuAlloc, PercpuFree, AddToPageCache, RemoveFromPageCache};
 
 pub struct Client {
     stream: UnixStream,
@@ -111,6 +111,8 @@ pub enum EventKind {
     RssStat(RssStat),
     PercpuAlloc(PercpuAlloc),
     PercpuFree(PercpuFree),
+    AddToPageCache(AddToPageCache),
+    RemoveFromPageCache(RemoveFromPageCache),
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -271,6 +273,12 @@ impl Event {
             },
             x if Some(x) == PercpuFree::DISCRIMINANT => {
                 (EventKind::PercpuFree(PercpuFree::from_slice(slice).ok_or(0)?), PercpuFree::SIZE)
+            },
+            x if Some(x) == AddToPageCache::DISCRIMINANT => {
+                (EventKind::AddToPageCache(AddToPageCache::from_slice(slice).ok_or(0)?), AddToPageCache::SIZE)
+            },
+            x if Some(x) == RemoveFromPageCache::DISCRIMINANT => {
+                (EventKind::RemoveFromPageCache(RemoveFromPageCache::from_slice(slice).ok_or(0)?), RemoveFromPageCache::SIZE)
             },
             _ => return Err(1),
         };

@@ -28,6 +28,10 @@ pub struct App {
     pub page_free: ebpf::ProgRef,
     #[prog("tracepoint/kmem/rss_stat")]
     pub rss_stat: ebpf::ProgRef,
+    #[prog("tracepoint/filemap/mm_filemap_add_to_page_cache")]
+    pub add_to_page_cache: ebpf::ProgRef,
+    #[prog("tracepoint/filemap/mm_filemap_delete_from_page_cache")]
+    pub remove_from_page_cache: ebpf::ProgRef,
 }
 
 #[cfg(feature = "kern")]
@@ -35,7 +39,7 @@ use {
     bpf_memprof::{Pod, STACK_MAX_DEPTH},
     bpf_memprof::{
         KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageFree,
-        PageFreeBatched, RssStat, PercpuAlloc, PercpuFree,
+        PageFreeBatched, RssStat, PercpuAlloc, PercpuFree, AddToPageCache, RemoveFromPageCache,
     },
     ebpf::helpers,
 };
@@ -242,6 +246,18 @@ impl App {
     #[inline(always)]
     pub fn percpu_free(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.output_unconditional::<PercpuFree>(ctx)
+    }
+
+    #[allow(dead_code)]
+    #[inline(always)]
+    pub fn add_to_page_cache(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.output::<AddToPageCache>(ctx)
+    }
+
+    #[allow(dead_code)]
+    #[inline(always)]
+    pub fn remove_from_page_cache(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.output_unconditional::<RemoveFromPageCache>(ctx)
     }
 }
 

@@ -395,3 +395,59 @@ impl Pod for PercpuFree {
         })
     }
 }
+
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddToPageCache {
+    pub pfn: Hex64,
+    i_ino: u64,
+    index: u64,
+    s_dev: u64,
+}
+
+impl Pod for AddToPageCache {
+    const DISCRIMINANT: Option<u32> = Some(16);
+    const SIZE: usize = 0x20;
+
+    #[inline(always)]
+    fn from_slice(s: &[u8]) -> Option<Self> {
+        if s.len() < Self::SIZE {
+            return None;
+        }
+        Some(AddToPageCache {
+            pfn: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
+            i_ino: u64::from_ne_bytes(TryFrom::try_from(&s[0x08..0x10]).unwrap()),
+            index: u64::from_ne_bytes(TryFrom::try_from(&s[0x10..0x18]).unwrap()),
+            s_dev: u64::from_ne_bytes(TryFrom::try_from(&s[0x18..0x20]).unwrap()),
+        })
+    }
+}
+
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoveFromPageCache {
+    pub pfn: Hex64,
+    i_ino: u64,
+    index: u64,
+    s_dev: u64,
+}
+
+impl Pod for RemoveFromPageCache {
+    const DISCRIMINANT: Option<u32> = Some(17);
+    const SIZE: usize = 0x20;
+
+    #[inline(always)]
+    fn from_slice(s: &[u8]) -> Option<Self> {
+        if s.len() < Self::SIZE {
+            return None;
+        }
+        Some(RemoveFromPageCache {
+            pfn: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
+            i_ino: u64::from_ne_bytes(TryFrom::try_from(&s[0x08..0x10]).unwrap()),
+            index: u64::from_ne_bytes(TryFrom::try_from(&s[0x10..0x18]).unwrap()),
+            s_dev: u64::from_ne_bytes(TryFrom::try_from(&s[0x18..0x20]).unwrap()),
+        })
+    }
+}

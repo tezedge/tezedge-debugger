@@ -37,8 +37,15 @@ impl ClientCallback for MemprofClient {
                 self.pid.store(event.pid, Ordering::Relaxed);
                 self.history.lock().unwrap().track_alloc(Page::new(v.pfn, v.order), &event.stack, v.gfp_flags);
             }
-            &EventKind::PageFree(ref v) if v.pfn.0 != 0 =>
-                self.history.lock().unwrap().track_free(Page::new(v.pfn, v.order), event.pid),
+            &EventKind::PageFree(ref v) if v.pfn.0 != 0 => {
+                self.history.lock().unwrap().track_free(Page::new(v.pfn, v.order), event.pid);
+            },
+            &EventKind::AddToPageCache(ref v) if v.pfn.0 != 0 => {
+                self.history.lock().unwrap().mark_page_cache(Page::new(v.pfn, 0), true);
+            },
+            &EventKind::RemoveFromPageCache(ref v) if v.pfn.0 != 0 => {
+                self.history.lock().unwrap().mark_page_cache(Page::new(v.pfn, 0), false);
+            },
             _ => (),
         }
         self.last = Some(event.event);

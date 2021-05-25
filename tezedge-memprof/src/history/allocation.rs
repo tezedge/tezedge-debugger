@@ -40,11 +40,21 @@ pub struct Event {
 }
 
 impl Event {
-    pub fn page_cache(&self) -> bool {
-        // this flag indicating page cache
-        const GFP_WRITE: u32 = 0x1000;
+    const EVENT_BASED_CACHE_FLAG: u32 = 1 << 31;
 
-        (self.flags.0 & GFP_WRITE) != 0
+    #[allow(dead_code)]
+    const GFP_WRITE: u32 = 0x1000;
+
+    pub fn page_cache(&self) -> bool {
+        (self.flags.0 & Self::EVENT_BASED_CACHE_FLAG) != 0
+    }
+
+    pub fn mark_page_cache(&mut self, b: bool) {
+        if b {
+            self.flags.0 |= Self::EVENT_BASED_CACHE_FLAG;
+        } else {
+            self.flags.0 &= !Self::EVENT_BASED_CACHE_FLAG;
+        }
     }
 }
 
@@ -65,6 +75,7 @@ pub trait PageHistory {
     fn track_free(&mut self) -> Result<(), FreeError>;
     fn is_allocated(&self, time: Option<u64>) -> bool;
 
+    fn mark_page_cache(&mut self, b: bool);
     fn page_cache(&self) -> bool;
 }
 
@@ -117,6 +128,12 @@ impl PageHistory for EventLast {
             (_, &None) => false,
             (None, &Some(Event { ref time_range, .. })) => time_range.open_end(),
             (Some(time), &Some(Event { ref time_range, .. })) => time_range.0.contains(&time),
+        }
+    }
+
+    fn mark_page_cache(&mut self, b: bool) {
+        if let &mut Some(ref mut event) = &mut self.0 {
+            event.mark_page_cache(b);
         }
     }
 

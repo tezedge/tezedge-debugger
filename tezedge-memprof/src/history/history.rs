@@ -33,6 +33,12 @@ impl<H> History<H>
 where
     H: PageHistory + Default,
 {
+    pub fn mark_page_cache(&mut self, page: Page, b: bool) {
+        if let Some(stack) = self.last_stack.get(&page) {
+            self.group.get_mut(stack).unwrap().get_mut(&page).unwrap().mark_page_cache(b);
+        }
+    }
+
     pub fn track_alloc(&mut self, page: Page, stack: &Stack, flags: Hex32) {
         let stack = StackShort(stack.ips().to_vec());
 
