@@ -9,9 +9,15 @@ FROM ubuntu:20.04
 
 WORKDIR /home/appuser/
 
-RUN DEBIAN_FRONTEND='noninteractive' apt-get update && apt-get install -y libelf-dev
+RUN DEBIAN_FRONTEND='noninteractive' apt-get update && apt-get install -y libelf-dev curl
+
+RUN curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.6.tgz && \
+    tar xzf docker-20.10.6.tgz --strip 1 -C /usr/local/bin docker/docker && \
+    rm docker-*.tgz
 
 COPY --from=builder /home/appuser/target/none/release/bpf-memprof-user .
 COPY --from=builder /home/appuser/target/none/release/tezedge-memprof .
 
-CMD ./bpf-memprof-user & sleep 0.5 && ./tezedge-memprof
+CMD ./bpf-memprof-user & sleep 0.5 && \
+    while ! docker cp $(docker ps -qf ancestor=${TEZEDGE_IMAGE}):/light-node /; do sleep 0.5; done && \
+    ./tezedge-memprof

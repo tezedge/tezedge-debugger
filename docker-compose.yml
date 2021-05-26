@@ -2,6 +2,21 @@ version: "3"
 
 services:
 
+  memprof:
+    image: simplestakingcom/tezedge-memprof:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.memprof
+    privileged: true
+    environment:
+      - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest
+    volumes:
+      - "/sys/kernel/debug:/sys/kernel/debug:rw"
+      - "/proc:/proc:rw"
+      - "/var/run/docker.sock:/var/run/docker.sock:rw"
+    ports:
+      - "17832:17832"
+
   debugger:
     image: simplestakingcom/tezedge-debugger:latest
     build:
@@ -26,6 +41,8 @@ services:
   tezedge-node:
     image: simplestakingcom/tezedge:latest
     command: ["--network", "mainnet", "--actions-store-backend", "rocksdb"]
+    depends_on:
+      - "memprof"
     #init: true
     logging:
       # Produce syslogs instead of terminal logs
