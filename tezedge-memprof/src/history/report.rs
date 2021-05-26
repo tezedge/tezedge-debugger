@@ -9,6 +9,7 @@ pub struct FrameReportInner {
     cache_value: u64,
     frames: HashMap<Hex64, FrameReportInner>,
     under_threshold: u64,
+    cache_under_threshold: u64,
 }
 
 pub struct FrameReportSorted {
@@ -17,7 +18,9 @@ pub struct FrameReportSorted {
     cache_value: u64,
     frames: BTreeMap<u64, FrameReportSorted>,
     under_threshold: u64,
+    cache_under_threshold: u64,
     unknown: u64,
+    cache_unknown: u64,
 }
 
 impl FrameReportInner {
@@ -37,24 +40,29 @@ impl FrameReportInner {
 
     pub fn strip(&mut self, threshold: u64) {
         let mut under_threshold = 0;
+        let mut cache_under_threshold = 0;
         self.frames.retain(|_, frame| {
             frame.strip(threshold);
             let retain = frame.value >= threshold;
             if !retain {
                 under_threshold += frame.value;
+                cache_under_threshold += frame.cache_value;
             }
             retain
         });
         self.under_threshold = under_threshold;
+        self.cache_under_threshold = cache_under_threshold;
     }
 
     pub fn sorted(&self, resolver: &StackResolver, name: Option<SymbolInfo>) -> FrameReportSorted {
         let mut frames = BTreeMap::new();
         let mut unknown = self.value - self.under_threshold;
+        let mut cache_unknown = self.cache_value - self.cache_under_threshold;
         for (key, value) in &self.frames {
             if let Some(name) = resolver.resolve(key.0) {
                 frames.insert(!value.value, value.sorted(resolver, Some(name)));
                 unknown -= value.value;
+                cache_unknown -= value.cache_value;
             }
         }
 
@@ -64,7 +72,9 @@ impl FrameReportInner {
             cache_value: self.cache_value,
             frames,
             under_threshold: self.under_threshold,
+            cache_under_threshold: self.cache_under_threshold,
             unknown,
+            cache_unknown,
         }
     }
 }
@@ -94,28 +104,32 @@ impl ser::Serialize for FrameReportSorted {
         }
 
         #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
         struct FakeFrame {
             name: String,
             value: u64,
+            cache_value: u64,
         }
 
         impl FakeFrame {
-            pub fn under_threshold(value: u64) -> Option<Self> {
+            pub fn under_threshold(value: u64, cache_value: u64) -> Option<Self> {
                 if value != 0 {
                     Some(FakeFrame {
                         name: "underThreshold".to_string(),
                         value,
+                        cache_value,
                     })
                 } else {
                     None
                 }
             }
 
-            pub fn unknown(value: u64) -> Option<Self> {
+            pub fn unknown(value: u64, cache_value: u64) -> Option<Self> {
                 if value != 0 {
                     Some(FakeFrame {
                         name: "unknown".to_string(),
                         value,
+                        cache_value,
                     })
                 } else {
                     None
@@ -147,8 +161,8 @@ impl ser::Serialize for FrameReportSorted {
 
         let helper = Helper {
             inner: &self.frames,
-            under_threshold: FakeFrame::under_threshold(self.under_threshold),
-            unknown: FakeFrame::unknown(self.unknown),
+            under_threshold: FakeFrame::under_threshold(self.under_threshold, self.cache_under_threshold),
+            unknown: FakeFrame::unknown(self.unknown, self.cache_unknown),
         };
 
         let l = 3 + (self.name.is_some() as usize);
