@@ -84,18 +84,36 @@ impl StackResolver {
     pub fn resolve(&self, address: u64) -> Option<SymbolInfo> {
         let ((offset, filename), name) = self.try_resolve(address)?;
 
+        fn cpp_demangle(s: &str) -> Option<String> {
+            cpp_demangle::Symbol::new(s).ok()?.demangle(&Default::default()).ok()
+        }
+
         Some(SymbolInfo {
             offset: Hex32(offset as _),
             executable: filename.to_string(),
-            function_name: name.map(|n| {
-                match cpp_demangle::Symbol::new(n) {
-                    Ok(s) => match s.demangle(&Default::default()) {
-                        Ok(s) => s,
-                        Err(_) => rustc_demangle::demangle(n).to_string(),
-                    },
-                    Err(_) => rustc_demangle::demangle(n).to_string(),
-                }
-            }),
+            function_name: name
+                .map(|n| {
+                    if is_rust(n) {
+                        rustc_demangle::demangle(n).to_string()
+                    } else {
+                        cpp_demangle(n).unwrap_or(n.clone())
+                    }
+                })
         })
     }
+}
+
+fn is_rust(s: &str) -> bool {
+    fn inner(s: &str) -> bool {
+        let s = s.trim_end_matches('E');
+        let l = s.bytes().len();
+        if l < 17 {
+            return false;
+        }
+
+        let h = s.as_bytes()[l - 17] == 'h' as u8;
+        s.as_bytes()[(l - 16)..].iter().fold(h, |h, b| h && b.is_ascii_hexdigit())
+    }
+
+    s.split_whitespace().any(inner) || s.split(".llvm").any(inner)
 }
