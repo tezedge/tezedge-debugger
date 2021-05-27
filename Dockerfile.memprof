@@ -1,23 +1,28 @@
+ARG TEZEDGE_IMAGE=simplestakingcom/tezedge:latest
 FROM simplestakingcom/tezedge-bpf-builder:latest as builder
 
-RUN cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
+RUN cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main && \
+    DEBIAN_FRONTEND='noninteractive' apt-get install -y libelf-dev
+
 COPY . .
-RUN cargo build -p bpf-memprof --release
-RUN cargo build -p tezedge-memprof --release
-
-FROM ubuntu:20.04
-
-WORKDIR /home/appuser/
-
-RUN DEBIAN_FRONTEND='noninteractive' apt-get update && apt-get install -y libelf-dev curl
+RUN cargo build -p bpf-memprof --release && \
+    cargo build -p tezedge-memprof --release
 
 RUN curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.6.tgz && \
-    tar xzf docker-20.10.6.tgz --strip 1 -C /usr/local/bin docker/docker && \
+    tar xzf docker-20.10.6.tgz --strip 1 -C /usr/bin docker/docker && \
     rm docker-*.tgz
 
-COPY --from=builder /home/appuser/target/none/release/bpf-memprof-user .
-COPY --from=builder /home/appuser/target/none/release/tezedge-memprof .
+FROM ${TEZEDGE_IMAGE}
 
-CMD ./bpf-memprof-user & sleep 0.5 && \
-    while ! docker cp $(docker ps -qf ancestor=${TEZEDGE_IMAGE}):/light-node /; do sleep 0.5; done && \
-    ./tezedge-memprof
+COPY --from=builder /usr/bin/bash /usr/bin/bash
+COPY --from=builder /usr/bin/sleep /usr/bin/sleep
+COPY --from=builder /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.6
+
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libelf.so.1 /usr/lib/x86_64-linux-gnu/libelf.so.1
+COPY --from=builder /lib/x86_64-linux-gnu/libz.so.1 /lib/x86_64-linux-gnu/libz.so.1
+COPY --from=builder /home/appuser/target/none/release/bpf-memprof-user /usr/bin/bpf-memprof-user
+COPY --from=builder /home/appuser/target/none/release/tezedge-memprof /usr/bin/tezedge-memprof
+
+COPY --from=builder /usr/bin/docker /usr/bin/docker
+
+ENTRYPOINT ["bash", "-c", "bpf-memprof-user & sleep 0.5 && while ! docker cp $(docker ps -qf ancestor=${TEZEDGE_IMAGE}):/light-node /; do sleep 0.5; done && tezedge-memprof"]

@@ -5,9 +5,12 @@ services:
   memprof:
     image: simplestakingcom/tezedge-memprof:latest
     build:
+      args:
+        - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest
       context: .
       dockerfile: Dockerfile.memprof
     privileged: true
+    init: true
     environment:
       - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest
     volumes:
@@ -23,7 +26,7 @@ services:
       context: .
       dockerfile: Dockerfile
     privileged: true
-    #init: true
+    init: true
     environment:
       - RUST_BACKTRACE=1
     volumes:
@@ -43,7 +46,7 @@ services:
     command: ["--network", "mainnet", "--actions-store-backend", "rocksdb"]
     depends_on:
       - "memprof"
-    #init: true
+    init: true
     logging:
       # Produce syslogs instead of terminal logs
       driver: "syslog"
