@@ -9,6 +9,7 @@ pub struct SymbolInfo {
     offset: Hex32,
     executable: String,
     function_name: Option<String>,
+    function_category: String,
 }
 
 #[derive(Default)]
@@ -88,6 +89,16 @@ impl StackResolver {
             cpp_demangle::Symbol::new(s).ok()?.demangle(&Default::default()).ok()
         }
 
+        let function_category = if filename == "light-node" {
+            if name.map(|n| is_rust(n)).unwrap_or(false) {
+                "nodeRust".to_string()
+            } else {
+                "nodeCpp".to_string()
+            }
+        } else {
+            "systemLib".to_string()
+        };
+
         Some(SymbolInfo {
             offset: Hex32(offset as _),
             executable: filename.to_string(),
@@ -98,7 +109,8 @@ impl StackResolver {
                     } else {
                         cpp_demangle(n).unwrap_or(n.clone())
                     }
-                })
+                }),
+            function_category,
         })
     }
 }
