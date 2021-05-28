@@ -12,7 +12,13 @@ COPY . .
 RUN cargo build -p bpf-memprof --release && \
     cargo build -p tezedge-memprof --release
 
+ARG TEZEDGE_IMAGE_HASH
+RUN echo ${TEZEDGE_IMAGE_HASH} > hash
+
 FROM ${TEZEDGE_IMAGE}
+
+COPY --from=builder /home/appuser/hash .
+COPY --from=builder /home/appuser/memprof.sh .
 
 COPY --from=builder /usr/bin/bash /usr/bin/bash
 COPY --from=builder /usr/bin/sleep /usr/bin/sleep
@@ -25,4 +31,4 @@ COPY --from=builder /home/appuser/target/none/release/tezedge-memprof /usr/bin/t
 
 COPY --from=builder /usr/bin/docker /usr/bin/docker
 
-ENTRYPOINT ["bash", "-c", "bpf-memprof-user & sleep 0.5 && while ! docker cp $(docker ps -qf ancestor=${TEZEDGE_IMAGE}):/light-node /; do sleep 0.5; done && tezedge-memprof"]
+ENTRYPOINT ["./memprof.sh"]
