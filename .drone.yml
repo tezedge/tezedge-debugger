@@ -15,6 +15,7 @@ steps:
     environment:
       RUST_BACKTRACE: 1
     commands:
+      - exit 1 # disabled
       - apt update && apt install -y curl
       - cp /etc/config-drone.toml config.toml
       - bpf-sniffer & sleep 0.5 && tezedge-recorder &
@@ -37,10 +38,6 @@ volumes:
     host:
       path: /sys/kernel/debug
 
-trigger:
-  branch: develop
-  event: push
-
 ---
 
 kind: pipeline
@@ -60,6 +57,9 @@ steps:
 
 image_pull_secrets:
   - docker_pull_secret
+
+depends_on:
+  - test-debugger-5.11
 
 trigger:
   branch: develop
@@ -99,22 +99,20 @@ name: test-memprof-develop
 
 steps:
   - name: memprof-tester
-    image: ubuntu:20.10
-    commands:
-      - apt update && apt install -y curl
-      # TODO: check response
-      - sleep 10 && curl memprof:17832/v1/tree && curl memprof:17832/v1/tree?reverse=true
-
-services:
-  - name: memprof
-    image: simplestakingcom/tezedge-memprof:latest
-    pull: always
+    image: simplestakingcom/tezedge-bpf-builder:latest
     privileged: true
     volumes:
       - name: kernel-debug
         path: /sys/kernel/debug
     commands:
-      - bpf-memprof-user & sleep 0.5 && tezedge-memprof
+      - cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
+      - DEBIAN_FRONTEND='noninteractive' apt-get install -y libelf-dev curl
+      - cargo build -p bpf-memprof --release && cargo build -p tezedge-memprof --release
+      - ./target/none/release/bpf-memprof-user & sleep 0.5 && ./target/none/release/tezedge-memprof &
+      # TODO: check response
+      - sleep 10 && curl http://localhost:17832/v1/tree
+
+services:
   - name: tezedge-node
     image: simplestakingcom/tezedge:latest
     commands:
