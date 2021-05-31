@@ -17,6 +17,7 @@ pub struct Comments {
     pub incoming_too_short: Option<usize>,
     pub incoming_uncertain: bool,
     pub incoming_cannot_decrypt: Option<u64>,
+    pub incoming_suspicious: Option<u64>,
     pub outgoing_wrong_pow: Option<f64>,
     pub outgoing_too_short: Option<usize>,
     pub outgoing_uncertain: bool,
@@ -40,6 +41,7 @@ impl Comments {
             .cloned()
             .unwrap_or(u64::MAX);
         i[4..12].clone_from_slice(&c.to_le_bytes());
+        i[12..16].clone_from_slice(&(self.incoming_suspicious.unwrap_or(0) as u32).to_le_bytes());
         let mut o = [0; 18];
         o[0] = self.outgoing_wrong_pow.as_ref().cloned().unwrap_or(0.0) as u8;
         o[1] = self
@@ -61,6 +63,7 @@ impl Comments {
 
     fn de((i, o): ([u8; 18], [u8; 18])) -> Self {
         let i_c = u64::from_le_bytes(TryFrom::try_from(&i[4..12]).unwrap());
+        let i_s = u32::from_le_bytes(TryFrom::try_from(&i[12..16]).unwrap()) as u64;
         let o_c = u64::from_le_bytes(TryFrom::try_from(&o[4..12]).unwrap());
         Comments {
             incoming_wrong_pow: if i[0] == 0 { None } else { Some(i[0] as f64) },
@@ -70,6 +73,7 @@ impl Comments {
                 Some(i[1] as usize)
             },
             incoming_uncertain: i[2] != 0,
+            incoming_suspicious: if i_s == 0 { None } else { Some(i_c) }, 
             incoming_cannot_decrypt: if i_c == u64::MAX { None } else { Some(i_c) },
             outgoing_wrong_pow: if o[0] == 0 { None } else { Some(o[0] as f64) },
             outgoing_too_short: if o[1] == u8::MAX {
@@ -103,6 +107,10 @@ impl Serialize for Comments {
         }
         if self.incoming_uncertain {
             let msg = "incoming data does not look like a connection message";
+            s.serialize_element(&msg)?;
+        }
+        if let Some(n) = self.incoming_suspicious {
+            let msg = format!("incoming message lack chunks, at: {}", n);
             s.serialize_element(&msg)?;
         }
         if let Some(position) = self.incoming_cannot_decrypt {
