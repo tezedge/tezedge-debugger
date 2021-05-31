@@ -1,6 +1,7 @@
 kind: pipeline
 type: docker
-name: debugger-tests
+# TODO: rename into test-debugger-develop
+name: test-debugger-5.11
 
 steps:
   - name: debugger
@@ -36,10 +37,14 @@ volumes:
     host:
       path: /sys/kernel/debug
 
+trigger:
+  branch: develop
+  event: push
+
 ---
 
 kind: pipeline
-name: docker-deploy-develop
+name: docker-deploy-debugger-develop
 
 steps:
   - name: build-tezedge-debugger-image  
@@ -60,13 +65,10 @@ trigger:
   branch: develop
   event: push
 
-#depends_on:
-#  - build-and-tests
-
 ---
 
 kind: pipeline
-name: docker-deploy-release
+name: docker-deploy-debugger-release
 
 steps:
   - name: build-tezedge-debugger-image
@@ -89,5 +91,63 @@ trigger:
   ref: refs/tags/**
   event: tag
 
-#depends_on:
-#  - build-and-tests
+---
+
+kind: pipeline
+type: docker
+name: test-memprof-develop
+
+steps:
+  - name: memprof-tester
+    image: ubuntu:20.10
+    commands:
+      - apt update && apt install -y curl
+      # TODO: check response
+      - sleep 10 && curl memprof:17832/v1/tree && curl memprof:17832/v1/tree?reverse=true
+
+services:
+  - name: memprof
+    image: simplestakingcom/tezedge-memprof:latest
+    pull: always
+    privileged: true
+    volumes:
+      - name: kernel-debug
+        path: /sys/kernel/debug
+    commands:
+      - bpf-memprof-user & sleep 0.5 && tezedge-memprof
+  - name: tezedge-node
+    image: simplestakingcom/tezedge:latest
+    commands:
+      - ./light-node --config-file=/tezedge.config --p2p-port=9732 --rpc-port=18732 --websocket-address=0.0.0.0:4927 --init-sapling-spend-params-file=/sapling-spend.params --init-sapling-output-params-file=/sapling-output.params
+
+volumes:
+  - name: kernel-debug
+    host:
+      path: /sys/kernel/debug
+
+---
+
+kind: pipeline
+name: docker-deploy-memprof-develop
+
+steps:
+  - name: build-tezedge-memprof-image  
+    image: plugins/docker
+    settings:
+      repo: simplestakingcom/tezedge-memprof
+      tag: latest
+      dockerfile: Dockerfile.memprof
+      username:
+        from_secret: docker_hub_username
+      password:
+        from_secret: docker_hub_pswd
+
+image_pull_secrets:
+  - docker_pull_secret
+
+depends_on:
+  - test-memprof-develop
+
+trigger:
+  branch: develop
+  event: push
