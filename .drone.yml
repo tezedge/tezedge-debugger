@@ -3,32 +3,24 @@ type: docker
 name: debugger-tests
 
 steps:
-  - name: debugger-tester
-    image: simplestakingcom/tezedge-bpf-builder:latest
-    pull: if-not-exists
-    commands:
-      - apt install -y g++
-      - git clone https://github.com/tezedge/tezedge-debugger && cd tezedge-debugger && git checkout memprof
-      - URL="tezos-node:18733/chains/main/blocks/head" timeout 60 ./tests/wait_until.sh
-      - DEBUGGER_URL="debugger:17743" cargo test -p tester
-
-services:
   - name: debugger
     image: simplestakingcom/tezedge-debugger:5.11
     privileged: true
     volumes:
       - name: tezos-shared-data
         path: /tmp/volume/tezos
-      - name: config
-        path: /home/appuser/config.toml
       - name: kernel-debug
         path: /sys/kernel/debug
     environment:
       RUST_BACKTRACE: 1
     commands:
-      - cd /home/appuser
-      - ./bpf-sniffer & sleep 0.5
-      - ./tezedge-recorder
+      - apt update && apt install -y curl
+      - cp /etc/config-drone.toml config.toml
+      - bpf-sniffer & sleep 0.5 && tezedge-recorder &
+      - URL="tezos-node:18733/chains/main/blocks/head" timeout 60 wait_until.sh
+      - sleep 10 && DEBUGGER_URL="localhost:17743" tester
+
+services:
   - name: tezos-node
     image: tezos/tezos:v8.1
     volumes:
@@ -40,9 +32,62 @@ services:
 volumes:
   - name: tezos-shared-data
     temp: {}
-  - name: config
-    host:
-      path: /var/lib/docker/volumes/remote-workspace/_data/tezedge-debugger/config-drone.toml
   - name: kernel-debug
     host:
       path: /sys/kernel/debug
+
+---
+
+kind: pipeline
+name: docker-deploy-develop
+
+steps:
+  - name: build-tezedge-debugger-image  
+    image: plugins/docker
+    settings:
+      repo: simplestakingcom/tezedge-debugger
+      tag: latest
+      dockerfile: Dockerfile
+      username:
+        from_secret: docker_hub_username
+      password:
+        from_secret: docker_hub_pswd
+
+image_pull_secrets:
+  - docker_pull_secret
+
+trigger:
+  branch: develop
+  event: push
+
+#depends_on:
+#  - build-and-tests
+
+---
+
+kind: pipeline
+name: docker-deploy-release
+
+steps:
+  - name: build-tezedge-debugger-image
+    image: plugins/docker
+    settings:
+      repo: simplestakingcom/tezedge-debugger
+      tags: 
+        - ${DRONE_TAG}
+        - latest-release
+      dockerfile: Dockerfile
+      username:
+        from_secret: docker_hub_username
+      password:
+        from_secret: docker_hub_pswd
+
+image_pull_secrets:
+  - docker_pull_secret
+
+trigger:
+  ref: refs/tags/**
+  event: tag
+
+#depends_on:
+#  - build-and-tests

@@ -12,7 +12,7 @@ services:
     privileged: true
     init: true
     environment:
-      - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest
+      - TEZEDGE_NODE_NAME=tezedge-debugger_tezedge-node_1
     volumes:
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
       - "/proc:/proc:rw"
