@@ -17,20 +17,20 @@ steps:
       - name: kernel-debug
         path: /sys/kernel/debug
     commands:
-      - apt-get install -y libelf-dev
-      - ./target/none/release/bpf-memprof-user & sleep 0.5 && ./target/none/release/tezedge-memprof &
+      - ./target/none/release/bpf-memprof-user & sleep 0.5 && ./target/none/release/tezedge-memprof
   - name: tezedge-node
     image: simplestakingcom/tezedge:latest
     detach: true
     commands:
-      - sleep 10 # wait while previous step install libelf-dev
+      - sleep 5 # wait while previous step run the bpf and start watching for light-node process
       - ./light-node --config-file=/tezedge.config --p2p-port=9732 --rpc-port=18732 --websocket-address=0.0.0.0:4927 --init-sapling-spend-params-file=/sapling-spend.params --init-sapling-output-params-file=/sapling-output.params
   - name: memprof-test
     image: simplestakingcom/tezedge-bpf-builder:latest
     commands:
-      - sleep 30 && URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture || exit 101
-      - sleep 30 && URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture || exit 101
-      - sleep 30 && URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture || exit 101
+      - export URL=http://memprof-run:17832
+      - cargo test -p tezedge-memprof --release -- --nocapture || exit 101
+      - sleep 30 && cargo test -p tezedge-memprof --release -- --nocapture || exit 101
+      - sleep 30 && cargo test -p tezedge-memprof --release -- --nocapture || exit 101
 
 volumes:
   - name: kernel-debug
