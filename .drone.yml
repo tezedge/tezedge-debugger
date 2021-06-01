@@ -3,36 +3,32 @@ type: docker
 name: test-memprof-develop
 
 steps:
-  - name: memprof-build
+  - name: memprof-test
     image: simplestakingcom/tezedge-bpf-builder:latest
-    commands:
-      - apt-get install -y pkg-config libssl-dev
-      - cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
-      - cargo build -p bpf-memprof --release && cargo build -p tezedge-memprof --tests --release
-  - name: memprof-run
-    image: simplestakingcom/tezedge-bpf-builder:latest
-    detach: true
     privileged: true
     volumes:
       - name: kernel-debug
         path: /sys/kernel/debug
       - name: proc-dir
         path: /proc
+      - name: docker_sock
+        path: /var/run/docker.sock
     commands:
-      - ./target/none/release/bpf-memprof-user & sleep 0.5 && ./target/none/release/tezedge-memprof
-  - name: tezedge-node
-    image: simplestakingcom/tezedge:latest
-    detach: true
-    commands:
-      - sleep 5 # wait while previous step run the bpf and start watching for light-node process
-      - /light-node --config-file=/tezedge.config --p2p-port=9732 --rpc-port=18732 --websocket-address=0.0.0.0:4927 --init-sapling-spend-params-file=/sapling-spend.params --init-sapling-output-params-file=/sapling-output.params
-  - name: memprof-test
-    image: simplestakingcom/tezedge-bpf-builder:latest
-    volumes:
-      - name: proc-dir
-        path: /proc
-    commands:
-      - URL=http://memprof-run:17832 cargo test -p tezedge-memprof --release -- --nocapture
+      - apt-get install -y pkg-config libssl-dev curl
+      # docker client
+      - curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.0.tgz
+      - tar xzf docker-20.10.0.tgz --strip 1 -C /usr/local/bin docker/docker
+      - rm docker-20.10.0.tgz
+      # build and run memprof
+      - cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
+      - cargo build -p bpf-memprof --release && cargo build -p tezedge-memprof --tests --release
+      - ./target/none/release/bpf-memprof-user & sleep 0.5 && ./target/none/release/tezedge-memprof & sleep 0.5
+      # run tezedge-node in docker
+      - export NODE_CONTAINER=$(docker run --rm -d simplestakingcom/tezedge:latest --network mainnet)
+      # do tests
+      - URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture
+      # stop the node
+      - docker stop $NODE_CONTAINER
 
 volumes:
   - name: kernel-debug
@@ -41,6 +37,9 @@ volumes:
   - name: proc-dir
     host:
       path: /proc
+  - name: docker_sock
+    host:
+      path: /var/run/docker.sock
 
 ---
 

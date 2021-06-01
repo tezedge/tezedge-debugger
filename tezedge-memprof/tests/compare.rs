@@ -50,11 +50,16 @@ async fn compare() {
         })
         .unwrap_or(0);
 
-    let diff = ((usage_kib - usage_system_kib) as f64) / (usage_system_kib as f64);
-    if diff.abs() < 0.1 {
-        println!("system report: {}, memprof report: {}, difference: {:.2}%", usage_system_kib, usage_kib, diff * 100.0);
+    if usage_system_kib == 0 {
+        println!("failed to get memory usage");
+        return;
+    }
+
+    let diff = usage_kib - usage_system_kib;
+    if diff.abs() < 10 * 1024 {
+        println!("system report: {}, memprof report: {}, difference: {}", usage_system_kib, usage_kib, diff);
     } else {
-        panic!("system report: {}, memprof report: {}, difference: {:.2}%", usage_system_kib, usage_kib, diff * 100.0);
+        panic!("system report: {}, memprof report: {}, difference: {}", usage_system_kib, usage_kib, diff);
     }
 }
 
@@ -63,6 +68,16 @@ async fn compare_3() {
     use std::time::Duration;
 
     let duration = Duration::from_secs(20);
+
+    loop {
+        let t = get_usage_kib().await.unwrap() as i32;
+        if t > 32 * 1024 {
+            break t;
+        } else {
+            println!("wait {:?}...", duration);
+            tokio::time::sleep(duration).await;
+        }
+    };
 
     compare().await;
     println!("wait {:?}...", duration);
