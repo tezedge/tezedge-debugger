@@ -16,6 +16,8 @@ steps:
     volumes:
       - name: kernel-debug
         path: /sys/kernel/debug
+      - name: proc-dir
+        path: /proc
     commands:
       - ./target/none/release/bpf-memprof-user & sleep 0.5 && ./target/none/release/tezedge-memprof
   - name: tezedge-node
@@ -23,9 +25,12 @@ steps:
     detach: true
     commands:
       - sleep 5 # wait while previous step run the bpf and start watching for light-node process
-      - ./light-node --config-file=/tezedge.config --p2p-port=9732 --rpc-port=18732 --websocket-address=0.0.0.0:4927 --init-sapling-spend-params-file=/sapling-spend.params --init-sapling-output-params-file=/sapling-output.params
+      - /light-node --config-file=/tezedge.config --p2p-port=9732 --rpc-port=18732 --websocket-address=0.0.0.0:4927 --init-sapling-spend-params-file=/sapling-spend.params --init-sapling-output-params-file=/sapling-output.params
   - name: memprof-test
     image: simplestakingcom/tezedge-bpf-builder:latest
+    volumes:
+      - name: proc-dir
+        path: /proc
     commands:
       - URL=http://memprof-run:17832 cargo test -p tezedge-memprof --release -- --nocapture
 
@@ -33,6 +38,9 @@ volumes:
   - name: kernel-debug
     host:
       path: /sys/kernel/debug
+  - name: proc-dir
+    host:
+      path: /proc
 
 ---
 
