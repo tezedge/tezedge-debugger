@@ -31,7 +31,6 @@ async fn get_pid() -> Result<u32, E> {
     Ok(pid as _)
 }
 
-#[tokio::test]
 async fn compare() {
     use std::{fs::File, io::{BufRead, BufReader}};
 
@@ -57,4 +56,19 @@ async fn compare() {
     } else {
         panic!("system report: {}, memprof report: {}, difference: {:.2}%", usage_system_kib, usage_kib, diff * 100.0);
     }
+}
+
+#[tokio::test]
+async fn compare_3() {
+    use std::time::Duration;
+
+    let duration = Duration::from_secs(20);
+
+    compare().await;
+    println!("wait {:?}...", duration);
+    tokio::time::sleep(duration).await;
+    compare().await;
+    println!("wait {:?}...", duration);
+    tokio::time::sleep(duration).await;
+    compare().await;
 }

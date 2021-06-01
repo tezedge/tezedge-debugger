@@ -27,10 +27,7 @@ steps:
   - name: memprof-test
     image: simplestakingcom/tezedge-bpf-builder:latest
     commands:
-      - export URL=http://memprof-run:17832
-      - cargo test -p tezedge-memprof --release -- --nocapture || exit 101
-      - sleep 30 && cargo test -p tezedge-memprof --release -- --nocapture || exit 101
-      - sleep 30 && cargo test -p tezedge-memprof --release -- --nocapture || exit 101
+      - URL=http://memprof-run:17832 cargo test -p tezedge-memprof --release -- --nocapture
 
 volumes:
   - name: kernel-debug
