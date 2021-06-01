@@ -3,27 +3,34 @@ type: docker
 name: test-memprof-develop
 
 steps:
-  - name: memprof-tester
+  - name: memprof-build
     image: simplestakingcom/tezedge-bpf-builder:latest
+    commands:
+      - apt-get install -y pkg-config libssl-dev
+      - cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
+      - cargo build -p bpf-memprof --release && cargo build -p tezedge-memprof --tests --release
+  - name: memprof-run
+    image: simplestakingcom/tezedge-bpf-builder:latest
+    detach: true
     privileged: true
     volumes:
       - name: kernel-debug
         path: /sys/kernel/debug
     commands:
-      - apt-get install -y pkg-config libssl-dev
-      - cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
-      - DEBIAN_FRONTEND='noninteractive' apt-get install -y libelf-dev curl
-      - cargo build -p bpf-memprof --release && cargo build -p tezedge-memprof --tests --release
+      - apt-get install -y libelf-dev
       - ./target/none/release/bpf-memprof-user & sleep 0.5 && ./target/none/release/tezedge-memprof &
-      - sleep 30 && URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture || exit 101
-      - sleep 30 && URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture || exit 101
-      - sleep 30 && URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture || exit 101
-
-services:
   - name: tezedge-node
     image: simplestakingcom/tezedge:latest
+    detach: true
     commands:
+      - sleep 10 # wait while previous step install libelf-dev
       - ./light-node --config-file=/tezedge.config --p2p-port=9732 --rpc-port=18732 --websocket-address=0.0.0.0:4927 --init-sapling-spend-params-file=/sapling-spend.params --init-sapling-output-params-file=/sapling-output.params
+  - name: memprof-test
+    image: simplestakingcom/tezedge-bpf-builder:latest
+    commands:
+      - sleep 30 && URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture || exit 101
+      - sleep 30 && URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture || exit 101
+      - sleep 30 && URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture || exit 101
 
 volumes:
   - name: kernel-debug
