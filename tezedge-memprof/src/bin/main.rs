@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // spawn a thread-pool serving http requests, using tokio
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let server = runtime
-        .spawn(warp::serve(server::routes(history.clone(), resolver)).run(([0, 0, 0, 0], 17832)));
+        .spawn(warp::serve(server::routes(history.clone(), resolver, cli.pid.clone())).run(([0, 0, 0, 0], 17832)));
 
     // spawn a thread listening ctrl+c
     {
@@ -128,7 +128,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 mod server {
-    use std::sync::{Arc, Mutex, RwLock};
+    use std::sync::{Arc, atomic::{Ordering, AtomicU32}, Mutex, RwLock};
     use warp::{
         Filter, Rejection, Reply,
         reply::{WithStatus, Json, self},
@@ -140,13 +140,22 @@ mod server {
     pub fn routes(
         history: Arc<Mutex<History<EventLast>>>,
         resolver: Arc<RwLock<StackResolver>>,
+        p: Arc<AtomicU32>,
     ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static {
         use warp::reply::with;
     
         warp::get()
-            .and(tree(history, resolver))
+            .and(tree(history, resolver).or(pid(p)))
             .with(with::header("Content-Type", "application/json"))
             .with(with::header("Access-Control-Allow-Origin", "*"))
+    }
+
+    fn pid(p: Arc<AtomicU32>) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
+        warp::path!("v1" / "pid")
+            .and(warp::query::query())
+            .map(move |()| -> WithStatus<Json> {
+                reply::with_status(reply::json(&p.load(Ordering::Relaxed)), StatusCode::OK)
+            })
     }
 
     fn tree(
