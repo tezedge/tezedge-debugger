@@ -66,8 +66,17 @@ where
     pub fn track_free(&mut self, page: Page, pid: u32) {
         let _ = pid; // TODO:
         if let Some(stack) = self.last_stack.get(&page).cloned() {
-            let history = self.group.entry(stack).or_default().entry(page.clone()).or_default();
+            let history = self.group.entry(stack.clone()).or_default().entry(page.clone()).or_default();
             Self::track_free_error(&mut self.error_report, history, &page);
+
+            if history.is_empty() {
+                let group = self.group.get_mut(&stack).unwrap();
+                group.remove(&page);
+                if group.is_empty() {
+                    self.group.remove(&stack);
+                }
+                self.last_stack.remove(&page);
+            }
         } else {
             // self.error_report.without_alloc(&page);
         }
@@ -79,6 +88,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     fn track_free_error(error_report: &mut ErrorReport, history: &mut H, page: &Page) {
         match history.track_free() {
             Ok(()) => (),
@@ -137,5 +147,31 @@ where
         report.inner.strip(threshold);
 
         report
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.last_stack.is_empty() && self.group.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use bpf_memprof::{Hex64, Hex32, Stack};
+    use crate::{History, EventLast, Page};
+
+    #[test]
+    fn overflow() {
+        let mut h = History::<EventLast>::default();
+        for _ in 0..0x100 {
+            for i in 1..100 {
+                h.track_alloc(Page::new(Hex64(i), 0), &Stack::from_frames(&[i / 3]), Hex32(0));
+            }
+            for i in 1..100 {
+                h.track_free(Page::new(Hex64(i), 0), 0);
+            }
+        }
+
+        assert_eq!(h.short_report(), (0, 0));
+        assert!(h.is_empty());
     }
 }

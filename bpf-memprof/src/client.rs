@@ -182,6 +182,17 @@ impl<'de> Deserialize<'de> for Stack {
 }
 
 impl Stack {
+    pub fn from_frames(f: &[u64]) -> Self {
+        let mut s = Stack {
+            length: f.len(),
+            ips: [Hex64(0); STACK_MAX_DEPTH],
+        };
+        for (i, ip) in f.iter().enumerate() {
+            s.ips[i].0 = *ip;
+        }
+        s
+    }
+
     pub fn ips(&self) -> &[Hex64] {
         &self.ips[..self.length]
     }

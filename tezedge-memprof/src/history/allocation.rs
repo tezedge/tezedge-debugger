@@ -77,6 +77,8 @@ pub trait PageHistory {
 
     fn mark_page_cache(&mut self, b: bool);
     fn page_cache(&self) -> bool;
+
+    fn is_empty(&self) -> bool;
 }
 
 #[derive(Default, Serialize)]
@@ -143,5 +145,9 @@ impl PageHistory for EventLast {
         } else {
             false
         }
+    }
+
+    fn is_empty(&self) -> bool {
+        !self.is_allocated(None)
     }
 }
