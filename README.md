@@ -37,14 +37,24 @@ How to run
 ==========
 
 The application is distributed as a docker image `simplestakingcom/tezedge-memprof`. The image
-needs to have privileged access. Also it needs `/sys/kernel/debug` and `/proc` directories mapped
-from the host system. The application is serving http requests on `17832` port.
+needs to have privileged permissions. Also it needs `/sys/kernel/debug` and `/proc` directories
+mapped from the host system. The application is serving http requests on `17832` port.
 
 For example:
 
 ```
 docker run --rm --privileged -it -p 17832:17832 -v /proc:/proc:rw -v /sys/kernel/debug:/sys/kernel/debug:rw simplestakingcom/tezedge-memprof:latest
 ```
+
+In order to determine function names, the memory profiler needs an access to `light-node`
+and system shared libraries. It should be identically the same files. That is why Tte docker image
+`simplestakingcom/tezedge-memprof:latest` is inherited from `simplestakingcom/tezedge:latest` image.
+
+But if the `tezedge` is updated, but the `tezedge-memprof` image is still old, it is a problem.
+To avoid such situation, `tezedge-memprof` image has a docker client inside, and copy `light-node`
+binary from the `tezedge` container. Set `TEZEDGE_NODE_NAME` environment variable into
+TezEdge node container name and map `/var/run/docker.sock` file from host to enable such behavior.
+See `docker-compose.yml` and `memprof.sh` for details.
 
 HTTP API
 ========
