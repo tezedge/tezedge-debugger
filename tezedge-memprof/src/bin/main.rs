@@ -53,7 +53,7 @@ impl ClientCallback for MemprofClient {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use std::{thread, time::Duration, io};
+    use std::{thread, time::Duration, io, fs};
     use tezedge_memprof::{Reporter, StackResolver};
 
     tracing_subscriber::fmt()
@@ -120,6 +120,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     thread.join().unwrap();
 
     let history = history.lock().unwrap();
+    let _ = fs::create_dir("target");
     serde_json::to_writer(std::fs::File::create("target/history.json")?, &*history)?;
 
     let _ = server;
