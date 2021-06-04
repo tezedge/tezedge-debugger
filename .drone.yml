@@ -1,6 +1,6 @@
 kind: pipeline
 type: docker
-name: test-memprof-develop
+name: test-memprof
 
 steps:
   - name: memprof-test
@@ -44,9 +44,19 @@ volumes:
 ---
 
 kind: pipeline
-name: docker-deploy-memprof-develop
+name: docker-deploy-develop
 
 steps:
+  - name: build-tezedge-debugger-image  
+    image: plugins/docker
+    settings:
+      repo: simplestakingcom/tezedge-debugger
+      tag: latest
+      dockerfile: Dockerfile
+      username:
+        from_secret: docker_hub_username
+      password:
+        from_secret: docker_hub_pswd
   - name: build-tezedge-memprof-image  
     image: plugins/docker
     settings:
@@ -64,8 +74,49 @@ image_pull_secrets:
   - docker_pull_secret
 
 depends_on:
-  - test-memprof-develop
+  - test-memprof
 
 trigger:
   branch: develop
   event: push
+
+---
+
+kind: pipeline
+name: docker-deploy-release
+
+steps:
+  - name: build-tezedge-debugger-image
+    image: plugins/docker
+    settings:
+      repo: simplestakingcom/tezedge-debugger
+      tags: 
+        - ${DRONE_TAG}
+        - latest-release
+      dockerfile: Dockerfile
+      username:
+        from_secret: docker_hub_username
+      password:
+        from_secret: docker_hub_pswd
+  - name: build-tezedge-memprof-image  
+    image: plugins/docker
+    settings:
+      repo: simplestakingcom/tezedge-memprof
+      tag: latest-release
+      dockerfile: Dockerfile.memprof
+      build_args:
+        - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest-release
+      username:
+        from_secret: docker_hub_username
+      password:
+        from_secret: docker_hub_pswd
+
+image_pull_secrets:
+  - docker_pull_secret
+
+depends_on:
+  - test-memprof
+
+trigger:
+  ref: refs/tags/**
+  event: tag
