@@ -21,6 +21,7 @@ required-features = ["user"]
 [dependencies]
 ebpf-kern = { version = "0.1", optional = true }
 ebpf-user = { version = "0.1", optional = true }
+libbpf-sys = { version = "0.3.0-1", optional = true } # temporary
 serde = { version = "1.0", features = ["derive"], optional = true }
 passfd = { version = "0.1", optional = true }
 sudo = { version = "0.6", optional = true }
@@ -34,6 +35,7 @@ default = ["user"]
 kern = ["ebpf-kern/macros"]
 user = [
     "ebpf-user/macros",
+    "libbpf-sys",
     "passfd",
     "sudo",
     "ctrlc",

@@ -197,6 +197,7 @@ dependencies = [
  "ctrlc",
  "ebpf-kern",
  "ebpf-user",
+ "libbpf-sys",
  "log",
  "passfd",
  "serde",

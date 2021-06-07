@@ -293,6 +293,18 @@ fn main() {
         .unwrap_or_else(|code| panic!("failed to open bpf: {}", code));
     skeleton.load()
         .unwrap_or_else(|code| panic!("failed to load bpf: {}", code));
+    if let AppItemKindMut::Map(map) = skeleton.app.pid.kind_mut() {
+        let key = 0u32.to_ne_bytes();
+        let mut value = 0u32.to_ne_bytes();
+        unsafe {
+            libbpf_sys::bpf_map_lookup_elem(map.fd(), key.as_ptr() as _, value.as_mut_ptr() as _)
+        };
+        let old_pid = u32::from_be_bytes(value);
+        if old_pid != 0 {
+            log::warn!("detected old pid: {}", old_pid);
+            unsafe { libbpf_sys::bpf_map_delete_elem(map.fd(), key.as_ptr() as _) };
+        }
+    }
     skeleton.attach()
         .unwrap_or_else(|code| panic!("failed to attach bpf: {}", code));
     log::info!("attached bpf module");
