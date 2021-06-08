@@ -6,7 +6,7 @@ services:
     image: simplestakingcom/tezedge-memprof:latest
     build:
       args:
-        - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest
+        - TEZEDGE_IMAGE=tezedge:latest
       context: .
       dockerfile: Dockerfile.memprof
     privileged: true
@@ -42,7 +42,7 @@ services:
       - "10001:10001/udp"  # debugger syslog port for tezos node
 
   tezedge-node:
-    image: simplestakingcom/tezedge:latest
+    image: simplestakingcom/tezedge:latest-frame-pointers-enabled
     command: ["--network", "mainnet", "--actions-store-backend", "rocksdb"]
     depends_on:
       - "memprof"

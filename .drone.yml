@@ -64,7 +64,7 @@ steps:
       tag: latest
       dockerfile: Dockerfile.memprof
       build_args:
-        - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest
+        - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest-frame-pointers-enabled
       username:
         from_secret: docker_hub_username
       password:
@@ -105,7 +105,7 @@ steps:
       tag: latest-release
       dockerfile: Dockerfile.memprof
       build_args:
-        - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest-release
+        - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest-frame-pointers-enabled-release
       username:
         from_secret: docker_hub_username
       password:
