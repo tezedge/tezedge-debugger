@@ -142,6 +142,9 @@ impl ser::Serialize for FrameReportSorted {
             where
                 S: ser::Serializer,
             {
+                if self.inner.is_empty() {
+                    return serializer.serialize_seq(Some(0))?.end();
+                }
                 let l = self.inner.len()
                     + (self.under_threshold.is_some() as usize)
                     + (self.unknown.is_some() as usize);

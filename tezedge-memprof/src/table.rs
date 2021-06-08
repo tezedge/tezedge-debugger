@@ -31,6 +31,7 @@ impl SymbolTable {
                 let section = elf.section(i).ok()??;
                 match (section.link, section.data) {
                     (link, SectionData::SymbolTable { table, .. }) => Some((link, table)),
+                    (link, SectionData::DynamicSymbolTable { table, .. }) => Some((link, table)),
                     _ => None,
                 }
             });
