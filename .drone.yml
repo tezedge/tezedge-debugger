@@ -24,7 +24,7 @@ steps:
       - cargo build -p bpf-memprof --release && cargo build -p tezedge-memprof --tests --release
       - ./target/none/release/bpf-memprof-user & sleep 0.5 && ./target/none/release/tezedge-memprof & sleep 0.5
       # run tezedge-node in docker
-      - export NODE_CONTAINER=$(docker run --rm -d simplestakingcom/tezedge:latest --network mainnet)
+      - export NODE_CONTAINER=$(docker run --rm -d simplestakingcom/tezedge:latest-frame-pointers-enabled --network mainnet)
       # do tests
       - URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- --nocapture
       # stop the node
