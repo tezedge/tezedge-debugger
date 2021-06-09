@@ -1,0 +1,13 @@
+FROM debian:buster as build-env
+
+ARG GLIBC_VERSION=2.28
+RUN apt-get update && apt-get install -y wget gcc make gawk bison && \
+    wget -q http://ftp.gnu.org/pub/gnu/glibc/glibc-${GLIBC_VERSION}.tar.gz && \
+    tar xzf glibc-${GLIBC_VERSION}.tar.gz && mkdir glibc-build && cd glibc-build && \
+    ../glibc-${GLIBC_VERSION}/configure --prefix=/usr/local/lib/glibc-new --with-tls \
+        --enable-add-ons=nptl CCFLAGS="-fno-omit-frame-pointer" && \
+    make -j$(nproc) && make install && cd / && rm -Rf glibc-${GLIBC_VERSION} glibc-build
+
+FROM scratch
+
+COPY --from=build-env /usr/local/lib/glibc-new/ /
