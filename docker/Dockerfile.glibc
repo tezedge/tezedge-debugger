@@ -11,6 +11,6 @@ RUN apt-get update && apt-get install -y wget gpg gcc make gawk bison && \
         --enable-add-ons=nptl CCFLAGS="-fno-omit-frame-pointer" && \
     make -j$(nproc) && make install && cd / && rm -Rf glibc-${GLIBC_VERSION} glibc-build
 
-FROM scratch
+FROM gcr.io/distroless/cc-debian10
 
 COPY --from=build-env /usr/local/lib/glibc-new/ /
