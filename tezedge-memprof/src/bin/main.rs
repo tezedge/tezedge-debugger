@@ -53,8 +53,16 @@ impl ClientCallback for MemprofClient {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use std::{thread, time::Duration, io, fs};
+    use std::{thread, time::Duration, io, fs, process::Command, env};
     use tezedge_memprof::{Reporter, StackResolver};
+
+    let bpf = if env::args().find(|a| a == "--run-bpf").is_some() {
+        let h = Command::new("bpf-memprof-user").spawn().expect("cannot run bpf");
+        thread::sleep(Duration::from_millis(500));
+        Some(h)
+    } else {
+        None
+    };
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -124,6 +132,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     serde_json::to_writer(std::fs::File::create("target/history.json")?, &*history)?;
 
     let _ = server;
+    let _ = bpf;
 
     Ok(())
 }

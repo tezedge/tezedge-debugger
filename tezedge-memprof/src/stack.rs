@@ -18,6 +18,34 @@ pub struct StackResolver {
     map: Option<ProcessMap>,
 }
 
+fn copy_binary(filename: &str) -> Result<(), ()> {
+    use std::{env, process::Command};
+
+    let node_name = env::var("TEZEDGE_NODE_NAME").map_err(|_| ())?;
+    let res = Command::new("docker")
+        .args(&["ps", "-qf"])
+        .arg(format!("name={}", node_name))
+        .output()
+        .map_err(|_| ())?;
+    if !res.status.success() {
+        return Err(());
+    }
+    let node_image_name = String::from_utf8(res.stdout).map_err(|_| ())?;
+    log::info!("{}", node_image_name);
+    if node_image_name.lines().count() > 1 {
+        log::error!("multiple node containers");
+        Err(())
+    } else {
+        log::info!("copying: {}", filename);
+        Command::new("docker").arg("cp")
+            .arg(format!("{}:{}", node_image_name, filename))
+            .arg("/")
+            .output()
+            .map_err(|_| ())
+            .map(|_| ())
+    }
+}
+
 impl StackResolver {
     pub fn spawn(pid: Arc<AtomicU32>) -> Arc<RwLock<Self>> {
         use std::{time::Duration, thread};
@@ -40,6 +68,9 @@ impl StackResolver {
                                 last_map = Some(map.clone());
                                 for filename in map.files() {
                                     if !files.contains(&filename) {
+                                        if filename.ends_with("light-node") {
+                                            let _ = copy_binary(&filename);
+                                        }
                                         log::info!("try load symbols for: {}", filename);
                                         match SymbolTable::load(&filename) {
                                             Ok(table) => {
