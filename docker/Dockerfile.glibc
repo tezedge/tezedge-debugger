@@ -1,8 +1,11 @@
 FROM debian:buster as build-env
 
 ARG GLIBC_VERSION=2.28
-RUN apt-get update && apt-get install -y wget gcc make gawk bison && \
+RUN apt-get update && apt-get install -y wget gpg gcc make gawk bison && \
     wget -q http://ftp.gnu.org/pub/gnu/glibc/glibc-${GLIBC_VERSION}.tar.gz && \
+    wget -q http://ftp.gnu.org/pub/gnu/glibc/glibc-${GLIBC_VERSION}.tar.gz.sig && \
+    gpg --keyserver hkps://keyserver.ubuntu.com --recv-key 16792B4EA25340F8 && \
+    gpg --verify glibc-${GLIBC_VERSION}.tar.gz.sig glibc-${GLIBC_VERSION}.tar.gz && \
     tar xzf glibc-${GLIBC_VERSION}.tar.gz && mkdir glibc-build && cd glibc-build && \
     ../glibc-${GLIBC_VERSION}/configure --prefix=/usr/local/lib/glibc-new --with-tls \
         --enable-add-ons=nptl CCFLAGS="-fno-omit-frame-pointer" && \
