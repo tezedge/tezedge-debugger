@@ -279,6 +279,7 @@ fn main() {
 
     let socket = "/tmp/bpf-memprof.sock";
     let _ = fs::remove_file(socket);
+    let _ = fs::create_dir("/tmp");
     let listener = UnixListener::bind(socket).expect("failed to bind socket");
 
     let mut perms = fs::metadata(socket)
