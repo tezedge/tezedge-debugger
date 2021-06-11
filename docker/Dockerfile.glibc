@@ -1,8 +1,11 @@
-FROM ubuntu:20.04 as build-env
+FROM ubuntu:21.04 as build-env
 
-RUN apt-get update && apt-get install -y wget gpg gcc make gawk bison python python3
-ARG GLIBC_VERSION=2.31
-ARG PUBLIC_KEY=BC7C7372637EC10C57D7AA6579C43DFBF1CF2187
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y tzdata && \
+    ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime && \
+    dpkg-reconfigure --frontend noninteractive tzdata
+RUN apt-get install -y wget gpg gcc make gawk bison python python3
+ARG GLIBC_VERSION=2.33
+ARG PUBLIC_KEY=7273542B39962DF7B299931416792B4EA25340F8
 RUN wget -q http://ftp.gnu.org/pub/gnu/glibc/glibc-${GLIBC_VERSION}.tar.gz && \
     wget -q http://ftp.gnu.org/pub/gnu/glibc/glibc-${GLIBC_VERSION}.tar.gz.sig && \
     gpg --keyserver hkps://keyserver.ubuntu.com --recv-key ${PUBLIC_KEY} && \
@@ -10,18 +13,18 @@ RUN wget -q http://ftp.gnu.org/pub/gnu/glibc/glibc-${GLIBC_VERSION}.tar.gz && \
     tar xzf glibc-${GLIBC_VERSION}.tar.gz
 ARG CCFLAGS=-O2 -fno-omit-frame-pointer -fno-optimize-sibling-calls 
 RUN mkdir glibc-build && cd glibc-build && \
-    ../glibc-${GLIBC_VERSION}/configure --prefix=/usr/local/lib/glibc-new --with-tls \
-        --enable-add-ons=nptl CCFLAGS="${CCFLAGS}" && \
+    ../glibc-${GLIBC_VERSION}/configure --prefix=/usr/local/lib/glibc-new CCFLAGS="${CCFLAGS}" && \
     make -j$(nproc) && make install && cd / && rm -Rf glibc-${GLIBC_VERSION} glibc-build
 
 FROM scratch
 
-COPY --from=build-env /lib64/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
-COPY --from=build-env /lib/x86_64-linux-gnu/libc.so.6 /lib/x86_64-linux-gnu/libc.so.6
-COPY --from=build-env /lib/x86_64-linux-gnu/libdl.so.2 /lib/x86_64-linux-gnu/libdl.so.2
-COPY --from=build-env /lib/x86_64-linux-gnu/libm.so.6 /lib/x86_64-linux-gnu/libm.so.6
-COPY --from=build-env /lib/x86_64-linux-gnu/librt.so.1 /lib/x86_64-linux-gnu/librt.so.1
-COPY --from=build-env /lib/x86_64-linux-gnu/libpthread.so.0 /lib/x86_64-linux-gnu/libpthread.so.0
+ARG GLIBC_VERSION=2.33
+COPY --from=build-env /usr/local/lib/glibc-new/lib/ld-${GLIBC_VERSION}.so /lib64/ld-linux-x86-64.so.2
+COPY --from=build-env /usr/local/lib/glibc-new/lib/libc-${GLIBC_VERSION}.so /lib/x86_64-linux-gnu/libc.so.6
+COPY --from=build-env /usr/local/lib/glibc-new/lib/libdl-${GLIBC_VERSION}.so /lib/x86_64-linux-gnu/libdl.so.2
+COPY --from=build-env /usr/local/lib/glibc-new/lib/libm-${GLIBC_VERSION}.so /lib/x86_64-linux-gnu/libm.so.6
+COPY --from=build-env /usr/local/lib/glibc-new/lib/librt-${GLIBC_VERSION}.so /lib/x86_64-linux-gnu/librt.so.1
+COPY --from=build-env /usr/local/lib/glibc-new/lib/libpthread-${GLIBC_VERSION}.so /lib/x86_64-linux-gnu/libpthread.so.0
 COPY --from=build-env /lib/x86_64-linux-gnu/libgcc_s.so.1 /lib/x86_64-linux-gnu/libgcc_s.so.1
-COPY --from=build-env /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.28 /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.28
 COPY --from=build-env /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /usr/lib/x86_64-linux-gnu/libstdc++.so.6
+ENV LD_LIBRARY_PATH=/lib:/lib/x86_64-linux-gnu:/usr/lib:/usr/lib/x86_64-linux-gnu

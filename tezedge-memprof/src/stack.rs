@@ -68,8 +68,10 @@ impl StackResolver {
                                 last_map = Some(map.clone());
                                 for filename in map.files() {
                                     if !files.contains(&filename) {
-                                        if filename.ends_with("light-node") {
-                                            let _ = copy_binary(&filename);
+                                        if filename.ends_with("light-node") || filename.ends_with("libtezos.so") {
+                                            if let Err(()) = copy_binary(&filename) {
+                                                log::error!("failed to copy fresh binary {:?} from tezedge container", filename);
+                                            }
                                         }
                                         log::info!("try load symbols for: {}", filename);
                                         match SymbolTable::load(&filename) {

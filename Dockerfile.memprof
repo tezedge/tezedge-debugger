@@ -1,4 +1,4 @@
-ARG TEZEDGE_IMAGE=simplestakingcom/tezedge:latest
+ARG TEZEDGE_IMAGE=simplestakingcom/tezedge:latest-frame-pointers-enabled
 FROM simplestakingcom/tezedge-bpf-builder:latest as builder
 
 RUN cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main && \
