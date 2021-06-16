@@ -63,6 +63,39 @@ fn double_alloc() {
 }
 
 #[test]
+fn alloc_random() {
+    let mut pages = HashSet::<u64>::new();
+    let mut history = History::<EventLast>::default();
+    let stack = Stack::from_frames(&[]);
+    for _ in 0..0x1000 {
+        let page_i = rand::random::<u64>() % 0x1000;
+        pages.insert(page_i);
+        let page = Page::new(Hex64(page_i), 0);
+        history.track_alloc(page, &stack, Hex32(0));
+    }
+
+    let (value, cache) = history.short_report();
+    assert_eq!(value, pages.len() as u64 * 4);
+    assert_eq!(cache, 0);
+}
+
+#[test]
+fn free_random() {
+    let mut pages = HashSet::<u64>::new();
+    let mut history = allocate_sequence(History::default(), 0..0x1000, |_| 1);
+    for _ in 0..0x1000 {
+        let page_i = rand::random::<u64>() % 0x1000;
+        pages.insert(page_i);
+        let page = Page::new(Hex64(page_i), 0);
+        history.track_free(page, 0);
+    }
+
+    let (value, cache) = history.short_report();
+    assert_eq!(value, (0x1000 - pages.len() as u64) * 4);
+    assert_eq!(cache, 0);
+}
+
+#[test]
 fn alloc_free_random() {
     let mut pages = HashSet::<u64>::new();
     let mut history = History::<EventLast>::default();
@@ -78,7 +111,98 @@ fn alloc_free_random() {
     assert_eq!(value, pages.len() as u64 * 4);
     assert_eq!(cache, 0);
 
+    for _ in 0..0x1000 {
+        let page_i = rand::random::<u64>() % 0x1000;
+        pages.remove(&page_i);
+        let page = Page::new(Hex64(page_i), 0);
+        history.track_free(page, 0);
+    }
 
+    let (value, cache) = history.short_report();
+    assert_eq!(value, pages.len() as u64 * 4);
+    assert_eq!(cache, 0);
+}
+
+#[test]
+fn alloc_cache_random() {
+    let mut pages = HashSet::<u64>::new();
+    let mut cache_pages = HashSet::<u64>::new();
+    let mut history = History::<EventLast>::default();
+    let stack = Stack::from_frames(&[]);
+    for _ in 0..0x1000 {
+        let page_i = rand::random::<u64>() % 0x1000;
+        pages.insert(page_i);
+        let page = Page::new(Hex64(page_i), 0);
+        history.track_alloc(page, &stack, Hex32(0));
+        if rand::random::<bool>() {
+            cache_pages.insert(page_i);
+            history.mark_page_cache(page, true);
+        }
+    }
+
+    let (value, cache) = history.short_report();
+    assert_eq!(value, pages.len() as u64 * 4);
+    assert_eq!(cache, cache_pages.len() as u64 * 4);
+}
+
+#[test]
+fn free_cache_random() {
+    let mut pages = HashSet::<u64>::new();
+    let mut cache_pages = HashSet::<u64>::new();
+    let mut history = allocate_sequence(History::<EventLast>::default(), 0..0x1000, |_| 1);
+    for page_i in 0..0x1000 {
+        let page = Page::new(Hex64(page_i), 0);
+        if rand::random::<bool>() {
+            cache_pages.insert(page_i);
+            history.mark_page_cache(page, true);
+        }
+    }
+
+    for _ in 0..0x1000 {
+        let page_i = rand::random::<u64>() % 0x1000;
+        pages.insert(page_i);
+        cache_pages.remove(&page_i);
+        let page = Page::new(Hex64(page_i), 0);
+        history.track_free(page, 0);
+    }
+
+    let (value, cache) = history.short_report();
+    assert_eq!(value, (0x1000 - pages.len() as u64) * 4);
+    assert_eq!(cache, cache_pages.len() as u64 * 4);
+}
+
+#[test]
+fn alloc_free_cache_random() {
+    let mut pages = HashSet::<u64>::new();
+    let mut cache_pages = HashSet::<u64>::new();
+    let mut history = History::<EventLast>::default();
+    let stack = Stack::from_frames(&[]);
+    for _ in 0..0x1000 {
+        let page_i = rand::random::<u64>() % 0x1000;
+        pages.insert(page_i);
+        let page = Page::new(Hex64(page_i), 0);
+        history.track_alloc(page, &stack, Hex32(0));
+        if rand::random::<bool>() {
+            cache_pages.insert(page_i);
+            history.mark_page_cache(page, true);
+        }
+    }
+
+    let (value, cache) = history.short_report();
+    assert_eq!(value, pages.len() as u64 * 4);
+    assert_eq!(cache, cache_pages.len() as u64 * 4);
+
+    for _ in 0..0x1000 {
+        let page_i = rand::random::<u64>() % 0x1000;
+        pages.remove(&page_i);
+        cache_pages.remove(&page_i);
+        let page = Page::new(Hex64(page_i), 0);
+        history.track_free(page, 0);
+    }
+
+    let (value, cache) = history.short_report();
+    assert_eq!(value, pages.len() as u64 * 4);
+    assert_eq!(cache, cache_pages.len() as u64 * 4);
 }
 
 #[test]
