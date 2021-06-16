@@ -3,7 +3,7 @@ use bpf_memprof::Hex32;
 use serde::Serialize;
 use super::{memory_map::ProcessMap, table::SymbolTable};
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub struct SymbolInfo {
     offset: Hex32,
@@ -16,6 +16,7 @@ pub struct SymbolInfo {
 pub struct StackResolver {
     files: HashMap<String, SymbolTable>,
     map: Option<ProcessMap>,
+    mock: Option<()>,
 }
 
 fn copy_binary(filename: &str) -> Result<(), ()> {
@@ -108,22 +109,36 @@ impl StackResolver {
         resolver
     }
 
-    fn try_resolve(&self, address: u64) -> Option<((usize, &str), Option<&String>)> {
+    pub fn mock() -> Self {
+        StackResolver {
+            files: HashMap::new(),
+            map: None,
+            mock: Some(()),
+        }
+    }
+
+    fn try_resolve(&self, address: u64) -> Option<((usize, &str), Option<String>)> {
         let map = self.map.as_ref()?;
         let (filename, offset) = map.find(address as usize)?;
         let table = self.files.get(&filename)?;
-        Some(((offset, table.name()), table.find(offset as u64)))
+        Some(((offset, table.name()), table.find(offset as u64).cloned()))
+    }
+
+    fn try_mock(&self, address: u64) -> Option<((usize, &str), Option<String>)> {
+        self.mock.as_ref().map(|&()| ((0, "mock"), Some(format!("func_{}", address))))
     }
 
     pub fn resolve(&self, address: u64) -> Option<SymbolInfo> {
-        let ((offset, filename), name) = self.try_resolve(address)?;
+        let ((offset, filename), name) = self
+            .try_resolve(address)
+            .or_else(|| self.try_mock(address))?;
 
         fn cpp_demangle(s: &str) -> Option<String> {
             cpp_demangle::Symbol::new(s).ok()?.demangle(&Default::default()).ok()
         }
 
         let function_category = if filename == "light-node" {
-            if name.map(|n| is_rust(n)).unwrap_or(false) {
+            if name.as_ref().map(|n| is_rust(n)).unwrap_or(false) {
                 "nodeRust".to_string()
             } else {
                 "nodeCpp".to_string()
@@ -137,10 +152,10 @@ impl StackResolver {
             executable: filename.to_string(),
             function_name: name
                 .map(|n| {
-                    if is_rust(n) {
-                        rustc_demangle::demangle(n).to_string()
+                    if is_rust(&n) {
+                        rustc_demangle::demangle(&n).to_string()
                     } else {
-                        cpp_demangle(n).unwrap_or(n.clone())
+                        cpp_demangle(&n).unwrap_or(n)
                     }
                 }),
             function_category,

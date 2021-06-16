@@ -15,7 +15,7 @@ impl fmt::Debug for Hex64 {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hex32(pub u32);
 
 impl fmt::Debug for Hex32 {

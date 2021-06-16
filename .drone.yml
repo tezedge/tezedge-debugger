@@ -3,7 +3,14 @@ type: docker
 name: test-memprof
 
 steps:
-  - name: memprof-test
+  - name: unit-tests
+    image: simplestakingcom/tezedge-bpf-builder:latest
+    commands:
+      - apt-get install -y pkg-config libssl-dev
+      - cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
+      - cargo test --package tezedge-memprof --lib -- history::history
+      - cargo test --package tezedge-memprof --lib -- history::tests
+  - name: memprof-compare-test
     image: simplestakingcom/tezedge-bpf-builder:latest
     privileged: true
     volumes:

@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, BTreeMap}, ops::Deref};
+use std::{collections::{HashMap, BTreeMap}, ops::Deref, cmp::Ordering};
 use bpf_memprof::Hex64;
 use serde::ser::{self, SerializeSeq};
 use super::stack::{SymbolInfo, StackResolver};
@@ -12,11 +12,37 @@ pub struct FrameReportInner {
     cache_under_threshold: u64,
 }
 
+struct SortKey {
+    inv_value: u64,
+    name: SymbolInfo,
+}
+
+impl PartialEq for SortKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.inv_value.eq(&other.inv_value) && self.name.eq(&other.name)
+    }
+}
+
+impl Eq for SortKey {}
+
+impl PartialOrd for SortKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SortKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.inv_value.cmp(&other.inv_value)
+            .then(self.name.cmp(&other.name))
+    }
+}
+
 pub struct FrameReportSorted {
     name: Option<SymbolInfo>,
     value: u64,
     cache_value: u64,
-    frames: BTreeMap<u64, FrameReportSorted>,
+    frames: BTreeMap<SortKey, FrameReportSorted>,
     under_threshold: u64,
     cache_under_threshold: u64,
     unknown: u64,
@@ -60,7 +86,11 @@ impl FrameReportInner {
         let mut cache_unknown = self.cache_value - self.cache_under_threshold;
         for (key, value) in &self.frames {
             if let Some(name) = resolver.resolve(key.0) {
-                frames.insert(!value.value, value.sorted(resolver, Some(name)));
+                let key = SortKey {
+                    inv_value: !value.value,
+                    name: name.clone(),
+                };
+                frames.insert(key, value.sorted(resolver, Some(name)));
                 unknown -= value.value;
                 cache_unknown -= value.cache_value;
             }
@@ -98,7 +128,7 @@ impl ser::Serialize for FrameReportSorted {
         use self::ser::SerializeMap;
 
         struct Helper<'a> {
-            inner: &'a BTreeMap<u64, FrameReportSorted>,
+            inner: &'a BTreeMap<SortKey, FrameReportSorted>,
             under_threshold: Option<FakeFrame>,
             unknown: Option<FakeFrame>,        
         }

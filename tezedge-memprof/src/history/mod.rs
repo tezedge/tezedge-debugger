@@ -12,3 +12,6 @@ pub use self::{
     history::History,
     report::FrameReport,
 };
+
+#[cfg(test)]
+mod tests;
