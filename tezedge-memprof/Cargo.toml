@@ -10,6 +10,7 @@ path = "src/bin/main.rs"
 
 [dev-dependencies]
 reqwest = "0.11"
+rand = "0.8"
 
 [dependencies]
 log = "0.4"

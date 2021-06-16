@@ -118,6 +118,14 @@ impl<R> FrameReport<R> {
     pub fn new(resolver: R) -> Self {
         FrameReport { resolver, inner: FrameReportInner::default() }
     }
+
+    pub fn value(&self) -> u64 {
+        self.inner.value
+    }
+
+    pub fn cache_value(&self) -> u64 {
+        self.inner.cache_value
+    }
 }
 
 impl ser::Serialize for FrameReportSorted {

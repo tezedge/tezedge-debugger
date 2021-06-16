@@ -2646,6 +2646,7 @@ dependencies = [
  "ctrlc",
  "elf64",
  "log",
+ "rand 0.8.3",
  "reqwest",
  "rustc-demangle",
  "serde",
