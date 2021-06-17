@@ -55,20 +55,16 @@ shared libraries. It enables the profiler to resolve function names.
 
 * `cd tezedge-debugger`
 
-* `HOSTNAME_FULL=192.168.0.101 docker-compose pull && docker-compose up -d`
+* `docker-compose pull && docker-compose up -d`
 
 First two steps are clone source code from github and move to the directory.
 The full source core is unneeded. You can take only `docker-compose.yml` file.
 
 Third step is running the TezEdge node along with the memory profiler and
-frontend. The variable `HOSTNAME_FULL` should be a hostname where the frontend
-can reach the host machine by http. It can be an IP address in your local
-network. It usually looks like `192.168.0.101` but might be different, depending
-on your local network configuration. You can get the IP using `ip route show`
-command.
+frontend.
 
-Now you can see the result at http://192.168.0.101/#/resources/memory in your
-browser (replace the 192.168.0.101 with the actual address).
+Now you can see the result at http://localhost/#/resources/memory in your
+browser.
 
 #### Without docker-compose
 
