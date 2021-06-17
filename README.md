@@ -275,7 +275,6 @@ Messages are always sorted from newest to oldest.
 * `/v2/log?level=error` - Return all errors in last one hundred logs,
 
 ### Requirements
-============
 * Linux kernel 5.11 version or higher.
 * Docker
 * [Docker compose](https://docs.docker.com/compose/install/)
