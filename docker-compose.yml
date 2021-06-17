@@ -67,12 +67,11 @@ services:
   explorer:
     image: simplestakingcom/tezedge-explorer:latest
     environment:
-      # HOSTNAME_FULL=$(hostname).dev.tezedge.com
-      - SANDBOX=http://${HOSTNAME_FULL}:3030
-      - DEBUGGER=http://${HOSTNAME_FULL}:17732
-      - MEMORYPROFILER=http://${HOSTNAME_FULL}:17832
+      - SANDBOX=http://localhost:3030
+      - DEBUGGER=http://localhost:17732
+      - MEMORYPROFILER=http://localhost:17832
       # need a better way to provide such information
-      - API=[{"id":"rust","name":"rust.${HOSTNAME_FULL}","http":"http://${HOSTNAME_FULL}:18732","ws":"ws://${HOSTNAME_FULL}:4927","monitoring":"http://${HOSTNAME_FULL}:38732/resources/tezedge","p2p_port":9732,"features":["MONITORING","RESOURCES","MEMPOOL_ACTION","STORAGE_BLOCK","NETWORK_ACTION","LOGS_ACTION"]},{"id":"ocaml","name":"ocaml.${HOSTNAME_FULL}","http":"http://${HOSTNAME_FULL}:18733","ws":false,"monitoring":"http://${HOSTNAME_FULL}:38732/resources/ocaml","p2p_port":9733,"features":["MONITORING","RESOURCES","MEMPOOL_ACTION","NETWORK_ACTION","LOGS_ACTION"]}]
+      - API=[{"id":"rust","name":"rust.localhost","http":"http://localhost:18732","ws":"ws://localhost:4927","monitoring":"http://localhost:38732/resources/tezedge","p2p_port":9732,"features":["MONITORING","RESOURCES","MEMPOOL_ACTION","STORAGE_BLOCK","NETWORK_ACTION","LOGS_ACTION"]},{"id":"ocaml","name":"ocaml.localhost","http":"http://localhost:18733","ws":false,"monitoring":"http://localhost:38732/resources/ocaml","p2p_port":9733,"features":["MONITORING","RESOURCES","MEMPOOL_ACTION","NETWORK_ACTION","LOGS_ACTION"]}]
     ports:
       - "80:80"
 

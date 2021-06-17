@@ -1,4 +1,8 @@
-use std::{collections::{HashMap, HashSet}, sync::{Arc, RwLock, atomic::{AtomicU32, Ordering}}};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, RwLock, atomic::{AtomicU32, Ordering}}, 
+    path::PathBuf,
+};
 use bpf_memprof::Hex32;
 use serde::Serialize;
 use super::{memory_map::ProcessMap, table::SymbolTable};
@@ -19,10 +23,14 @@ pub struct StackResolver {
     mock: Option<()>,
 }
 
-fn copy_binary(filename: &str) -> Result<(), ()> {
-    use std::{env, process::Command};
+fn copy_binary(filename: &str) -> Result<PathBuf, ()> {
+    use std::{env, process::Command, path::Path, fs};
 
-    let node_name = env::var("TEZEDGE_NODE_NAME").map_err(|_| ())?;
+    let node_name = match env::var("TEZEDGE_NODE_NAME") {
+        Err(_) => return Ok(PathBuf::from(filename)),
+        Ok(v) => v,
+    };
+
     let res = Command::new("docker")
         .args(&["ps", "-qf"])
         .arg(format!("name={}", node_name))
@@ -32,18 +40,24 @@ fn copy_binary(filename: &str) -> Result<(), ()> {
         return Err(());
     }
     let node_image_name = String::from_utf8(res.stdout).map_err(|_| ())?;
-    log::info!("{}", node_image_name);
     if node_image_name.lines().count() > 1 {
         log::error!("multiple node containers");
         Err(())
     } else {
         log::info!("copying: {}", filename);
-        Command::new("docker").arg("cp")
-            .arg(format!("{}:{}", node_image_name, filename))
-            .arg("/")
+        let path = format!("/tmp{}", filename);
+        let path = Path::new(&path);
+        let prefix = path.parent().ok_or(())?;
+        let _ = fs::create_dir_all(prefix);
+        let output = Command::new("docker").arg("cp")
+            .arg(format!("{}:{}", node_image_name.trim_end_matches('\n'), filename))
+            .arg(path)
             .output()
-            .map_err(|_| ())
-            .map(|_| ())
+            .map_err(|_| ())?;
+        if !output.status.success() {
+            log::error!("{:?}", String::from_utf8(output.stderr));
+        }
+        Ok(path.to_path_buf())
     }
 }
 
@@ -67,30 +81,32 @@ impl StackResolver {
                         Ok(map) => {
                             if Some(&map) != last_map.as_ref() {
                                 last_map = Some(map.clone());
-                                for filename in map.files() {
-                                    if !files.contains(&filename) {
-                                        if filename.ends_with("light-node") || filename.ends_with("libtezos.so") {
-                                            if let Err(()) = copy_binary(&filename) {
-                                                log::error!("failed to copy fresh binary {:?} from tezedge container", filename);
-                                            }
-                                        }
-                                        log::info!("try load symbols for: {}", filename);
+                                for initial_filename in map.files() {
+                                    if !files.contains(&initial_filename) {
+                                        let filename = match copy_binary(&initial_filename) {
+                                            Err(()) => {
+                                                log::error!("failed to copy fresh binary {:?} from tezedge container", initial_filename);
+                                                continue;
+                                            },
+                                            Ok(filename) => filename,
+                                        };
+                                        log::info!("try load symbols for: {}", initial_filename);
                                         match SymbolTable::load(&filename) {
                                             Ok(table) => {
-                                                log::info!("loaded {} symbols from: {}", table.len(), filename);
+                                                log::info!("loaded {} symbols from: {}", table.len(), initial_filename);
                                                 let mut guard = resolver_ref.write().unwrap();
-                                                guard.files.insert(filename.clone(), table);
+                                                guard.files.insert(initial_filename.clone(), table);
                                                 drop(guard);
                                             },
                                             Err(error) => {
                                                 log::info!(
-                                                    "failed to load symbols for: {}, {}",
+                                                    "failed to load symbols for: {:?}, {}",
                                                     filename,
                                                     error,
                                                 );
                                             }
                                         }
-                                        files.insert(filename);
+                                        files.insert(initial_filename);
                                     }
                                 }
                                 resolver_ref.write().unwrap().map = Some(map);
