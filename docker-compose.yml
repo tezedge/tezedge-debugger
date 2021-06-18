@@ -31,7 +31,7 @@ services:
       - "tezedge-shared-data:/tmp/volume/tezedge:ro"
       - "tezos-shared-data:/tmp/volume/tezos:ro"
       # /var/lib/docker/volumes/remote-workspace/_data/tezedge-debugger
-      - "./config-docker.toml:/home/appuser/config.toml:ro"
+      - "/var/lib/docker/volumes/remote-workspace/_data/tezedge-debugger/config-docker.toml:/home/appuser/config.toml:ro"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
     ports:
       - "17732:17732"      # debugger RPC port compatibility server

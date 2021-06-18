@@ -10,7 +10,7 @@ use std::{
     },
 };
 use anyhow::Result;
-use bpf_sniffer_common::{BpfModuleClient, SnifferEvent, Command, EventId, SocketId};
+use bpf_recorder::{BpfModuleClient, SnifferEvent, Command, EventId, SocketId};
 
 use super::{
     processor::Connection,

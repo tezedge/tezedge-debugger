@@ -363,7 +363,7 @@ fn run_bpf() -> (ebpf::Skeleton<App>, i32) {
     use std::io::Error;
     use ebpf::{Skeleton, kind::{AppItemKindMut, AppItem}};
 
-    static CODE: &[u8] = include_bytes!(concat!("../", env!("BPF_CODE")));
+    static CODE: &[u8] = include_bytes!(concat!("../", env!("BPF_CODE_MEMPROF")));
 
     let mut skeleton = Skeleton::<App>::open("bpf-memprof\0", CODE)
         .unwrap_or_else(|code| panic!("failed to open bpf: {}", code));

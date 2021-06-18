@@ -5,31 +5,11 @@ members = [
 
     # recorder and its bpf tools
     "tezedge-recorder",
-    "bpf-sniffer-lib",
-    "bpf-sniffer",
-    "bpf-sniffer-common",
+    "bpf-recorder",
+    "bpf-ring-buffer",
 
     #memprof and its bpf tools
     "bpf-memprof-common",
     "tezedge-memprof",
     "bpf-memprof",
-
-    # common bpf related
-    "bpf-ring-buffer",
 ]
-
-[patch.crates-io]
-
-rocksdb = { git = "https://github.com/rust-rocksdb/rust-rocksdb", rev = "29802a4b71b8e96a3095b84aadbbea3e39e0d074" }
-
-bpf-sys = { git = "https://github.com/tezedge/redbpf.git", branch = "develop" }
-redbpf = { git = "https://github.com/tezedge/redbpf.git", branch = "develop" }
-redbpf-probes = { git = "https://github.com/tezedge/redbpf.git", branch = "develop" }
-redbpf-macros = { git = "https://github.com/tezedge/redbpf.git", branch = "develop" }
-cargo-bpf = { git = "https://github.com/tezedge/redbpf.git", branch = "develop" }
-
-#bpf-sys = { path = "../redbpf/bpf-sys" }
-#redbpf = { path = "../redbpf/redbpf" }
-#redbpf-probes = { path = "../redbpf/redbpf-probes" }
-#redbpf-macros = { path = "../redbpf/redbpf-macros" }
-#cargo-bpf = { path = "../redbpf/cargo-bpf" }
