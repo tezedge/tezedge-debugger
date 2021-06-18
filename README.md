@@ -160,28 +160,15 @@ First of all, the recorder should get the raw data from the kernel.
 
 #### BPF module
 
-The recorder using BPF module to intercept network related syscalls.
+The recorder uses BPF module to intercept network related syscalls.
 It intercepts `read`, `recvfrom`, `write`, `sendto`, `bind`, `listen`,
-`connect`, `accept` and `close` syscalls. Those syscalls can give a full picture
+`connect`, `accept` and `close` syscalls. Those syscalls give a full picture
 of network activity of the application. The BPF module configured to know where
-the application which we want to record listens incoming connection.
+the application which we want to record is listening incoming connection.
 That is needed to determine an applications PID. It listen `bind` attempts from
 any PID on the given port. And once we have one, we know the PID. After that,
 the BPF module intercepting other syscalls made by this PID. The single recorder
 can record multiple applications simultaneously.
-
-The most challenging task here is to send dynamically sized and potentially big
-amount of data from the BPF module which works in kernel space to the main part
-of the application which works in user space. The BPF restrict heap memory
-allocations. But there is an API to create a ring buffer in shared memory.
-We use this buffer. Next problem is the size of data sent in the buffer should
-be statically known. It should be a constant. The kernel reject a BPF module
-which try to allocate a variable sized area in the ring buffer. So we are
-allocating a 256 bytes if the data size is in (0, 256] interval, a 512 bytes if
-the data is in (256, 512] interval and so on, up to 128 megabytes.
-With one exception: if the data send by the application has size 148 bytes,
-we send 148 bytes, because it is very frequent case during bootstrap.
-It is a length of a block header.
 
 #### Packets, Chunks and Messages
 Tezos nodes communicate by exchanging chunked P2P messages over the internet. Each part uses its own "blocks" of data.
