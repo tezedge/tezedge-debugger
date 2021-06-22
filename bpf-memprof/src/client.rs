@@ -236,10 +236,6 @@ impl Event {
     pub fn from_slice(slice: &[u8]) -> Result<Self, u8> {
         use core::convert::TryFrom;
 
-        if slice.len() == 0x200 {
-            return Err(2);
-        }
-
         if slice.len() < 0x10 {
             return Err(0);
         }

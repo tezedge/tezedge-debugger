@@ -18,7 +18,9 @@ pub struct App {
     pub pid: ebpf::HashMapRef<4, 4>,
     #[hashmap(size = 1)]
     pub lost_events: ebpf::HashMapRef<4, 4>,
-    #[ringbuf(size = 0x10000000)]
+    #[array_percpu(size = 1)]
+    pub stack: ebpf::ArrayPerCpuRef<0x400>,
+    #[ringbuf(size = 0x4000000)]
     pub event_queue: ebpf::RingBufferRef,
     #[prog("tracepoint/syscalls/sys_enter_execve")]
     pub execve: ebpf::ProgRef,
@@ -184,7 +186,33 @@ impl App {
     where
         T: Pod,
     {
-        let mut data = self.event_queue.reserve(0x10 + T::SIZE + 0x08 + (8 * STACK_MAX_DEPTH))
+        let stack_len = self.stack.get_mut(0)
+            .map(|s| {
+                let size = ctx.get_user_stack(s).unwrap_or(0);
+                (((size + 7) / 8) as usize)
+            })
+            .unwrap_or(0);
+
+        let stack_len = if stack_len > 64 {
+            STACK_MAX_DEPTH
+        } else if stack_len > 32 {
+            64
+        } else if stack_len > 16 {
+            32
+        } else if stack_len > 8 {
+            16
+        } else if stack_len > 4 {
+            8
+        } else if stack_len > 2 {
+            4
+        } else if stack_len > 1 {
+            2
+        } else {
+            1
+        };
+
+        let size = 0x10 + T::SIZE + 0x08 + stack_len * 8;
+        let mut data = self.event_queue.reserve(size)
             .map_err(|e| {
                 let _ = self.inc_lost();
                 e
@@ -196,10 +224,9 @@ impl App {
         let data_mut = &mut data_mut[0x10..];
         ctx.read_into(0x08, &mut data_mut[..T::SIZE]);
         let data_mut = &mut data_mut[T::SIZE..];
+        data_mut[..0x08].clone_from_slice(&(stack_len as u64).to_ne_bytes());
         match ctx.get_user_stack(&mut data_mut[0x08..]) {
             Ok(size) => {
-                let length = ((size + 7) / 8) as u64;
-                data_mut[..0x08].clone_from_slice(&length.to_ne_bytes());
                 data.submit();
                 Ok(())
             },
