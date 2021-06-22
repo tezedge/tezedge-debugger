@@ -16,6 +16,8 @@ ebpf::license!("GPL");
 pub struct App {
     #[hashmap(size = 1)]
     pub pid: ebpf::HashMapRef<4, 4>,
+    #[hashmap(size = 1)]
+    pub lost_events: ebpf::HashMapRef<4, 4>,
     #[ringbuf(size = 0x10000000)]
     pub event_queue: ebpf::RingBufferRef,
     #[prog("tracepoint/syscalls/sys_enter_execve")]
@@ -134,6 +136,31 @@ impl App {
         self.check_filename(ctx.read_here::<*const u8>(0x18))
     }
 
+    #[inline(always)]
+    fn inc_lost(&mut self) -> Result<(), i32> {
+        if let Some(cnt_bytes) = self.lost_events.get_mut(&0u32.to_ne_bytes()) {
+            if cnt_bytes[0] < u8::MAX {
+                cnt_bytes[0] += 1;
+            } else if cnt_bytes[1] < u8::MAX {
+                cnt_bytes[0] = 0;
+                cnt_bytes[1] += 1;
+            } else if cnt_bytes[2] < u8::MAX {
+                cnt_bytes[0] = 0;
+                cnt_bytes[1] = 0;
+                cnt_bytes[2] += 1;
+            } else if cnt_bytes[3] < u8::MAX {
+                cnt_bytes[0] = 0;
+                cnt_bytes[1] = 0;
+                cnt_bytes[2] = 0;
+                cnt_bytes[3] += 1;
+            }
+            Ok(())
+        } else {
+            self.lost_events.insert(0u32.to_ne_bytes(), 1u32.to_le_bytes())
+        }
+    }
+
+    #[inline(always)]
     fn output_unconditional<T>(&mut self, ctx: ebpf::Context) -> Result<(), i32>
     where
         T: Pod,
@@ -143,6 +170,7 @@ impl App {
         self.output_generic::<T>(ctx, pid)
     }
 
+    #[inline(always)]
     fn output<T>(&mut self, ctx: ebpf::Context) -> Result<(), i32>
     where
         T: Pod,
@@ -151,11 +179,16 @@ impl App {
         self.output_generic::<T>(ctx, pid)
     }
 
+    #[inline(always)]
     fn output_generic<T>(&mut self, ctx: ebpf::Context, pid: u32) -> Result<(), i32>
     where
         T: Pod,
     {
-        let mut data = self.event_queue.reserve(0x10 + T::SIZE + 0x08 + (8 * STACK_MAX_DEPTH))?;
+        let mut data = self.event_queue.reserve(0x10 + T::SIZE + 0x08 + (8 * STACK_MAX_DEPTH))
+            .map_err(|e| {
+                let _ = self.inc_lost();
+                e
+            })?;
         let data_mut = data.as_mut();
         ctx.read_into(0x00, &mut data_mut[..0x08]);
         data_mut[0x08..0x0c].clone_from_slice(&pid.to_ne_bytes());
@@ -266,7 +299,7 @@ fn main() {
     use ebpf::{Skeleton, kind::{AppItemKindMut, AppItem}};
     use std::{
         fs,
-        io::{BufReader, BufRead},
+        io::{Error, BufReader, BufRead},
         os::unix::{fs::PermissionsExt, net::UnixListener},
         process,
     };
@@ -294,16 +327,20 @@ fn main() {
         .unwrap_or_else(|code| panic!("failed to open bpf: {}", code));
     skeleton.load()
         .unwrap_or_else(|code| panic!("failed to load bpf: {}", code));
-    if let AppItemKindMut::Map(map) = skeleton.app.pid.kind_mut() {
-        let key = 0u32.to_ne_bytes();
-        let mut value = 0u32.to_ne_bytes();
-        unsafe {
-            libbpf_sys::bpf_map_lookup_elem(map.fd(), key.as_ptr() as _, value.as_mut_ptr() as _)
-        };
-        let old_pid = u32::from_be_bytes(value);
+    if let Some(old_pid) = skeleton.app.pid.get(&0u32.to_ne_bytes()) {
+        let old_pid = u32::from_ne_bytes(old_pid);
         if old_pid != 0 {
             log::warn!("detected old pid: {}", old_pid);
-            unsafe { libbpf_sys::bpf_map_delete_elem(map.fd(), key.as_ptr() as _) };
+            match skeleton.app.pid.remove(&0u32.to_ne_bytes()) {
+                Ok(()) => (),
+                Err(code) => {
+                    log::error!(
+                        "failed to remove old pid, code {}, error {}",
+                        code,
+                        Error::last_os_error(),
+                    );
+                }
+            }
         }
     }
     skeleton.attach()
@@ -326,7 +363,19 @@ fn main() {
     for line in stream.lines() {
         // handle line
         match line {
-            Ok(line) => log::info!("received command: {}", line),
+            Ok(line) => {
+                log::info!("received command: {}", line);
+                if line == "check" {
+                    let cnt = skeleton.app.lost_events.get(&0u32.to_ne_bytes())
+                        .map(u32::from_le_bytes)
+                        .unwrap_or(0);
+                    if cnt != 0 {
+                        log::warn!("lost events: {}", cnt);
+                    } else {
+                        log::info!("check: ok");
+                    }
+                }
+            }
             Err(error) => log::error!("{:?}", error),
         }
     }

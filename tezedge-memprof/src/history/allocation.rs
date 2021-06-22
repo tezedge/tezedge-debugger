@@ -81,6 +81,67 @@ pub trait PageHistory {
     fn is_empty(&self) -> bool;
 }
 
+#[derive(Serialize)]
+#[repr(u8)]
+pub enum NoHistory {
+    Free,
+    Allocated,
+    Cache,
+}
+
+impl Default for NoHistory {
+    fn default() -> Self {
+        NoHistory::Free
+    }
+}
+
+impl PageHistory for NoHistory {
+    fn track_alloc(&mut self, flags: Hex32) -> Result<(), AllocError> {
+        let _ = flags;
+        if !matches!(&*self, &NoHistory::Free) {
+            Err(AllocError)
+        } else {
+            *self = NoHistory::Allocated;
+            Ok(())
+        }
+    }
+
+    fn track_free(&mut self) -> Result<(), FreeError> {
+        if matches!(&*self, &NoHistory::Free) {
+            Err(FreeError::DoubleFree)
+        } else {
+            *self = NoHistory::Free;
+            Ok(())
+        }
+    }
+
+    fn is_allocated(&self, time: Option<u64>) -> bool {
+        if time.is_some() {
+            // WARNING: `NoHistory` does not track history,
+            // therefore it is unable to determine whether it is allocated at some time or not
+            false
+        } else {
+            !matches!(self, &NoHistory::Free)
+        }
+    }
+
+    fn mark_page_cache(&mut self, b: bool) {
+        match *self {
+            NoHistory::Free => (),
+            NoHistory::Allocated => if b { *self = NoHistory::Cache },
+            NoHistory::Cache => if !b { *self = NoHistory::Allocated },
+        }
+    }
+
+    fn page_cache(&self) -> bool {
+        matches!(self, &NoHistory::Cache)
+    }
+
+    fn is_empty(&self) -> bool {
+        !self.is_allocated(None)
+    }
+}
+
 #[derive(Default, Serialize)]
 pub struct EventLast(Option<Event>);
 

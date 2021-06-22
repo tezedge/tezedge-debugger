@@ -4,8 +4,8 @@ use serde::{Serialize, ser};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Page {
-    pfn: Hex64,
-    order: u32,
+    // last 4 bits is order, 0..28 bits are pfn
+    inner: u32,
 }
 
 impl Hash for Page {
@@ -13,13 +13,15 @@ impl Hash for Page {
     where
         H: Hasher,
     {
-        self.pfn.0.hash::<H>(state)
+        self.inner.hash::<H>(state)
     }
 }
 
 impl fmt::Display for Page {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}-{}", self.pfn, self.order)
+        let pfn = Hex64((self.inner & 0x0fffffff) as u64);
+        let order = self.inner >> 28;
+        write!(f, "{:?}-{}", pfn, order)
     }
 }
 
@@ -34,10 +36,11 @@ impl Serialize for Page {
 
 impl Page {
     pub fn new(pfn: Hex64, order: u32) -> Self {
-        Page { pfn, order }
+        let inner = ((pfn.0 & 0x0fffffff) as u32) + (order << 28);
+        Page { inner }
     }
 
     pub fn size_kib(&self) -> u64 {
-        1u64 << (self.order + 2)
+        4u64 << (self.inner >> 28)
     }
 }

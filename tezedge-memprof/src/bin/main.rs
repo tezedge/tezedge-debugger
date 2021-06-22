@@ -3,20 +3,20 @@
 
 use std::{collections::HashMap, sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU32, Ordering}}};
 use bpf_memprof::{Client, ClientCallback, Event, EventKind};
-use tezedge_memprof::{AtomicState, Page, History, EventLast};
+use tezedge_memprof::{AtomicState, Page, History, NoHistory};
 
 #[derive(Default)]
 struct MemprofClient {
     pid: Arc<AtomicU32>,
     state: Arc<AtomicState>,
     allocations: HashMap<u64, u64>,
-    history: Arc<Mutex<History<EventLast>>>,
+    history: Arc<Mutex<History<NoHistory>>>,
     last: Option<EventKind>,
+    overall_counter: u64,
 }
 
 impl ClientCallback for MemprofClient {
     fn arrive(&mut self, client: &mut Client, data: &[u8]) {
-        let _ = client;
         let event = match Event::from_slice(data) {
             Ok(v) => v,
             Err(error) => {
@@ -49,6 +49,11 @@ impl ClientCallback for MemprofClient {
             _ => (),
         }
         self.last = Some(event.event);
+
+        self.overall_counter += 1;
+        if self.overall_counter & 0xffff == 0 {
+            client.send_command("check").unwrap();
+        }
     }
 }
 
@@ -145,10 +150,10 @@ mod server {
         http::StatusCode,
     };
     use serde::Deserialize;
-    use tezedge_memprof::{History, EventLast, StackResolver};
+    use tezedge_memprof::{History, NoHistory, StackResolver};
 
     pub fn routes(
-        history: Arc<Mutex<History<EventLast>>>,
+        history: Arc<Mutex<History<NoHistory>>>,
         resolver: Arc<RwLock<StackResolver>>,
         p: Arc<AtomicU32>,
     ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static {
@@ -169,7 +174,7 @@ mod server {
     }
 
     fn tree(
-        history: Arc<Mutex<History<EventLast>>>,
+        history: Arc<Mutex<History<NoHistory>>>,
         resolver: Arc<RwLock<StackResolver>>,
     ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
         #[derive(Deserialize)]

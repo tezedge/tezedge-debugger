@@ -9,7 +9,7 @@ mod state;
 pub use self::state::{AtomicState, Reporter};
 
 mod history;
-pub use self::history::{Page, History, FrameReport, EventLast};
+pub use self::history::{Page, History, FrameReport, EventLast, NoHistory};
 
 mod stack;
 pub use self::stack::StackResolver;
