@@ -640,7 +640,7 @@ dependencies = [
 [[package]]
 name = "ebpf-kern"
 version = "0.1.5"
-source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#4bcc64c9b83ec3fb3666fbc2cae97af2cf56adde"
+source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#cd91a8fe04136e76f1e92429b707666f95616f43"
 dependencies = [
  "cty",
  "ebpf-kern-macros",
@@ -649,7 +649,7 @@ dependencies = [
 [[package]]
 name = "ebpf-kern-macros"
 version = "0.1.4"
-source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#4bcc64c9b83ec3fb3666fbc2cae97af2cf56adde"
+source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#cd91a8fe04136e76f1e92429b707666f95616f43"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -659,7 +659,7 @@ dependencies = [
 [[package]]
 name = "ebpf-user"
 version = "0.1.5"
-source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#4bcc64c9b83ec3fb3666fbc2cae97af2cf56adde"
+source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#cd91a8fe04136e76f1e92429b707666f95616f43"
 dependencies = [
  "cty",
  "ebpf-user-macros",
@@ -669,7 +669,7 @@ dependencies = [
 [[package]]
 name = "ebpf-user-macros"
 version = "0.1.4"
-source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#4bcc64c9b83ec3fb3666fbc2cae97af2cf56adde"
+source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#cd91a8fe04136e76f1e92429b707666f95616f43"
 dependencies = [
  "quote",
  "syn",
@@ -683,9 +683,9 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "elf64"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e3c91ed8acb35484cea848ce1bf8e3a9d2db0862c42edd3c599891dba3589bb"
+checksum = "a35a7790745cb076785b90810bd4666eb220c0329cc5586ea0a989650a0d250a"
 dependencies = [
  "bitflags",
 ]
