@@ -7,13 +7,13 @@ pub struct SymbolTable {
 }
 
 struct Symbol {
-    range: u64, // 5 bytes offset, 3 bytes length
+    range: Range<u32>,
     name_offset: u32,
 }
 
 impl Symbol {
     fn code(&self) -> Range<u64> {
-        (self.range >> 24)..(self.range & !((1 << 24) - 1))
+        (self.range.start as u64)..(self.range.end as u64)
     }
 }
 
@@ -62,12 +62,13 @@ impl SymbolTable {
             };
             for i in 0..symtab.length() {
                 let symbol = symtab.pick(i).map_err(|e| format!("{:?}", e))?;
-                let range = (symbol.value << 24) + symbol.size;
-                symbols.push(Symbol { range, name_offset: (strings.len() as u32) + symbol.name })
+                let range = (symbol.value as u32)..((symbol.value + symbol.size) as u32);
+                let name_offset = (strings.len() as u32) + symbol.name;
+                symbols.push(Symbol { range, name_offset })
             }
             strings.extend_from_slice(strtab.as_raw());
         }
-        symbols.sort_by(|a, b| a.range.cmp(&b.range));
+        symbols.sort_by(|a, b| a.range.start.cmp(&b.range.start));
 
         Ok(SymbolTable {
             inner: symbols,
