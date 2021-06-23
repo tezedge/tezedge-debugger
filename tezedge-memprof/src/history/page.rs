@@ -43,4 +43,8 @@ impl Page {
     pub fn size_kib(&self) -> u64 {
         4u64 << (self.inner >> 28)
     }
+
+    pub fn number(&self) -> u32 {
+        1 << (self.inner >> 28)
+    }
 }

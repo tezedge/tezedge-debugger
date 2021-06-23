@@ -9,7 +9,7 @@ mod report;
 pub use self::{
     page::Page,
     allocation::{PageHistory, EventLast, NoHistory},
-    history::History,
+    history::{History, AllocationState},
     report::FrameReport,
 };
 
