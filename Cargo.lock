@@ -2629,6 +2629,7 @@ dependencies = [
  "bincode",
  "bpf-memprof",
  "cpp_demangle",
+ "crc32fast",
  "ctrlc",
  "elf64",
  "log",

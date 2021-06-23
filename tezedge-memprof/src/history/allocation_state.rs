@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::{AddAssign, Deref}};
+use std::{collections::{HashMap, HashSet}, ops::{AddAssign, Deref}};
 use serde::Serialize;
 use bpf_memprof::{Hex32, Stack};
 use super::{
@@ -10,8 +10,25 @@ use super::{
 
 #[derive(Default, Serialize)]
 pub struct AllocationState {
-    group: HashMap<StackShort, Usage>,
-    last_stack: HashMap<Page, StackShort>,
+    group: HashMap<u32, Usage>,
+    last_stack: HashMap<Page, StackHash>,
+
+    stacks: Vec<StackShort>,
+    stack_indices: HashMap<StackHash, u32>,
+    collision_detector: HashSet<StackShort>, // only for debug
+}
+
+#[derive(Serialize, Hash, PartialEq, Eq, Clone)]
+struct StackHash(u32);
+
+impl StackHash {
+    pub fn new(stack: &StackShort) -> Self {
+        let mut hasher = crc32fast::Hasher::new();
+        for frame in &stack.0 {
+            hasher.update(&frame.0.to_ne_bytes());
+        }
+        StackHash(hasher.finalize())
+    }
 }
 
 #[derive(Default, Serialize)]
@@ -55,40 +72,48 @@ impl<'a> AddAssign<&'a Self> for Usage {
 
 impl AllocationState {
     pub fn mark_page_cache(&mut self, page: Page, b: bool) {
-        if let Some(stack) = self.last_stack.get(&page) {
-            self.group.get_mut(stack).unwrap().cache(&page, b);
+        if let Some(stack_hash) = self.last_stack.get(&page) {
+            let index = self.stack_indices.get(stack_hash).unwrap();
+            self.group.get_mut(index).unwrap().cache(&page, b);
         }
     }
 
     pub fn track_alloc(&mut self, page: Page, stack: &Stack, _flags: Hex32) {
         let stack = StackShort(stack.ips().to_vec());
+        let stack_hash = StackHash::new(&stack);
 
         // if we have a last_stack for some page then `self.group` contains entry for this stack
         // and the entry contains history for the page, so unwrap here is ok
         if let Some(last_stack) = self.last_stack.get(&page) {
-            if last_stack.eq(&stack) {
-                self.group.get_mut(last_stack).unwrap().increase(&page);
-            } else {
-                // fix it to track precise history, do not remove it in previous stack
-                //self.group.get_mut(last_stack).unwrap().decrease(&page);
-                self.group.entry(stack.clone()).or_default().increase(&page);
-                self.last_stack.insert(page, stack);
+            if last_stack.eq(&stack_hash) {
+                let index = self.stack_indices.get(&stack_hash).unwrap();
+                self.group.get_mut(index).unwrap().increase(&page);
+                return;
             }
-        } else {
-            self.group.entry(stack.clone()).or_default().increase(&page);
-            self.last_stack.insert(page, stack);
         }
+
+        let index = self.stack_indices.get(&stack_hash).cloned()
+            .unwrap_or_else(|| {
+                debug_assert!(self.collision_detector.insert(stack.clone()));
+                let index = self.stacks.len() as u32;
+                self.stacks.push(stack);
+                self.stack_indices.insert(stack_hash.clone(), index);
+                index
+            });
+        self.group.entry(index).or_default().increase(&page);
+        self.last_stack.insert(page, stack_hash);
     }
 
     pub fn track_free(&mut self, page: Page, pid: u32) {
         let _ = pid; // TODO:
 
-        if let Some(stack) = self.last_stack.get(&page).cloned() {
-            let usage = self.group.entry(stack.clone()).or_default();
+        if let Some(stack_hash) = self.last_stack.get(&page) {
+            let index = self.stack_indices.get(stack_hash).unwrap();
+            let usage = self.group.entry(*index).or_default();
             usage.decrease(&page);
 
             if usage.is_empty() {
-                self.group.remove(&stack);
+                self.group.remove(index);
             }
         }
         // WARNING: might violate invariant if double free
@@ -114,9 +139,10 @@ impl AllocationState {
         R: Deref<Target = StackResolver>,
     {
         let mut report = FrameReport::new(resolver);
-        for (stack, usage) in &self.group {
+        for (stack_index, usage) in &self.group {
             let (value, cache_value) = usage.short_report();
-            
+
+            let stack = self.stacks.get(*stack_index as usize).unwrap();
             if reverse {
                 report.inner.insert(stack.0.iter().rev(), value, cache_value);
             } else {
