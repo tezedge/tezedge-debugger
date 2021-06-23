@@ -4,13 +4,13 @@ use bpf_memprof::{Hex32, Hex64, Stack};
 use super::{
     page::Page,
     error::ErrorReport,
-    allocation::{PageHistory, AllocError, FreeError},
+    page_history::{PageHistory, AllocError, FreeError},
     report::FrameReport,
     stack::StackResolver,
 };
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-pub struct StackShort(Vec<Hex64>);
+pub struct StackShort(pub Vec<Hex64>);
 
 impl Serialize for StackShort {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -149,7 +149,8 @@ where
         report
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[cfg(test)]
+    fn is_empty(&self) -> bool {
         self.last_stack.is_empty() && self.group.is_empty()
     }
 }

@@ -26,6 +26,7 @@
         "extfrag",
         "getsockname",
         "greylisted",
+        "hasher",
         "hashset",
         "heapify",
         "heaptrack",

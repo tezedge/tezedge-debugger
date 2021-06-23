@@ -3,11 +3,18 @@ use std::{ops::Range, path::Path};
 pub struct SymbolTable {
     inner: Vec<Symbol>,
     name: String,
+    strings: Vec<u8>,
 }
 
 struct Symbol {
-    code: Range<u64>,
-    name: String,
+    range: Range<u32>,
+    name_offset: u32,
+}
+
+impl Symbol {
+    fn code(&self) -> Range<u64> {
+        (self.range.start as u64)..(self.range.end as u64)
+    }
 }
 
 impl SymbolTable {
@@ -36,6 +43,7 @@ impl SymbolTable {
                 }
             });
 
+        let mut strings = Vec::new();
         for (link, symtab) in symbol_tables {
             let index = u16::from(link) as usize;
             if index >= elf.section_number() {
@@ -54,20 +62,18 @@ impl SymbolTable {
             };
             for i in 0..symtab.length() {
                 let symbol = symtab.pick(i).map_err(|e| format!("{:?}", e))?;
-                let name = strtab.pick(symbol.name as usize)
-                    .map_err(|e| format!("{:?}", e))?
-                    .to_string();
-                symbols.push(Symbol {
-                    code: symbol.value..(symbol.value + symbol.size),
-                    name,
-                })
+                let range = (symbol.value as u32)..((symbol.value + symbol.size) as u32);
+                let name_offset = (strings.len() as u32) + symbol.name;
+                symbols.push(Symbol { range, name_offset })
             }
+            strings.extend_from_slice(strtab.as_raw());
         }
-        symbols.sort_by(|a, b| a.code.start.cmp(&b.code.start));
+        symbols.sort_by(|a, b| a.range.start.cmp(&b.range.start));
 
         Ok(SymbolTable {
             inner: symbols,
             name: path.as_ref().file_name().and_then(|n| n.to_str()).unwrap_or("").to_string(),
+            strings,
         })
     }
 
@@ -83,7 +89,7 @@ impl SymbolTable {
         self.len() == 0
     }
 
-    pub fn find(&self, offset: u64) -> Option<&String> {
+    pub fn find(&self, offset: u64) -> Option<String> {
         if self.is_empty() {
             return None;
         }
@@ -99,9 +105,14 @@ impl SymbolTable {
                 pos -= length;
             } else {
                 let symbol = &self.inner[pos];
-                if symbol.code.contains(&offset) {
-                    return Some(&symbol.name);
-                } else if symbol.code.start > offset {
+                let code = symbol.code();
+                if code.contains(&offset) {
+                    let strtab = elf64::StringTable::new(&self.strings);
+                    return match strtab.pick(symbol.name_offset as usize) {
+                        Ok(name) => Some(name.to_string()),
+                        Err(e) => Some(format!("\"string table error {:?}\"", e)),
+                    };
+                } else if code.start > offset {
                     pos -= length;
                 } else {
                     pos += length;

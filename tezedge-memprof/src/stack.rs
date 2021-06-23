@@ -137,7 +137,7 @@ impl StackResolver {
         let map = self.map.as_ref()?;
         let (filename, offset) = map.find(address as usize)?;
         let table = self.files.get(&filename)?;
-        Some(((offset, table.name()), table.find(offset as u64).cloned()))
+        Some(((offset, table.name()), table.find(offset as u64)))
     }
 
     fn try_mock(&self, address: u64) -> Option<((usize, &str), Option<String>)> {

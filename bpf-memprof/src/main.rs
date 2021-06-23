@@ -20,7 +20,7 @@ pub struct App {
     pub lost_events: ebpf::HashMapRef<4, 4>,
     #[array_percpu(size = 1)]
     pub stack: ebpf::ArrayPerCpuRef<0x400>,
-    #[ringbuf(size = 0x4000000)]
+    #[ringbuf(size = 0x2000000)]
     pub event_queue: ebpf::RingBufferRef,
     #[prog("tracepoint/syscalls/sys_enter_execve")]
     pub execve: ebpf::ProgRef,
@@ -169,29 +169,39 @@ impl App {
     {
         let x = unsafe { helpers::get_current_pid_tgid() };
         let pid = (x >> 32) as u32;
-        self.output_generic::<T>(ctx, pid)
+        self.output_generic::<T>(ctx, pid, false)
     }
 
     #[inline(always)]
-    fn output<T>(&mut self, ctx: ebpf::Context) -> Result<(), i32>
+    fn output<T>(&mut self, ctx: ebpf::Context, need_stack: bool) -> Result<(), i32>
     where
         T: Pod,
     {
         let pid = self.check_pid()?;
-        self.output_generic::<T>(ctx, pid)
+        self.output_generic::<T>(ctx, pid, need_stack)
     }
 
     #[inline(always)]
-    fn output_generic<T>(&mut self, ctx: ebpf::Context, pid: u32) -> Result<(), i32>
+    fn output_generic<T>(
+        &mut self,
+        ctx: ebpf::Context,
+        pid: u32,
+        need_stack: bool,
+    ) -> Result<(), i32>
     where
         T: Pod,
     {
-        let stack_len = self.stack.get_mut(0)
-            .map(|s| {
-                let size = ctx.get_user_stack(s).unwrap_or(0);
-                (((size + 7) / 8) as usize)
-            })
-            .unwrap_or(0);
+        let stack_len = if need_stack {
+            self.stack.get_mut(0)
+                .map(|s| {
+                    let size = ctx.get_user_stack(s).unwrap_or(0);
+                    (size / 8) as usize
+                })
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        
 
         let stack_len = if stack_len > 64 {
             STACK_MAX_DEPTH
@@ -207,8 +217,10 @@ impl App {
             4
         } else if stack_len > 1 {
             2
-        } else {
+        } else if stack_len > 0 {
             1
+        } else {
+            0
         };
 
         let size = 0x10 + T::SIZE + 0x08 + stack_len * 8;
@@ -225,6 +237,10 @@ impl App {
         ctx.read_into(0x08, &mut data_mut[..T::SIZE]);
         let data_mut = &mut data_mut[T::SIZE..];
         data_mut[..0x08].clone_from_slice(&(stack_len as u64).to_ne_bytes());
+        if !need_stack {
+            data.submit();
+            return Ok(());
+        }
         match ctx.get_user_stack(&mut data_mut[0x08..]) {
             Ok(size) => {
                 data.submit();
@@ -248,25 +264,25 @@ impl App {
     #[allow(dead_code)]
     #[inline(always)]
     pub fn kmalloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<KMAlloc>(ctx)
+        self.output::<KMAlloc>(ctx, false)
     }
 
     #[allow(dead_code)]
     #[inline(always)]
     pub fn kmalloc_node(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<KMAllocNode>(ctx)
+        self.output::<KMAllocNode>(ctx, false)
     }
 
     #[allow(dead_code)]
     #[inline(always)]
     pub fn cache_alloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<CacheAlloc>(ctx)
+        self.output::<CacheAlloc>(ctx, false)
     }
 
     #[allow(dead_code)]
     #[inline(always)]
     pub fn cache_alloc_node(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<CacheAllocNode>(ctx)
+        self.output::<CacheAllocNode>(ctx, false)
     }
 
     #[allow(dead_code)]
@@ -277,7 +293,7 @@ impl App {
 
     #[inline(always)]
     pub fn page_alloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<PageAlloc>(ctx)
+        self.output::<PageAlloc>(ctx, true)
     }
 
     #[inline(always)]
@@ -293,13 +309,13 @@ impl App {
 
     #[inline(always)]
     pub fn rss_stat(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<RssStat>(ctx)
+        self.output::<RssStat>(ctx, false)
     }
 
     #[allow(dead_code)]
     #[inline(always)]
     pub fn percpu_alloc(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<PercpuAlloc>(ctx)
+        self.output::<PercpuAlloc>(ctx, false)
     }
 
     #[allow(dead_code)]
@@ -311,7 +327,7 @@ impl App {
     #[allow(dead_code)]
     #[inline(always)]
     pub fn add_to_page_cache(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<AddToPageCache>(ctx)
+        self.output::<AddToPageCache>(ctx, false)
     }
 
     #[allow(dead_code)]

@@ -3,14 +3,14 @@
 
 use std::{collections::HashMap, sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU32, Ordering}}};
 use bpf_memprof::{Client, ClientCallback, Event, EventKind};
-use tezedge_memprof::{AtomicState, Page, History, NoHistory};
+use tezedge_memprof::{AtomicState, Page, AllocationState};
 
 #[derive(Default)]
 struct MemprofClient {
     pid: Arc<AtomicU32>,
     state: Arc<AtomicState>,
     allocations: HashMap<u64, u64>,
-    history: Arc<Mutex<History<NoHistory>>>,
+    history: Arc<Mutex<AllocationState>>,
     last: Option<EventKind>,
     overall_counter: u64,
 }
@@ -150,10 +150,10 @@ mod server {
         http::StatusCode,
     };
     use serde::Deserialize;
-    use tezedge_memprof::{History, NoHistory, StackResolver};
+    use tezedge_memprof::{AllocationState, StackResolver};
 
     pub fn routes(
-        history: Arc<Mutex<History<NoHistory>>>,
+        history: Arc<Mutex<AllocationState>>,
         resolver: Arc<RwLock<StackResolver>>,
         p: Arc<AtomicU32>,
     ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static {
@@ -174,7 +174,7 @@ mod server {
     }
 
     fn tree(
-        history: Arc<Mutex<History<NoHistory>>>,
+        history: Arc<Mutex<AllocationState>>,
         resolver: Arc<RwLock<StackResolver>>,
     ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
         #[derive(Deserialize)]
