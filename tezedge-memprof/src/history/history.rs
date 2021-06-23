@@ -39,7 +39,8 @@ where
         }
     }
 
-    pub fn track_alloc(&mut self, page: Page, stack: &Stack, flags: Hex32) {
+    pub fn track_alloc(&mut self, page: Page, stack: &Stack, flags: Hex32, pid: u32) {
+        let _ = pid;
         let stack = StackShort(stack.ips().to_vec());
 
         // if we have a last_stack for some page then `self.group` contains entry for this stack
@@ -165,7 +166,7 @@ mod test {
         let mut h = History::<EventLast>::default();
         for _ in 0..0x100 {
             for i in 1..100 {
-                h.track_alloc(Page::new(Hex64(i), 0), &Stack::from_frames(&[i / 3]), Hex32(0));
+                h.track_alloc(Page::new(Hex64(i), 0), &Stack::from_frames(&[i / 3]), Hex32(0), 0);
             }
             for i in 1..100 {
                 h.track_free(Page::new(Hex64(i), 0), 0);

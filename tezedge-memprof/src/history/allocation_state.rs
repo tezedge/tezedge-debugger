@@ -10,6 +10,7 @@ use super::{
 
 #[derive(Default, Serialize)]
 pub struct AllocationState {
+    pid: Option<u32>,
     group: HashMap<u32, Usage>,
     last_stack: HashMap<Page, StackHash>,
 
@@ -39,7 +40,7 @@ struct Usage {
 
 impl Usage {
     pub fn decrease(&mut self, page: &Page) {
-        self.node = self.node.checked_sub(page.number()).unwrap_or(0);
+        self.node = self.node.checked_sub(page.number()).unwrap();
     }
 
     pub fn increase(&mut self, page: &Page) {
@@ -78,23 +79,36 @@ impl AllocationState {
         }
     }
 
-    pub fn track_alloc(&mut self, page: Page, stack: &Stack, _flags: Hex32) {
+    pub fn track_alloc(&mut self, page: Page, stack: &Stack, _flags: Hex32, pid: u32) {
+        self.pid = Some(pid);
         let stack = StackShort(stack.ips().to_vec());
         let stack_hash = StackHash::new(&stack);
+        self.track_alloc_inner(page, stack, stack_hash)
+    }
 
+    fn track_alloc_inner(&mut self, page: Page, stack: StackShort, stack_hash: StackHash) {
         // if we have a last_stack for some page then `self.group` contains entry for this stack
         // and the entry contains history for the page, so unwrap here is ok
         if let Some(last_stack) = self.last_stack.get(&page) {
+            let index = self.stack_indices.get(&last_stack).unwrap();
             if last_stack.eq(&stack_hash) {
-                let index = self.stack_indices.get(&stack_hash).unwrap();
                 self.group.get_mut(index).unwrap().increase(&page);
                 return;
+            } else {
+                self.group.get_mut(index).unwrap().decrease(&page);
+                self.last_stack.remove(&page);
+                log::debug!("double alloc {}", page);
+                return self.track_alloc_inner(page, stack, stack_hash);
             }
         }
 
         let index = self.stack_indices.get(&stack_hash).cloned()
+            .map(|x| {
+                assert!(!self.collision_detector.insert(stack.clone()));
+                x
+            })
             .unwrap_or_else(|| {
-                debug_assert!(self.collision_detector.insert(stack.clone()));
+                assert!(self.collision_detector.insert(stack.clone()));
                 let index = self.stacks.len() as u32;
                 self.stacks.push(stack);
                 self.stack_indices.insert(stack_hash.clone(), index);
@@ -105,19 +119,21 @@ impl AllocationState {
     }
 
     pub fn track_free(&mut self, page: Page, pid: u32) {
-        let _ = pid; // TODO:
+        if self.pid != Some(pid) {
+            return;
+        }
 
-        if let Some(stack_hash) = self.last_stack.get(&page) {
-            let index = self.stack_indices.get(stack_hash).unwrap();
+        if let Some(stack_hash) = self.last_stack.remove(&page) {
+            let index = self.stack_indices.get(&stack_hash).unwrap();
             let usage = self.group.entry(*index).or_default();
             usage.decrease(&page);
 
             if usage.is_empty() {
                 self.group.remove(index);
             }
+        } else {
+            log::debug!("double free, or free without alloc {}", page);
         }
-        // WARNING: might violate invariant if double free
-        self.last_stack.remove(&page);
     }
 
     pub fn short_report(&self) -> (u64, u64) {

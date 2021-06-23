@@ -27,7 +27,7 @@ impl ClientCallback for MemprofClient {
 
         if let Some(last) = &self.last {
             if last.eq(&event.event) {
-                log::debug!("repeat");
+                log::trace!("repeat");
                 return;
             }
         }
@@ -35,7 +35,7 @@ impl ClientCallback for MemprofClient {
         match &event.event {
             &EventKind::PageAlloc(ref v) if v.pfn.0 != 0 => {
                 self.pid.store(event.pid, Ordering::Relaxed);
-                self.history.lock().unwrap().track_alloc(Page::new(v.pfn, v.order), &event.stack, v.gfp_flags);
+                self.history.lock().unwrap().track_alloc(Page::new(v.pfn, v.order), &event.stack, v.gfp_flags, event.pid);
             }
             &EventKind::PageFree(ref v) if v.pfn.0 != 0 => {
                 self.history.lock().unwrap().track_free(Page::new(v.pfn, v.order), event.pid);

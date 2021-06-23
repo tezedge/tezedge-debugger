@@ -11,7 +11,7 @@ where
     pages.fold(history, |mut h, i| {
         let stack = Stack::from_frames(&[stack(i)]);
         let page = Page::new(Hex64(i), 0);
-        h.track_alloc(page, &stack, Hex32(0));
+        h.track_alloc(page, &stack, Hex32(0), 0);
         h
     })
 }
@@ -71,7 +71,7 @@ fn alloc_random() {
         let page_i = rand::random::<u64>() % 0x1000;
         pages.insert(page_i);
         let page = Page::new(Hex64(page_i), 0);
-        history.track_alloc(page, &stack, Hex32(0));
+        history.track_alloc(page, &stack, Hex32(0), 0);
     }
 
     let (value, cache) = history.short_report();
@@ -104,7 +104,7 @@ fn alloc_free_random() {
         let page_i = rand::random::<u64>() % 0x1000;
         pages.insert(page_i);
         let page = Page::new(Hex64(page_i), 0);
-        history.track_alloc(page, &stack, Hex32(0));
+        history.track_alloc(page, &stack, Hex32(0), 0);
     }
 
     let (value, cache) = history.short_report();
@@ -133,7 +133,7 @@ fn alloc_cache_random() {
         let page_i = rand::random::<u64>() % 0x1000;
         pages.insert(page_i);
         let page = Page::new(Hex64(page_i), 0);
-        history.track_alloc(page, &stack, Hex32(0));
+        history.track_alloc(page, &stack, Hex32(0), 0);
         if rand::random::<bool>() {
             cache_pages.insert(page_i);
             history.mark_page_cache(page, true);
@@ -181,7 +181,7 @@ fn alloc_free_cache_random() {
         let page_i = rand::random::<u64>() % 0x1000;
         pages.insert(page_i);
         let page = Page::new(Hex64(page_i), 0);
-        history.track_alloc(page, &stack, Hex32(0));
+        history.track_alloc(page, &stack, Hex32(0), 0);
         if rand::random::<bool>() {
             cache_pages.insert(page_i);
             history.mark_page_cache(page, true);
