@@ -3,7 +3,9 @@
 
 use std::{collections::HashMap, sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU32, Ordering}}};
 use bpf_memprof::{Client, ClientCallback, Event, EventKind};
-use tezedge_memprof::{AtomicState, Page, AllocationState};
+use tezedge_memprof::{AtomicState, Page, History, EventLast};
+
+type AllocationState = History<EventLast>;
 
 #[derive(Default)]
 struct MemprofClient {
@@ -150,7 +152,8 @@ mod server {
         http::StatusCode,
     };
     use serde::Deserialize;
-    use tezedge_memprof::{AllocationState, StackResolver};
+    use tezedge_memprof::StackResolver;
+    use super::AllocationState;
 
     pub fn routes(
         history: Arc<Mutex<AllocationState>>,
