@@ -7,6 +7,7 @@ use super::{
     page_history::{PageHistory, AllocError, FreeError},
     report::FrameReport,
     stack::StackResolver,
+    abstract_tracker::Tracker,
 };
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -29,17 +30,11 @@ pub struct History<H> {
     last_stack: HashMap<Page, StackShort>,
 }
 
-impl<H> History<H>
+impl<H> Tracker for History<H>
 where
     H: PageHistory + Default,
 {
-    pub fn mark_page_cache(&mut self, page: Page, b: bool) {
-        if let Some(stack) = self.last_stack.get(&page) {
-            self.group.get_mut(stack).unwrap().get_mut(&page).unwrap().mark_page_cache(b);
-        }
-    }
-
-    pub fn track_alloc(&mut self, page: Page, stack: &Stack, flags: Hex32, pid: u32) {
+    fn track_alloc(&mut self, page: Page, stack: &Stack, flags: Hex32, pid: u32) {
         let _ = pid;
         let stack = StackShort(stack.ips().to_vec());
 
@@ -64,7 +59,7 @@ where
         }
     }
 
-    pub fn track_free(&mut self, page: Page, pid: u32) {
+    fn track_free(&mut self, page: Page, pid: u32) {
         let _ = pid; // TODO:
         if let Some(stack) = self.last_stack.get(&page).cloned() {
             let history = self.group.entry(stack.clone()).or_default().entry(page.clone()).or_default();
@@ -83,25 +78,13 @@ where
         }
     }
 
-    fn track_alloc_error(error_report: &mut ErrorReport, history: &mut H, page: &Page, flags: Hex32) {
-        if let Err(AllocError) = history.track_alloc(flags) {
-            error_report.double_alloc(page);
+    fn mark_page_cache(&mut self, page: Page, b: bool) {
+        if let Some(stack) = self.last_stack.get(&page) {
+            self.group.get_mut(stack).unwrap().get_mut(&page).unwrap().mark_page_cache(b);
         }
     }
 
-    #[allow(dead_code)]
-    fn track_free_error(error_report: &mut ErrorReport, history: &mut H, page: &Page) {
-        match history.track_free() {
-            Ok(()) => (),
-            Err(FreeError::DoubleFree) => error_report.double_free(&page),
-            Err(FreeError::WithoutAlloc) => {
-                error_report.without_alloc(&page);
-                debug_assert!(false);
-            },
-        }
-    }
-
-    pub fn short_report(&self) -> (u64, u64) {
+    fn short_report(&self) -> (u64, u64) {
         let mut value_kib = 0;
         let mut cache_value_kib = 0;
         for (_, group) in &self.group {
@@ -118,7 +101,7 @@ where
         (value_kib, cache_value_kib)
     }
 
-    pub fn tree_report<R>(
+    fn tree_report<R>(
         &self,
         resolver: R,
         threshold: u64,
@@ -149,6 +132,29 @@ where
 
         report
     }
+}
+
+impl<H> History<H>
+where
+    H: PageHistory + Default,
+{
+    fn track_alloc_error(error_report: &mut ErrorReport, history: &mut H, page: &Page, flags: Hex32) {
+        if let Err(AllocError) = history.track_alloc(flags) {
+            error_report.double_alloc(page);
+        }
+    }
+
+    #[allow(dead_code)]
+    fn track_free_error(error_report: &mut ErrorReport, history: &mut H, page: &Page) {
+        match history.track_free() {
+            Ok(()) => (),
+            Err(FreeError::DoubleFree) => error_report.double_free(&page),
+            Err(FreeError::WithoutAlloc) => {
+                error_report.without_alloc(&page);
+                debug_assert!(false);
+            },
+        }
+    }
 
     #[cfg(test)]
     fn is_empty(&self) -> bool {
@@ -159,7 +165,7 @@ where
 #[cfg(test)]
 mod test {
     use bpf_memprof::{Hex64, Hex32, Stack};
-    use crate::{History, EventLast, Page};
+    use crate::{History, EventLast, Page, Tracker};
 
     #[test]
     fn overflow() {

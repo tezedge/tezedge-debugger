@@ -3,9 +3,10 @@
 
 use std::{collections::HashMap, sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU32, Ordering}}};
 use bpf_memprof::{Client, ClientCallback, Event, EventKind};
-use tezedge_memprof::{AtomicState, Page, History, EventLast};
+use tezedge_memprof::{AtomicState, Page, Tracker};
 
-type AllocationState = History<EventLast>;
+use tezedge_memprof::AllocationState;
+//type AllocationState = tezedge_memprof::History<tezedge_memprof::EventLast>;
 
 #[derive(Default)]
 struct MemprofClient {
@@ -152,14 +153,16 @@ mod server {
         http::StatusCode,
     };
     use serde::Deserialize;
-    use tezedge_memprof::StackResolver;
-    use super::AllocationState;
+    use tezedge_memprof::{StackResolver, Tracker};
 
-    pub fn routes(
-        history: Arc<Mutex<AllocationState>>,
+    pub fn routes<T>(
+        history: Arc<Mutex<T>>,
         resolver: Arc<RwLock<StackResolver>>,
         p: Arc<AtomicU32>,
-    ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static {
+    ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static
+    where
+        T: Tracker + Send + 'static,
+    {
         use warp::reply::with;
     
         warp::get()
@@ -176,10 +179,13 @@ mod server {
             })
     }
 
-    fn tree(
-        history: Arc<Mutex<AllocationState>>,
+    fn tree<T>(
+        history: Arc<Mutex<T>>,
         resolver: Arc<RwLock<StackResolver>>,
-    ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
+    ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
+    where
+        T: Tracker + Send + 'static,
+    {
         #[derive(Deserialize)]
         struct Params {
             threshold: Option<u64>,

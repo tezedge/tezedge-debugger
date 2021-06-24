@@ -1,13 +1,15 @@
 use super::stack;
 
+mod abstract_tracker;
 mod page;
 mod page_history;
 mod error;
-mod allocation_state;
+mod allocation;
 mod history;
 mod report;
 
-pub use self::allocation_state::AllocationState;
+pub use self::abstract_tracker::Tracker;
+pub use self::allocation::AllocationState;
 pub use self::{
     page::Page,
     page_history::{PageHistory, EventLast},
