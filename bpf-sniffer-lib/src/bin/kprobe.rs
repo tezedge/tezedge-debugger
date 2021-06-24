@@ -16,7 +16,7 @@ program!(0xFFFFFFFE, "GPL");
 type HashSet<T> = HashMap<T, u32>;
 
 #[map]
-static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x40000000); // 1GiB buffer
+static mut main_buffer: RingBuffer = RingBuffer::with_max_length(0x8000000); // 128MiB buffer
 
 #[map]
 static mut ports: HashSet<u16> = HashSet::with_max_entries(64);

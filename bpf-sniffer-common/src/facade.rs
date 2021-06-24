@@ -248,7 +248,7 @@ impl BpfModuleClient {
     {
         let stream = UnixStream::connect(path)?;
         let fd = stream.recv_fd()?;
-        let rb = RingBuffer::new(fd, 0x40000000)?;
+        let rb = RingBuffer::new(fd, 0x8000000)?;
 
         Ok((BpfModuleClient { stream }, rb))
     }
@@ -259,7 +259,7 @@ impl BpfModuleClient {
     {
         let stream = UnixStream::connect(path)?;
         let fd = stream.recv_fd()?;
-        let rb = RingBufferSync::new(fd, 0x40000000)?;
+        let rb = RingBufferSync::new(fd, 0x8000000)?;
 
         Ok((BpfModuleClient { stream }, rb))
     }
