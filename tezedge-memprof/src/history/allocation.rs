@@ -98,7 +98,11 @@ impl Group {
                 return;
             } else {
                 // double alloc in different stack, free in this stack and proceed
-                self.group.get_mut(&state.stack_hash).unwrap().decrease(&page);
+                let usage = self.group.get_mut(&state.stack_hash).unwrap();
+                if state.for_cache {
+                    usage.cache(&page, false);
+                }
+                usage.decrease(&page);
                 self.last_stack.remove(&page);
             }
         }
