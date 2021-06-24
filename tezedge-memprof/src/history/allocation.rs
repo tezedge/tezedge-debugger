@@ -70,10 +70,10 @@ pub struct PageState {
 }
 
 impl PageState {
-    pub fn new(stack_hash: StackHash) -> Self {
+    pub fn new(stack_hash: StackHash, for_cache: bool) -> Self {
         PageState {
             stack_hash,
-            for_cache: false,
+            for_cache,
         }
     }
 }
@@ -89,6 +89,7 @@ impl Group {
     pub fn insert(&mut self, page: Page, stack: StackShort) {
         let stack_hash = StackHash::new(&stack);
 
+        let mut for_cache = false;
         // if `self.last_stack` contains state for some page
         // then `self.group` contains `usage` for the stack
         if let Some(state) = self.last_stack.get(&page) {
@@ -98,6 +99,7 @@ impl Group {
                 return;
             } else {
                 // double alloc in different stack, free in this stack and proceed
+                for_cache = state.for_cache;
                 let usage = self.group.get_mut(&state.stack_hash).unwrap();
                 usage.decrease(&page);
                 self.last_stack.remove(&page);
@@ -114,7 +116,7 @@ impl Group {
             usage.increase(&page);
             self.group.insert(stack_hash.clone(), usage);
         }
-        self.last_stack.insert(page, PageState::new(stack_hash));
+        self.last_stack.insert(page, PageState::new(stack_hash, for_cache));
     }
 
     pub fn remove(&mut self, page: &Page) {
@@ -136,8 +138,14 @@ impl Group {
         // then `self.group` contains `usage` for the stack
         if let Some(state) = self.last_stack.get_mut(&page) {
             if state.for_cache != b {
-                self.group.get_mut(&state.stack_hash).unwrap().cache(&page, b);
+                let usage = self.group.get_mut(&state.stack_hash).unwrap();
+                usage.cache(&page, b);
                 state.for_cache = b;
+
+                if !b {
+                    usage.decrease(&page);
+                    self.last_stack.remove(&page);
+                }
             }
         }
     }
