@@ -353,7 +353,10 @@ cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branc
 
 ### Kernel sources (needed only for network recorder)
 
-Prepare sources of the Linux kernel. The version should be 5.8.18
+The minimal required version of Linux kernel is 5.8, but if the version is lower 5.11,
+the debugger work unreliable. The recommended version of kernel is 5.11 or higher.
+
+However, for building you need kernel sources of version 5.8.18
 no matter what the actual version you run.
 
 ```
@@ -367,7 +370,7 @@ export KERNEL_SOURCE=$(pwd)
 cd ..
 ```
 
-### Build and run
+### Build
 
 Get the code:
 
@@ -389,7 +392,41 @@ cargo +nightly-2020-12-31 build -p bpf-sniffer --release
 cargo +nightly-2021-03-23 build -p tezedge-recorder --release
 ```
 
-#### Run memory profiler
+### Important note before run
+
+Do not run multiple instance of the memory profiler or multiple instance of network recorder
+simultaneously on the same computer.
+
+The single instance of network recorder is able to record
+multiple TezEdge and/or Tezos nodes on the same computer.
+
+### Configure network recorder
+
+The network recorder expect `config.toml` file in the directory where it is running.
+It contains keys:
+
+```
+bpf_sniffer_path = "/tmp/bpf-sniffer.sock"
+rpc_port = 17732
+```
+
+The `bpf_sniffer_path` is legacy, do not change it.
+The `rpc_port` is the port where the network recorder serves http requests (v2).
+
+The `[[nodes]]` section contains settings related to some TezEdge or Tezos node.
+There might be multiple such sections.
+
+* `db_path` it is path to the database where debugger store intercepted network data. 
+
+* `identity_path` is the path where node generated or will generate `identity.json` file.
+
+* `p2p_port` is the port where the node will be listening incoming p2p connections.
+
+* `rpc_port` is the port where the network recorder serves http requests (v3).
+
+* `syslog_port` is the UDP port where the network recorder receives nodes logs in syslog format.
+
+### Run memory profiler
 
 In one terminal:
 ```
@@ -406,12 +443,7 @@ Or in single terminal:
 sudo ./target/none/release/bpf-memprof-user & sleep 0.5 && sudo ./target/none/release/tezedge-memprof
 ```
 
-#### Run network recorder
-
-Check the config.toml file to correspond you actual configuration.
-Pay attention to `identity_path`. It is not necessary the identity will be
-present at the moment of debugger launching. But it is necessary the identity will be
-present when the TezEdge node start p2p communications.
+### Run network recorder
 
 Run the recorder:
 
