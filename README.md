@@ -47,6 +47,13 @@ shared libraries. It enables the profiler to resolve function names.
 
 * Serves http requests.
 
+### Requirements
+
+* Linux kernel 5.11 version or higher.
+* Docker
+* [Docker compose](https://docs.docker.com/compose/install/)
+* (**RECOMMENDED**)  Steps described in Docker [Post-Installation](https://docs.docker.com/engine/install/linux-postinstall/). 
+
 ### How to run
 
 #### Using docker-compose
@@ -97,6 +104,19 @@ Set the `TEZEDGE_NODE_NAME` environment variable into the TezEdge node container
 name and map `/var/run/docker.sock` file from host to enable such behavior.
 
 See `docker-compose.yml` and `memprof.sh` for details.
+
+### How to run tests
+
+#### Unit tests
+
+`cargo +nightly-2021-03-23 test -p tezedge-memprof -- history`
+
+#### Integration test
+
+The TezEdge node and the memory profiler should be running to do this test.
+Specify the URL where the memory profiler is running.
+
+`URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof -- compare`
 
 ### HTTP API
 
@@ -262,6 +282,7 @@ Messages are always sorted from newest to oldest.
 * `/v2/log?level=error` - Return all errors in last one hundred logs,
 
 ### Requirements
+
 * Linux kernel 5.11 version or higher.
 * Docker
 * [Docker compose](https://docs.docker.com/compose/install/)
