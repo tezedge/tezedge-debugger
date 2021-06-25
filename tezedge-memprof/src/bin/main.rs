@@ -10,6 +10,7 @@ use tezedge_memprof::AllocationState;
 
 #[derive(Default)]
 struct MemprofClient {
+    has_pid: bool,
     pid: Arc<AtomicU32>,
     state: Arc<AtomicState>,
     allocations: HashMap<u64, u64>,
@@ -37,17 +38,22 @@ impl ClientCallback for MemprofClient {
         self.state.process_event(&mut self.allocations, &event.event);
         match &event.event {
             &EventKind::PageAlloc(ref v) if v.pfn.0 != 0 => {
+                self.has_pid = true;
                 self.pid.store(event.pid, Ordering::Relaxed);
-                self.history.lock().unwrap().track_alloc(Page::new(v.pfn, v.order), &event.stack, v.gfp_flags, event.pid);
+                let page = Page::new(v.pfn, v.order);
+                self.history.lock().unwrap().track_alloc(page, &event.stack, v.gfp_flags, event.pid);
             }
-            &EventKind::PageFree(ref v) if v.pfn.0 != 0 => {
-                self.history.lock().unwrap().track_free(Page::new(v.pfn, v.order), event.pid);
+            &EventKind::PageFree(ref v) if v.pfn.0 != 0 && self.has_pid => {
+                let page = Page::new(v.pfn, v.order);
+                self.history.lock().unwrap().track_free(page, event.pid);
             },
-            &EventKind::AddToPageCache(ref v) if v.pfn.0 != 0 => {
-                self.history.lock().unwrap().mark_page_cache(Page::new(v.pfn, 0), true);
+            &EventKind::AddToPageCache(ref v) if v.pfn.0 != 0 && self.has_pid => {
+                let page = Page::new(v.pfn, 0);
+                self.history.lock().unwrap().mark_page_cache(page, true);
             },
-            &EventKind::RemoveFromPageCache(ref v) if v.pfn.0 != 0 => {
-                self.history.lock().unwrap().mark_page_cache(Page::new(v.pfn, 0), false);
+            &EventKind::RemoveFromPageCache(ref v) if v.pfn.0 != 0 && self.has_pid => {
+                let page = Page::new(v.pfn, 0);
+                self.history.lock().unwrap().mark_page_cache(page, false);
             },
             _ => (),
         }
@@ -61,7 +67,7 @@ impl ClientCallback for MemprofClient {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use std::{thread, time::Duration, io, fs, process::Command, env};
+    use std::{thread, time::Duration, io, process::Command, env};
     use tezedge_memprof::{Reporter, StackResolver};
 
     let bpf = if env::args().find(|a| a == "--run-bpf").is_some() {
@@ -135,9 +141,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     thread.join().unwrap();
 
-    let history = history.lock().unwrap();
-    let _ = fs::create_dir("target");
-    serde_json::to_writer(std::fs::File::create("target/history.json")?, &*history)?;
+    //let history = history.lock().unwrap();
+    //let _ = std::fs::create_dir("target");
+    //serde_json::to_writer(std::fs::File::create("target/history.json")?, &*history)?;
 
     let _ = server;
     let _ = bpf;

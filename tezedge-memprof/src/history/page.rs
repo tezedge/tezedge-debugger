@@ -13,7 +13,7 @@ impl Hash for Page {
     where
         H: Hasher,
     {
-        self.inner.hash::<H>(state)
+        (self.inner & 0x0fffffff).hash::<H>(state)
     }
 }
 
