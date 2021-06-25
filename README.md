@@ -305,3 +305,116 @@ The easiest way to launch the Debugger is by running it with the included docker
 docker-compose pull
 docker-compose up
 ```
+
+## Build from sources
+
+### Prepare system dependencies
+
+* curl, wget and git to get the code
+* zlib, clang and llvm 11 to build the BPF linker
+* libelf, make to build the memory profiler
+* libsodium, gcc, g++, libssl, pkg-config to build the recorder
+* libarchive-tools, flex, bison to prepare the kernel code (needed for the recorder).
+
+In Ubuntu 20.04 or Ubuntu 20.10:
+
+```
+sudo apt-get update
+sudo apt-get install curl wget git zlib1g-dev clang make libelf-dev libsodium-dev gcc g++ libssl-dev pkg-config libarchive-tools flex bison bc lsb-release software-properties-common
+wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 11 && rm llvm.sh
+export LLVM_SYS_110_PREFIX=/usr/lib/llvm-11
+```
+
+### Rust
+
+The Rust version should be nightly-2021-03-23 for building the crates.
+But internally also used nightly-2020-12-31 for building bpf module.
+
+If you have no rustup:
+
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2020-12-31
+source $HOME/.cargo/env
+rustup update nightly-2021-03-23
+```
+
+If you have rustup:
+
+```
+rustup update nightly-2020-12-31
+rustup update nightly-2021-03-23
+```
+
+### BPF linker (needed only for memory profiler)
+
+```
+cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
+```
+
+### Kernel sources (needed only for network recorder)
+
+Prepare sources of the Linux kernel. The version should be 5.8.18
+no matter what the actual version you run.
+
+```
+export KERNEL_VERSION=5.8.18
+wget -cq https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-$KERNEL_VERSION.tar.xz
+tar xf linux-$KERNEL_VERSION.tar.xz
+cd linux-$KERNEL_VERSION
+make defconfig
+make modules_prepare
+export KERNEL_SOURCE=$(pwd)
+cd ..
+```
+
+### Build and run
+
+Get the code:
+
+```
+git clone https://github.com/tezedge/tezedge-debugger --branch develop
+cd tezedge-debugger
+```
+
+Build memory profiler:
+
+```
+cargo +nightly-2021-03-23 build -p bpf-memprof --release
+cargo +nightly-2021-03-23 build -p tezedge-memprof --release
+```
+
+Build network recorder:
+```
+cargo +nightly-2020-12-31 build -p bpf-sniffer --release
+cargo +nightly-2021-03-23 build -p tezedge-recorder --release
+```
+
+#### Run memory profiler
+
+In one terminal:
+```
+sudo ./target/none/release/bpf-memprof-user
+```
+
+In another terminal:
+```
+sudo ./target/none/release/tezedge-memprof
+```
+
+Or in single terminal:
+```
+sudo ./target/none/release/bpf-memprof-user & sleep 0.5 && sudo ./target/none/release/tezedge-memprof
+```
+
+#### Run network recorder
+
+Check the config.toml file to correspond you actual configuration.
+Pay attention to `identity_path`. It is not necessary the identity will be
+present at the moment of debugger launching. But it is necessary the identity will be
+present when the TezEdge node start p2p communications.
+
+Run the recorder:
+
+```
+sudo ./target/none/release/bpf-sniffer & sleep 0.5 && ./target/none/release/tezedge-recorder
+```

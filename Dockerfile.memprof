@@ -1,4 +1,3 @@
-ARG TEZEDGE_IMAGE=simplestakingcom/tezedge:latest-frame-pointers-enabled
 FROM simplestakingcom/tezedge-bpf-builder:latest as builder
 
 RUN cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main && \
@@ -12,7 +11,7 @@ COPY . .
 RUN cargo build -p bpf-memprof --release && \
     cargo build -p tezedge-memprof --release
 
-FROM ${TEZEDGE_IMAGE}
+FROM simplestakingcom/tezedge-libs:latest-profile
 
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libelf.so.1 /usr/lib/x86_64-linux-gnu/libelf.so.1
 COPY --from=builder /lib/x86_64-linux-gnu/libz.so.1 /lib/x86_64-linux-gnu/libz.so.1
