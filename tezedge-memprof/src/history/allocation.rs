@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, ops::Deref};
+use std::{collections::HashMap, ops::Deref};
 use serde::Serialize;
 use bpf_memprof::{Hex32, Stack};
 use super::{
@@ -10,20 +10,7 @@ use super::{
 };
 
 #[derive(Serialize, Hash, PartialEq, Eq, Clone)]
-pub struct StackHash(u64, u32);
-
-impl StackHash {
-    pub fn new(stack: &StackShort) -> Self {
-        let mut hasher = crc32fast::Hasher::new();
-        let mut sum = 0;
-        for frame in &stack.0 {
-            let b = frame.0.to_ne_bytes();
-            hasher.update(&b);
-            sum = crc64::crc64(sum, &b);
-        }
-        StackHash(sum, hasher.finalize())
-    }
-}
+pub struct StackHash(u32);
 
 #[derive(Serialize)]
 pub struct Usage {
@@ -85,12 +72,19 @@ impl PageState {
 pub struct Group {
     last_stack: HashMap<Page, PageState>,
     group: HashMap<StackHash, Usage>,
-    collision_detector: HashSet<StackShort>,
+    collision_detector: HashMap<StackShort, StackHash>,
+    counter: u32,
 }
 
 impl Group {
     pub fn insert(&mut self, page: Page, stack: StackShort) {
-        let stack_hash = StackHash::new(&stack);
+        let &mut Group { ref mut collision_detector, ref mut counter, .. } = self;
+        let stack_hash = collision_detector
+            .entry(stack.clone())
+            .or_insert_with(|| {
+                *counter += 1;
+                StackHash(*counter)
+            }) as &_;
 
         let mut for_cache = false;
         // if `self.last_stack` contains state for some page
@@ -111,15 +105,13 @@ impl Group {
 
         // ensure `self.group` contains usage, and insert the state into `self.last_stack`
         if let Some(usage) = self.group.get_mut(&stack_hash) {
-            assert!(self.collision_detector.contains(&stack));
             usage.increase(&page);
         } else {
-            assert!(self.collision_detector.insert(stack.clone()));
             let mut usage = Usage::new(stack);
             usage.increase(&page);
             self.group.insert(stack_hash.clone(), usage);
         }
-        self.last_stack.insert(page, PageState::new(stack_hash, for_cache));
+        self.last_stack.insert(page, PageState::new(stack_hash.clone(), for_cache));
     }
 
     pub fn remove(&mut self, page: &Page) {
@@ -167,7 +159,7 @@ pub struct AllocationState {
 impl Tracker for AllocationState {
     fn track_alloc(&mut self, page: Page, stack: &Stack, _flags: Hex32, pid: u32) {
         self.pid = Some(pid);
-        let stack = StackShort(stack.ips().to_vec());
+        let stack = StackShort::new(stack);
         self.group.insert(page, stack);
     }
 

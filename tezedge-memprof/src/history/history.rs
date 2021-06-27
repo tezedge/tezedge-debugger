@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Deref};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 use serde::{Serialize, ser};
 use bpf_memprof::{Hex32, Hex64, Stack};
 use super::{
@@ -11,7 +11,13 @@ use super::{
 };
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-pub struct StackShort(pub Vec<Hex64>);
+pub struct StackShort(pub Arc<Vec<Hex64>>);
+
+impl StackShort {
+    pub fn new(stack: &Stack) -> Self {
+        StackShort(Arc::new(stack.ips().to_vec()))
+    }
+}
 
 impl Serialize for StackShort {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -36,7 +42,7 @@ where
 {
     fn track_alloc(&mut self, page: Page, stack: &Stack, flags: Hex32, pid: u32) {
         let _ = pid;
-        let stack = StackShort(stack.ips().to_vec());
+        let stack = StackShort::new(stack);
 
         // if we have a last_stack for some page then `self.group` contains entry for this stack
         // and the entry contains history for the page, so unwrap here is ok
