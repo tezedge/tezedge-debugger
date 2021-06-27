@@ -10,15 +10,18 @@ use super::{
 };
 
 #[derive(Serialize, Hash, PartialEq, Eq, Clone)]
-pub struct StackHash(u32);
+pub struct StackHash(u64, u32);
 
 impl StackHash {
     pub fn new(stack: &StackShort) -> Self {
         let mut hasher = crc32fast::Hasher::new();
+        let mut sum = 0;
         for frame in &stack.0 {
-            hasher.update(&frame.0.to_ne_bytes());
+            let b = frame.0.to_ne_bytes();
+            hasher.update(&b);
+            sum = crc64::crc64(sum, &b);
         }
-        StackHash(hasher.finalize())
+        StackHash(sum, hasher.finalize())
     }
 }
 

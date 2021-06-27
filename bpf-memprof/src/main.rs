@@ -327,7 +327,7 @@ impl App {
     #[allow(dead_code)]
     #[inline(always)]
     pub fn add_to_page_cache(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<AddToPageCache>(ctx, false)
+        self.output_unconditional::<AddToPageCache>(ctx)
     }
 
     #[allow(dead_code)]
