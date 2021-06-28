@@ -377,6 +377,9 @@ docker-compose up
 
 ## Build from sources
 
+The Ubuntu 21.04 is preferable to run this software, because it has kernel 5.11.0.
+If you are running another os with older kernel, you need to update the kernel.
+
 ### Prepare system dependencies
 
 * curl, wget and git to get the code
@@ -385,7 +388,7 @@ docker-compose up
 * libsodium, gcc, g++, libssl, pkg-config to build the network recorder
 * libarchive-tools, flex, bison to prepare the kernel code (needed for the network recorder).
 
-In Ubuntu 20.04 or Ubuntu 20.10:
+In Ubuntu 20.04 or Ubuntu 20.10 or Ubuntu 21.04:
 
 ```
 sudo apt-get update
