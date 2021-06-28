@@ -352,8 +352,8 @@ docker-compose up
 
 ## Build from sources
 
-The Ubuntu 21.04 is preferable to run this software, because it has kernel 5.11.0.
-If you are running another os with older kernel, you need to update the kernel.
+It is preferable to use Ubuntu 21.04 to run this software since it has kernel 5.11.0.
+If you are running another OS with an older kernel, you need to update the kernel.
 
 ### Prepare system dependencies
 
