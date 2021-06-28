@@ -2,10 +2,24 @@
 
 ## Memory Profiler  
 
-This tool monitors the memory usage of each function of the TezEdge Light Node.
+As developers, we want to see how much memory is used in each piece
+of code of the TezEdge node. So that we can evaluate whether a particular
+function in code costs us too much memory. We want to minimize memory
+consumption, which is always beneficial for the smooth running of any software.
 
-The profiler can track both the memory used by the node itself and by the kernel
-for the caching IO of the node.
+The memory profiler for the TezEdge node utilizing
+extended Berkeley Packet Filters (eBPF), a technology we’ve previously used
+in the firewall of the TezEdge node’s validation subsystem.
+
+It track physical (residential) memory usage by the TezEdge node. And can
+determine the function and entire call stack where the allocation happened.
+The profiler does not store the history of allocations, hence it does not
+use disk memory. It gives us only the current moment slice. Preserves more
+space on the server for the node itself.
+
+Running this software and its web frontend developers can see a call tree
+and how many memory allocated in the branches of the tree. And he can reason
+where it is worth to decrease the consumption.
 
 ### How it works
 
@@ -170,17 +184,17 @@ a smaller amount of memory than some threshold value, default value is `256`.
 
 Returns the process id of the TezEdge Node process.
 
-## Recorder
+## Network Recorder
 
 Network message recorder for applications running on the Tezos protocol.
 
 ### Peer to peer messages
 
-First of all, the recorder should get the raw data from the kernel.
+First of all, the network recorder should get the raw data from the kernel.
 
 #### BPF module
 
-The recorder uses BPF module to intercept network related syscalls.
+The network recorder uses BPF module to intercept network related syscalls.
 It intercepts `read`, `recvfrom`, `write`, `sendto`, `bind`, `listen`,
 `connect`, `accept` and `close` syscalls. Those syscalls give a full picture
 of network activity of the application. The BPF module configured to know where
@@ -188,7 +202,8 @@ the application which we want to record is listening incoming connection.
 That is needed to determine an applications PID. It listen `bind` attempts from
 any PID on the given port. And once we have one, we know the PID. After that,
 the BPF module intercepting other syscalls made by this PID. The single recorder
-can record multiple applications simultaneously.
+can record multiple applications simultaneously. Do not run multiple instance of
+the network recorder.
 
 #### Packets, Chunks and Messages
 Tezos nodes communicate by exchanging chunked P2P messages over the internet. Each part uses its own "blocks" of data.
@@ -196,7 +211,7 @@ Tezos nodes communicate by exchanging chunked P2P messages over the internet. Ea
 #### Packet
 Packets are used by the higher layers of TCP/IP models to transport application communication over the internet 
 (there are more type of data blocks on lower levels of the model, like ethernet frames, but we do not work with those).
-The recorder does not care about such low-level details, packets are processed by the kernel.
+The network recorder does not care about such low-level details, packets are processed by the kernel.
 
 #### Chunks
 A binary chunk is a Tezos construct, which represents some sized binary block. Each chunk is a continuous memory, with the
@@ -212,7 +227,7 @@ to await enough chunks to deserialize message.
 
 #### Encryption
 
-The primary feature of the recorder is the ability to decrypt all messages while having access only to the single identity of the local
+The primary feature of the network recorder is the ability to decrypt all messages while having access only to the single identity of the local
 node.
 
 ##### Tezos "handshake"
@@ -225,23 +240,27 @@ calculated from the local node's private key and remote node's public key. The n
 * To encrypt a message, the node uses the nonce sent in its own `ConnectionMessage` and a precomputed key.
 * To decrypt a message, the node uses the received nonce and a precomputed key.
 
-For the recorder to decrypt a message that is coming from a remote node to the local running node. It needs to know:
-* The local node's private key - which is part of its local identity to which the recorder has access.
+For the network recorder to decrypt a message that is coming from a remote node to the local running node.
+It needs to know:
+* The local node's private key - which is part of its local identity to which the network recorder has access.
 * The remote node's public key - which is part of the received `ConnectionMessage` and was captured.
 * The remote node's nonce - which is part of the received `ConnectionMessage` and was captured.
 
 But to decrypt a message sent by the local node, it would be necessary to know the private key of the remote node, to which it does not have
 access. Fortunately, Tezos is internally using the Curve5519 method, which allows to decrypt a message with the same 
-keys which were used for encryption, thus the recorder "just" needs the:
-* Local node's private key - which is part of its local identity, to which the recorder has access.
+keys which were used for encryption, thus the network recorder "just" needs the:
+* Local node's private key - which is part of its local identity, to which the network recorder has access.
 * Remote node's public key - which is part of the received `ConnectionMessage` and was captured.
 * Local node's nonce - which is part of the sent `ConnectionMessage` and was captured.
 
 ### Node Logs
-To capture node logs, the recorder utilizes the "syslog" protocol (which can be easily enabled in the Docker), which,
+To capture node logs, the network recorder utilizes the "syslog" protocol
+(which can be easily enabled in the Docker), which,
 instead of printing the log into the console, wraps them into the UDP packet and sends them to the server. This should
-be handled by the application or the administrator of the application. The recorder runs a syslog server inside, to simply process the generated
-logs. This system allows to decouple the recorder from the node, which prevents the recorder from failing if the running node fails, 
+be handled by the application or the administrator of the application.
+The network recorder runs a syslog server inside, to simply process the generated
+logs. This system allows to decouple the recorder from the node,
+which prevents the network recorder from failing if the running node fails, 
 preserving all of the captured logs, and potentially information about the failure of the node.
 
 ### Storage
@@ -313,8 +332,8 @@ docker-compose up
 * curl, wget and git to get the code
 * zlib, clang and llvm 11 to build the BPF linker
 * libelf, make to build the memory profiler
-* libsodium, gcc, g++, libssl, pkg-config to build the recorder
-* libarchive-tools, flex, bison to prepare the kernel code (needed for the recorder).
+* libsodium, gcc, g++, libssl, pkg-config to build the network recorder
+* libarchive-tools, flex, bison to prepare the kernel code (needed for the network recorder).
 
 In Ubuntu 20.04 or Ubuntu 20.10:
 
@@ -445,7 +464,7 @@ sudo ./target/none/release/bpf-memprof-user & sleep 0.5 && sudo ./target/none/re
 
 ### Run network recorder
 
-Run the recorder:
+Run the network recorder:
 
 ```
 sudo ./target/none/release/bpf-sniffer & sleep 0.5 && ./target/none/release/tezedge-recorder
