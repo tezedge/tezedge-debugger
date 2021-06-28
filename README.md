@@ -3,23 +3,23 @@
 ## Memory Profiler  
 
 As developers, we want to see how much memory is used in each piece
-of code of the TezEdge node. So that we can evaluate whether a particular
+of code of the TezEdge node, so that we can evaluate whether a particular
 function in code costs us too much memory. We want to minimize memory
 consumption, which is always beneficial for the smooth running of any software.
 
-The memory profiler for the TezEdge node utilizing
+For this purpose, we've created a memory profiler for the TezEdge node that utilizes
 extended Berkeley Packet Filters (eBPF), a technology we’ve previously used
 in the firewall of the TezEdge node’s validation subsystem.
 
-It track physical (residential) memory usage by the TezEdge node. And can
+It track physical (residential) memory usage by the TezEdge node and it can
 determine the function and entire call stack where the allocation happened.
 The profiler does not store the history of allocations, hence it does not
-use disk memory. It gives us only the current moment slice. Preserves more
+use disk memory. It only gives us the current moment slice, which preserves more
 space on the server for the node itself.
 
-Running this software and its web frontend developers can see a call tree
-and how many memory allocated in the branches of the tree. And he can reason
-where it is worth to decrease the consumption.
+By running this software and its browser-based front end, developers can see a call tree
+and how many memory are allocated in the branches of the tree. They can then accurately determine
+where it would be worthwhile to decrease memory consumption.
 
 ### How it works
 
@@ -194,14 +194,14 @@ First of all, the network recorder should get the raw data from the kernel.
 
 #### BPF module
 
-The network recorder uses BPF module to intercept network related syscalls.
+The network recorder uses the BPF module to intercept network-related syscalls.
 It intercepts `read`, `recvfrom`, `write`, `sendto`, `bind`, `listen`,
 `connect`, `accept` and `close` syscalls. Those syscalls give a full picture
 of network activity of the application. The BPF module configured to know where
 the application which we want to record is listening incoming connection.
 That is needed to determine an applications PID. It listen `bind` attempts from
 any PID on the given port. And once we have one, we know the PID. After that,
-the BPF module intercepting other syscalls made by this PID. The single recorder
+the BPF module intercepting other syscalls made by this PID. A single instance of the recorder
 can record multiple applications simultaneously. Do not run multiple instance of
 the network recorder.
 
@@ -240,13 +240,13 @@ calculated from the local node's private key and remote node's public key. The n
 * To encrypt a message, the node uses the nonce sent in its own `ConnectionMessage` and a precomputed key.
 * To decrypt a message, the node uses the received nonce and a precomputed key.
 
-For the network recorder to decrypt a message that is coming from a remote node to the local running node.
-It needs to know:
+For the network recorder to decrypt a message that is coming from a remote node to the local running node, it needs to know the following:
+
 * The local node's private key - which is part of its local identity to which the network recorder has access.
 * The remote node's public key - which is part of the received `ConnectionMessage` and was captured.
 * The remote node's nonce - which is part of the received `ConnectionMessage` and was captured.
 
-But to decrypt a message sent by the local node, it would be necessary to know the private key of the remote node, to which it does not have
+However, to decrypt a message sent by the local node, it would be necessary to know the private key of the remote node, to which it does not have
 access. Fortunately, Tezos is internally using the Curve5519 method, which allows to decrypt a message with the same 
 keys which were used for encryption, thus the network recorder "just" needs the:
 * Local node's private key - which is part of its local identity, to which the network recorder has access.
@@ -258,10 +258,10 @@ To capture node logs, the network recorder utilizes the "syslog" protocol
 (which can be easily enabled in the Docker), which,
 instead of printing the log into the console, wraps them into the UDP packet and sends them to the server. This should
 be handled by the application or the administrator of the application.
-The network recorder runs a syslog server inside, to simply process the generated
-logs. This system allows to decouple the recorder from the node,
-which prevents the network recorder from failing if the running node fails, 
-preserving all of the captured logs, and potentially information about the failure of the node.
+The network recorder runs a syslog server inside to simply process the generated
+logs. This system allows us to decouple the recorder from the node,
+which prevents the network recorder from failing if the running node fails.
+This preserves all of the captured logs, which can potentially include information about the failure of the node.
 
 ### Storage
 Storage is based on RocksDB, utilizing custom [indexes](./src/storage/secondary_index.rs), which
@@ -375,7 +375,7 @@ cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branc
 The minimal required version of Linux kernel is 5.8, but if the version is lower 5.11,
 the debugger work unreliable. The recommended version of kernel is 5.11 or higher.
 
-However, for building you need kernel sources of version 5.8.18
+However, for building, you need kernel sources of version 5.8.18
 no matter what the actual version you run.
 
 ```
@@ -416,7 +416,7 @@ cargo +nightly-2021-03-23 build -p tezedge-recorder --release
 Do not run multiple instance of the memory profiler or multiple instance of network recorder
 simultaneously on the same computer.
 
-The single instance of network recorder is able to record
+A single instance of the network recorder is able to record
 multiple TezEdge and/or Tezos nodes on the same computer.
 
 ### Configure network recorder
