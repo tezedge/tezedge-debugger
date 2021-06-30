@@ -196,20 +196,25 @@ mod server {
         struct Params {
             threshold: Option<u64>,
             reverse: Option<bool>,
+            short: Option<bool>,
         }
 
         warp::path!("v1" / "tree")
             .and(warp::query::query())
             .map(move |params: Params| -> WithStatus<Json> {
                 let resolver = resolver.read().unwrap();
-                let report = history.lock()
-                    .unwrap()
-                    .tree_report(
+                let history = history.lock().unwrap();
+                if params.short.unwrap_or(false) {
+                    let report = history.short_report();
+                    reply::with_status(reply::json(&report), StatusCode::OK)
+                } else {
+                    let report = history.tree_report(
                         resolver,
                         params.threshold.unwrap_or(512),
                         params.reverse.unwrap_or(false),
                     );
-                reply::with_status(reply::json(&report), StatusCode::OK)
+                    reply::with_status(reply::json(&report), StatusCode::OK)
+                }
             })
     }
 }

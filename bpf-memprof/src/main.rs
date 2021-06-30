@@ -402,6 +402,7 @@ fn main() {
         .send_fd(fd)
         .expect("failed to send ring buffer access");
 
+    let mut old_cnt = 0;
     let stream = BufReader::new(stream);
     for line in stream.lines() {
         // handle line
@@ -411,8 +412,9 @@ fn main() {
                     let cnt = skeleton.app.lost_events.get(&0u32.to_ne_bytes())
                         .map(u32::from_le_bytes)
                         .unwrap_or(0);
-                    if cnt != 0 {
-                        log::warn!("lost events: {}", cnt);
+                    if cnt - old_cnt != 0 {
+                        log::warn!("lost events: {}", cnt - old_cnt);
+                        old_cnt = cnt;
                     } else {
                         log::debug!("check: ok");
                     }

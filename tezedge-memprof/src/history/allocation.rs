@@ -45,7 +45,7 @@ impl Usage {
         } else {
             if self.cache < page.number() {
                 self.cache = 0;
-                log::debug!("page {} was not marked as cache by mistake", page);
+                log::warn!("page {} was not marked as cache by mistake", page);
             } else {
                 self.cache -= page.number();
             }
@@ -90,7 +90,7 @@ impl Group {
         // if `self.last_stack` contains state for some page
         // then `self.group` contains `usage` for the stack
         if let Some(state) = self.last_stack.get(&page) {
-            log::debug!("double alloc {}", page);
+            log::trace!("double alloc {}", page);
             if state.stack_hash.eq(&stack_hash) {
                 // double alloc in the same stack, do nothing
                 return;
@@ -124,7 +124,7 @@ impl Group {
             }
             usage.decrease(page);
         } else {
-            log::debug!("double free, or free without alloc {}", page);
+            log::trace!("double free, or free without alloc {}", page);
         }
     }
 
