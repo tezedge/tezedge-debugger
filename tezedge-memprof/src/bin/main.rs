@@ -5,8 +5,8 @@ use std::{collections::HashMap, sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU3
 use bpf_memprof::{Client, ClientCallback, Event, EventKind};
 use tezedge_memprof::{AtomicState, Page, Tracker};
 
-use tezedge_memprof::AllocationState;
-//type AllocationState = tezedge_memprof::History<tezedge_memprof::EventLast>;
+//use tezedge_memprof::AllocationState;
+type AllocationState = tezedge_memprof::History<tezedge_memprof::EventLast>;
 
 #[derive(Default)]
 struct MemprofClient {
