@@ -20,7 +20,7 @@ pub struct App {
     pub lost_events: ebpf::HashMapRef<4, 4>,
     #[array_percpu(size = 1)]
     pub stack: ebpf::ArrayPerCpuRef<0x400>,
-    #[ringbuf(size = 0x2000000)]
+    #[ringbuf(size = 0x4000000)]
     pub event_queue: ebpf::RingBufferRef,
     #[prog("tracepoint/syscalls/sys_enter_execve")]
     pub execve: ebpf::ProgRef,
@@ -407,7 +407,6 @@ fn main() {
         // handle line
         match line {
             Ok(line) => {
-                log::info!("received command: {}", line);
                 if line == "check" {
                     let cnt = skeleton.app.lost_events.get(&0u32.to_ne_bytes())
                         .map(u32::from_le_bytes)
@@ -415,7 +414,7 @@ fn main() {
                     if cnt != 0 {
                         log::warn!("lost events: {}", cnt);
                     } else {
-                        log::info!("check: ok");
+                        log::debug!("check: ok");
                     }
                 }
             }

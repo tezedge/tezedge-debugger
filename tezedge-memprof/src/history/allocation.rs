@@ -136,10 +136,11 @@ impl Group {
                 let usage = self.group.get_mut(&state.stack_hash).unwrap();
                 usage.cache(&page, b);
                 state.for_cache = b;
-
-                if !b {
-                    usage.decrease(&page);
-                    self.last_stack.remove(&page);
+            } else {
+                if b {
+                    log::warn!("seems the kernel marks as a cache the page already marked as a cache");
+                } else {
+                    log::warn!("seems the kernel marks as not a cache the page that was not marked as a cache");
                 }
             }
         }

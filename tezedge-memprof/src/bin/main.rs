@@ -121,7 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let top = report.rss_anon_kib();
                 let (anon_plus_cache, cache) = history.lock().unwrap().short_report();
                 let anon = anon_plus_cache - cache;
-                log::info!("anon: {} kib (diff: {}), cache {} kib", anon, (anon as i64) - (top as i64), cache);
+                log::debug!("anon: {} kib (diff: {}), cache {} kib", anon, (anon as i64) - (top as i64), cache);
             }
         })
     };
