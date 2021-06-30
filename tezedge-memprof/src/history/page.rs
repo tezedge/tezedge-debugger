@@ -47,4 +47,12 @@ impl Page {
     pub fn number(&self) -> u32 {
         1 << (self.inner >> 28)
     }
+
+    pub fn order(&self) -> u8 {
+        (self.inner >> 28) as u8
+    }
+
+    pub fn set_order(&mut self, order: u8) {
+        self.inner = (self.inner & 0x0fffffff) + ((order as u32) << 28)
+    }
 }

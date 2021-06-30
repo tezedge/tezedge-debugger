@@ -57,13 +57,15 @@ impl Usage {
 pub struct PageState {
     stack_hash: StackHash,
     for_cache: bool,
+    order: u8,
 }
 
 impl PageState {
-    pub fn new(stack_hash: StackHash, for_cache: bool) -> Self {
+    pub fn new(stack_hash: StackHash, for_cache: bool, order: u8) -> Self {
         PageState {
             stack_hash,
             for_cache,
+            order,
         }
     }
 }
@@ -111,7 +113,7 @@ impl Group {
             usage.increase(&page);
             self.group.insert(stack_hash.clone(), usage);
         }
-        self.last_stack.insert(page, PageState::new(stack_hash.clone(), for_cache));
+        self.last_stack.insert(page, PageState::new(stack_hash.clone(), for_cache, page.order()));
     }
 
     pub fn remove(&mut self, page: &Page) {
@@ -134,6 +136,8 @@ impl Group {
         if let Some(state) = self.last_stack.get_mut(&page) {
             if state.for_cache != b {
                 let usage = self.group.get_mut(&state.stack_hash).unwrap();
+                let mut page = page;
+                page.set_order(state.order);
                 usage.cache(&page, b);
                 state.for_cache = b;
                 if !b {
