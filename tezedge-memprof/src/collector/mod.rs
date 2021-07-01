@@ -122,15 +122,16 @@ impl Collector {
             let usage = self.groups.get_mut(&info.func_path_index).unwrap();
 
             assert!(info.is_allocated);
-            assert_ne!(info.is_cache, b);
-            info.is_cache = b;
-            if b {
-                usage.cache_value += pages_count;
-            } else {
-                if usage.cache_value < pages_count {
-                    panic!();
+            if info.is_cache != b {
+                info.is_cache = b;
+                if b {
+                    usage.cache_value += pages_count;
+                } else {
+                    if usage.cache_value < pages_count {
+                        panic!();
+                    }
+                    usage.cache_value -= pages_count;
                 }
-                usage.cache_value -= pages_count;
             }
         }
     }
