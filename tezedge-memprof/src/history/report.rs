@@ -111,7 +111,7 @@ impl FrameReportInner {
 
 pub struct FrameReport<R> {
     resolver: R,
-    pub(super) inner: FrameReportInner,
+    pub(crate) inner: FrameReportInner,
 }
 
 impl<R> FrameReport<R> {

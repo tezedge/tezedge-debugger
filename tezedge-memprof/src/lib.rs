@@ -17,3 +17,6 @@ pub use self::stack::StackResolver;
 mod table;
 
 pub mod server;
+
+mod collector;
+pub use self::collector::Collector;
