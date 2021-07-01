@@ -5,6 +5,9 @@ use std::{
     sync::{Arc, Mutex, atomic::{Ordering, AtomicBool, AtomicU32}},
     io,
     time::Duration,
+    thread,
+    env,
+    process::Command,
 };
 use bpf_memprof::{EventKind, Event, ClientCallback, Client};
 use tezedge_memprof::{Collector, StackResolver, server};
@@ -65,6 +68,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
+    let bpf = if env::args().find(|a| a == "--run-bpf").is_some() {
+        let h = Command::new("bpf-memprof-user").spawn().expect("cannot run bpf");
+        thread::sleep(Duration::from_millis(500));
+        Some(h)
+    } else {
+        None
+    };
+
     let running = Arc::new(AtomicBool::new(true));
     let cli = MemprofClient::default();
     let history = cli.collector.clone();
@@ -97,6 +108,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let _ = server;
+    if let Some(mut bpf) = bpf {
+        let _ = bpf.wait()?;
+    }
 
     Ok(())
 }
