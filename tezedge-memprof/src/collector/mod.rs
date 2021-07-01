@@ -128,7 +128,7 @@ impl Collector {
             let pages_count = 1 << info.order;
             let usage = self.groups.get_mut(&info.func_path_index).unwrap();
 
-            if info.is_cache {
+            if info.is_allocated {
                 log::warn!("not alloc, but cache {}, page: {:08x}-{}", b, page, info.order);
             }
             if info.is_cache != b {
