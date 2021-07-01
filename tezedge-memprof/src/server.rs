@@ -54,7 +54,8 @@ where
             let resolver = resolver.read().unwrap();
             let history = history.lock().unwrap();
             if params.short.unwrap_or(false) {
-                let report = history.short_report();
+                let (value, cache_value) = history.short_report();
+                let report = value - cache_value;
                 reply::with_status(reply::json(&report), StatusCode::OK)
             } else {
                 let report = history.tree_report(
