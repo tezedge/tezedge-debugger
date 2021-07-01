@@ -1,4 +1,4 @@
-FROM simplestakingcom/tezedge-bpf-builder:latest as builder
+FROM tezedge/tezedge-bpf-builder:latest as builder
 
 RUN apt install -y g++ git libssl-dev pkg-config
 

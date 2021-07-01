@@ -4,14 +4,14 @@ name: test-memprof
 
 steps:
   - name: unit-tests
-    image: simplestakingcom/tezedge-bpf-builder:latest
+    image: tezedge/tezedge-bpf-builder:latest
     commands:
       - apt-get install -y pkg-config libssl-dev
       - cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
       - cargo test --package tezedge-memprof --lib -- history::history
       - cargo test --package tezedge-memprof --lib -- history::tests
   - name: memprof-compare-test
-    image: simplestakingcom/tezedge-bpf-builder:latest
+    image: tezedge/tezedge-bpf-builder:latest
     privileged: true
     volumes:
       - name: kernel-debug
@@ -31,7 +31,7 @@ steps:
       - cargo build -p bpf-memprof --release && cargo build -p tezedge-memprof --tests --release
       - ./target/none/release/bpf-memprof-user & sleep 0.5 && ./target/none/release/tezedge-memprof-new & sleep 0.5
       # run tezedge-node in docker
-      - export NODE_CONTAINER=$(docker run --rm -d simplestakingcom/tezedge:latest-frame-pointers-enabled --network mainnet)
+      - export NODE_CONTAINER=$(docker run --rm -d tezedge/tezedge:latest-frame-pointers-enabled --network mainnet)
       # do tests
       - URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- positive compare --nocapture
       # stop the node
@@ -57,7 +57,7 @@ steps:
   - name: build-tezedge-debugger-image  
     image: plugins/docker
     settings:
-      repo: simplestakingcom/tezedge-debugger
+      repo: tezedge/tezedge-debugger
       tag: latest
       dockerfile: Dockerfile
       username:
@@ -67,11 +67,11 @@ steps:
   - name: build-tezedge-memprof-image  
     image: plugins/docker
     settings:
-      repo: simplestakingcom/tezedge-memprof
+      repo: tezedge/tezedge-memprof
       tag: latest
       dockerfile: Dockerfile.memprof
       build_args:
-        - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest-frame-pointers-enabled
+        - TEZEDGE_IMAGE=tezedge/tezedge:latest-frame-pointers-enabled
       username:
         from_secret: docker_hub_username
       password:
@@ -96,7 +96,7 @@ steps:
   - name: build-tezedge-debugger-image
     image: plugins/docker
     settings:
-      repo: simplestakingcom/tezedge-debugger
+      repo: tezedge/tezedge-debugger
       tags: 
         - ${DRONE_TAG}
         - latest-release
@@ -108,11 +108,11 @@ steps:
   - name: build-tezedge-memprof-image  
     image: plugins/docker
     settings:
-      repo: simplestakingcom/tezedge-memprof
+      repo: tezedge/tezedge-memprof
       tag: latest-release
       dockerfile: Dockerfile.memprof
       build_args:
-        - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest-frame-pointers-enabled-release
+        - TEZEDGE_IMAGE=tezedge/tezedge:latest-frame-pointers-enabled-release
       username:
         from_secret: docker_hub_username
       password:

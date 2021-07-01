@@ -5,7 +5,7 @@ name: test-debugger-5.11
 
 steps:
   - name: debugger
-    image: simplestakingcom/tezedge-debugger:5.11
+    image: tezedge/tezedge-debugger:5.11
     privileged: true
     volumes:
       - name: tezos-shared-data
@@ -47,7 +47,7 @@ steps:
   - name: build-tezedge-debugger-image  
     image: plugins/docker
     settings:
-      repo: simplestakingcom/tezedge-debugger
+      repo: tezedge/tezedge-debugger
       tag: latest
       dockerfile: Dockerfile
       username:
@@ -74,7 +74,7 @@ steps:
   - name: build-tezedge-debugger-image
     image: plugins/docker
     settings:
-      repo: simplestakingcom/tezedge-debugger
+      repo: tezedge/tezedge-debugger
       tags: 
         - ${DRONE_TAG}
         - latest-release
