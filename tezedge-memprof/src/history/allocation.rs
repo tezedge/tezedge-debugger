@@ -6,7 +6,7 @@ use super::{
     report::FrameReport,
     stack::StackResolver,
     history::StackShort,
-    abstract_tracker::Tracker,
+    abstract_tracker::{Tracker, Reporter},
 };
 
 #[derive(Serialize, Hash, PartialEq, Eq, Clone)]
@@ -182,7 +182,9 @@ impl Tracker for AllocationState {
     fn mark_page_cache(&mut self, page: Page, b: bool) {
         self.group.mark_cache(page, b);
     }
+}
 
+impl Reporter for AllocationState {
     fn short_report(&self) -> (u64, u64) {
         let (mut node, mut cache) = (0, 0);
         for usage in self.group.iter() {

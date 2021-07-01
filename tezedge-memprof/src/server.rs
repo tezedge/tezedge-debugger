@@ -8,7 +8,7 @@ use warp::{
     http::StatusCode,
 };
 use serde::Deserialize;
-use super::{StackResolver, Tracker};
+use super::{StackResolver, Reporter};
 
 pub fn routes<T>(
     history: Arc<Mutex<T>>,
@@ -16,7 +16,7 @@ pub fn routes<T>(
     p: Arc<AtomicU32>,
 ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static
 where
-    T: Tracker + Send + 'static,
+    T: Reporter + Send + 'static,
 {
     use warp::reply::with;
 
@@ -39,7 +39,7 @@ fn tree<T>(
     resolver: Arc<RwLock<StackResolver>>,
 ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
 where
-    T: Tracker + Send + 'static,
+    T: Reporter + Send + 'static,
 {
     #[derive(Deserialize)]
     struct Params {

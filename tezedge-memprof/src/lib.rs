@@ -6,10 +6,10 @@
 mod memory_map;
 
 mod state;
-pub use self::state::{AtomicState, Reporter};
+pub use self::state::{AtomicState, Reporter as StateReporter};
 
 mod history;
-pub use self::history::{Page, History, AllocationState, FrameReport, EventLast, Tracker};
+pub use self::history::{Page, History, AllocationState, FrameReport, EventLast, Tracker, Reporter};
 
 mod stack;
 pub use self::stack::StackResolver;

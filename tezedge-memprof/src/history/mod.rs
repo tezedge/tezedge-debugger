@@ -8,7 +8,7 @@ mod allocation;
 mod history;
 mod report;
 
-pub use self::abstract_tracker::Tracker;
+pub use self::abstract_tracker::{Tracker, Reporter};
 pub use self::allocation::AllocationState;
 pub use self::{
     page::Page,

@@ -3,7 +3,7 @@
 
 use std::{collections::HashMap, sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU32, Ordering}}};
 use bpf_memprof::{Client, ClientCallback, Event, EventKind};
-use tezedge_memprof::{AtomicState, Page, Tracker};
+use tezedge_memprof::{AtomicState, Page, Tracker, Reporter};
 
 //use tezedge_memprof::AllocationState;
 type AllocationState = tezedge_memprof::History<tezedge_memprof::EventLast>;
@@ -68,7 +68,7 @@ impl ClientCallback for MemprofClient {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{thread, time::Duration, io, process::Command, env};
-    use tezedge_memprof::{Reporter, StackResolver, server};
+    use tezedge_memprof::{StateReporter, StackResolver, server};
 
     let bpf = if env::args().find(|a| a == "--run-bpf").is_some() {
         let h = Command::new("bpf-memprof-user").spawn().expect("cannot run bpf");
@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // spawn a thread reporting status in log each few seconds
     let thread = {
         let running = running.clone();
-        let mut state = Reporter::new(cli.state.clone());
+        let mut state = StateReporter::new(cli.state.clone());
         let history = cli.history.clone();
         thread::spawn(move || {
             let delay = Duration::from_secs(4);

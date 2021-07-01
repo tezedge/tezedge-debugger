@@ -7,7 +7,7 @@ use super::{
     page_history::{PageHistory, AllocError, FreeError},
     report::FrameReport,
     stack::StackResolver,
-    abstract_tracker::Tracker,
+    abstract_tracker::{Tracker, Reporter},
 };
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -89,7 +89,12 @@ where
             self.group.get_mut(stack).unwrap().get_mut(&page).unwrap().mark_page_cache(b);
         }
     }
+}
 
+impl<H> Reporter for History<H>
+where
+    H: PageHistory,
+{
     fn short_report(&self) -> (u64, u64) {
         let mut value_kib = 0;
         let mut cache_value_kib = 0;
@@ -171,7 +176,7 @@ where
 #[cfg(test)]
 mod test {
     use bpf_memprof::{Hex64, Hex32, Stack};
-    use crate::{History, EventLast, Page, Tracker};
+    use crate::{History, EventLast, Page, Tracker, Reporter};
 
     #[test]
     fn overflow() {
