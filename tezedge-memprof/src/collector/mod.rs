@@ -66,15 +66,17 @@ impl Collector {
             let usage = self.groups.get_mut(old_index).unwrap();
             if info.is_allocated {
                 if usage.value < pages_count {
-                    panic!();
+                    log::warn!("alloc underflow, page: {:08x}-{}", page, info.order);
                 }
                 usage.value -= pages_count;
             } else {
-                assert!(!info.is_cache);
+                if info.is_cache {
+                    log::warn!("not alloc, but cache, page: {:08x}-{}", page, info.order);
+                }
             }
             if info.is_cache {
                 if usage.cache_value < pages_count {
-                    panic!();
+                    log::warn!("cache underflow, page: {:08x}-{}", page, info.order);
                 }
                 usage.cache_value -= pages_count;
             }
@@ -90,7 +92,10 @@ impl Collector {
                 cache_value: 0,
             });
         usage.value += pages_count;
-        assert_eq!(usage.func_path, path);
+
+        if usage.func_path != path {
+            log::warn!("inconsistent path for page: {:08x}-{}", page, info.order);
+        }
     }
 
     pub fn track_free(&mut self, page: u32) {
@@ -100,15 +105,17 @@ impl Collector {
             let usage = self.groups.get_mut(&info.func_path_index).unwrap();
             if info.is_allocated {
                 if usage.value < pages_count {
-                    panic!();
+                    log::warn!("alloc underflow, page: {:08x}-{}", page, info.order);
                 }
                 usage.value -= pages_count;
             } else {
-                assert!(!info.is_cache);
+                if info.is_cache {
+                    log::warn!("not alloc, but cache, page: {:08x}-{}", page, info.order);
+                }
             }
             if info.is_cache {
                 if usage.cache_value < pages_count {
-                    panic!();
+                    log::warn!("cache underflow, page: {:08x}-{}", page, info.order);
                 }
                 usage.cache_value -= pages_count;
             }
@@ -121,14 +128,16 @@ impl Collector {
             let pages_count = 1 << info.order;
             let usage = self.groups.get_mut(&info.func_path_index).unwrap();
 
-            assert!(info.is_allocated);
+            if info.is_cache {
+                log::warn!("not alloc, but cache {}, page: {:08x}-{}", b, page, info.order);
+            }
             if info.is_cache != b {
                 info.is_cache = b;
                 if b {
                     usage.cache_value += pages_count;
                 } else {
                     if usage.cache_value < pages_count {
-                        panic!();
+                        log::warn!("cache underflow, page: {:08x}-{}", page, info.order);
                     }
                     usage.cache_value -= pages_count;
                 }
