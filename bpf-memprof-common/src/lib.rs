@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-#![cfg_attr(feature = "kern", no_std)]
+#![cfg_attr(not(feature = "client"), no_std)]
 
 mod event;
 pub use self::event::{Pod, Hex32, Hex64, CommonHeader};

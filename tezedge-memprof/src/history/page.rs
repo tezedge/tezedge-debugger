@@ -1,5 +1,5 @@
 use std::{fmt, hash::{Hash, Hasher}};
-use bpf_memprof::Hex64;
+use bpf_memprof_common::Hex64;
 use serde::{Serialize, ser};
 
 #[derive(Clone, Copy, PartialEq, Eq)]

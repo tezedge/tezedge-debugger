@@ -1,5 +1,5 @@
 use std::{collections::HashMap, fmt, sync::{Arc, atomic::{Ordering, AtomicU64}}, time::Duration};
-use bpf_memprof::EventKind;
+use bpf_memprof_common::EventKind;
 
 #[derive(Clone, Default, Debug)]
 struct Counters<T> {

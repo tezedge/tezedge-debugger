@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use bpf_memprof::{Stack, Hex64, Hex32};
+use bpf_memprof_common::{Stack, Hex64, Hex32};
 use super::{Page, AllocationState, History, EventLast, Tracker, Reporter};
 use crate::StackResolver;
 

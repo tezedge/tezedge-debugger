@@ -10,6 +10,7 @@ members = [
     "bpf-sniffer-common",
 
     #memprof and its bpf tools
+    "bpf-memprof-common",
     "tezedge-memprof",
     "bpf-memprof",
 

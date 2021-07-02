@@ -4,10 +4,6 @@ version = "0.1.0"
 authors = ["Vladislav Melnik <vladislav.melnik@viablesystems.io>"]
 edition = "2018"
 
-[lib]
-name = "bpf_memprof"
-path = "src/lib.rs"
-
 [[bin]]
 name = "bpf-memprof-kern"
 path = "src/main.rs"
@@ -21,13 +17,14 @@ required-features = ["user"]
 [dependencies]
 ebpf-kern = { git = "https://github.com/vlad9486/ebpf-tools", branch = "develop", optional = true }
 ebpf-user = { git = "https://github.com/vlad9486/ebpf-tools", branch = "develop", optional = true }
-serde = { version = "1.0", features = ["derive"], optional = true }
 passfd = { version = "0.1", optional = true }
 sudo = { version = "0.6", optional = true }
 ctrlc = { version = "3.1", optional = true }
 log = { version = "0.4", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.2", optional = true }
+bpf-memprof-common = { path = "../bpf-memprof-common" }
+tezedge-memprof = { path = "../tezedge-memprof", optional = true }
 
 [features]
 default = ["user"]
@@ -40,5 +37,5 @@ user = [
     "tracing",
     "tracing-subscriber",
     "log",
+    "tezedge-memprof",
 ]
-client = ["serde/derive", "ebpf-user", "passfd"]
