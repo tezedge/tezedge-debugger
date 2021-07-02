@@ -82,6 +82,9 @@ impl Consumer {
             &EventKind::RemoveFromPageCache(ref v) if v.pfn.0 != 0 && self.has_pid => {
                 self.aggregator.lock().unwrap().mark_cache(v.pfn.0 as u32, false);
             },
+            &EventKind::RssStat(ref v) if v.member == 1 && self.has_pid => {
+                self.aggregator.lock().unwrap().track_rss_anon(v.size as _);
+            }
             _ => (),
         }
         self.last = Some(event.event);

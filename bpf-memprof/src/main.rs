@@ -425,6 +425,11 @@ fn main() {
         .expect("failed to send ring buffer access");*/
 
     let cli = Consumer::default();
+    let aggregator = cli.reporter();
+
+    if std::env::args().find(|s| s == "--dump").is_some() {
+        aggregator.lock().unwrap().turn_on_dump();
+    }
 
     // spawn a thread monitoring process map from `/proc/<pid>/maps` and loading symbol tables
     let resolver = StackResolver::spawn(cli.pid());
@@ -465,6 +470,7 @@ fn main() {
         }
     }
 
+    aggregator.lock().unwrap().store_dump();
     log::info!("stop server");
     let _ = server;
 }

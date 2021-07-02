@@ -1,4 +1,5 @@
 use std::{sync::Arc, collections::HashMap};
+use serde::{Serialize, Deserialize};
 use bpf_memprof_common::{Hex64, Stack};
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
@@ -29,16 +30,50 @@ pub struct Usage {
     cache_value: u32,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub enum RawEvent {
+    Alloc {
+        page: u32,
+        order: u8,
+    },
+    Free {
+        page: u32,
+    },
+    Cache {
+        page: u32,
+    },
+    UnCache {
+        page: u32,
+    },
+    RssAnon(u32),
+}
+
 #[derive(Default)]
 pub struct Aggregator {
     counter: u32,
     paths: HashMap<FuncPath, FuncPathIndex>,
     pages: HashMap<PageAddress, PageInfo>,
     groups: HashMap<FuncPathIndex, Usage>,
+    dump: Option<Vec<RawEvent>>,
 }
 
 impl Aggregator {
+    pub fn turn_on_dump(&mut self) {
+        self.dump = Some(Vec::new());
+    }
+
+    pub fn store_dump(&mut self) {
+        if let Some(dump) = &self.dump {
+            log::info!("writing dump...");
+            bincode::serialize_into(std::fs::File::create("target/dump").unwrap(), dump).unwrap();
+            log::info!("done dump");
+        }
+    }
+
     pub fn track_alloc(&mut self, page: u32, order: u8, stack: &Stack) {
+        if let Some(dump) = &mut self.dump {
+            dump.push(RawEvent::Alloc { page, order });
+        }
         let &mut Aggregator { ref mut counter, .. } = self;
         let path = FuncPath::new(stack);
         let index = self.paths
@@ -98,6 +133,10 @@ impl Aggregator {
     }
 
     pub fn track_free(&mut self, page: u32) {
+        if let Some(dump) = &mut self.dump {
+            dump.push(RawEvent::Free { page });
+        }
+
         let address = PageAddress(page);
         if let Some(info) = self.pages.remove(&address) {
             let pages_count = 1 << info.order;
@@ -122,6 +161,14 @@ impl Aggregator {
     }
 
     pub fn mark_cache(&mut self, page: u32, b: bool) {
+        if let Some(dump) = &mut self.dump {
+            if b {
+                dump.push(RawEvent::Cache { page });
+            } else {
+                dump.push(RawEvent::UnCache { page });
+            }
+        }
+
         let address = PageAddress(page);
         if let Some(info) = self.pages.get_mut(&address) {
             let pages_count = 1 << info.order;
@@ -141,6 +188,12 @@ impl Aggregator {
                     usage.cache_value -= pages_count;
                 }
             }
+        }
+    }
+
+    pub fn track_rss_anon(&mut self, value: u32) {
+        if let Some(dump) = &mut self.dump {
+            dump.push(RawEvent::RssAnon(value));
         }
     }
 

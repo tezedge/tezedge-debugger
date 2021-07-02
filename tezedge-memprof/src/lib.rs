@@ -19,4 +19,4 @@ mod table;
 pub mod server;
 
 mod collector;
-pub use self::collector::{Consumer, Aggregator};
+pub use self::collector::{Consumer, Aggregator, RawEvent};
