@@ -3,10 +3,10 @@ version: "3"
 services:
 
   memprof:
-    image: simplestakingcom/tezedge-memprof:latest
+    image: tezedge/tezedge-memprof:latest
     build:
       args:
-        - TEZEDGE_IMAGE=simplestakingcom/tezedge:latest-frame-pointers-enabled
+        - TEZEDGE_IMAGE=tezedge/tezedge:latest-frame-pointers-enabled
       context: .
       dockerfile: Dockerfile.memprof
     privileged: true
@@ -21,7 +21,7 @@ services:
       - "17832:17832"
 
   debugger:
-    image: simplestakingcom/tezedge-debugger:latest
+    image: tezedge/tezedge-debugger:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -43,7 +43,7 @@ services:
       - "10001:10001/udp"  # debugger syslog port for tezos node
 
   tezedge-node:
-    image: simplestakingcom/tezedge:latest-frame-pointers-enabled
+    image: tezedge/tezedge:latest-frame-pointers-enabled
     command: ["--network", "mainnet", "--tezos-context-storage", "irmin", "--peer-thresh-low", "30", "--peer-thresh-high", "45"]
     depends_on:
       - "memprof"
@@ -65,7 +65,7 @@ services:
       - "3030:3030"       # sandbox launcher port
 
   explorer:
-    image: simplestakingcom/tezedge-explorer:latest
+    image: tezedge/tezedge-explorer:latest
     environment:
       - SANDBOX=http://localhost:3030
       - DEBUGGER=http://localhost:17732

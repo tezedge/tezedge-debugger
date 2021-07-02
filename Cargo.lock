@@ -249,7 +249,7 @@ dependencies = [
 [[package]]
 name = "bpf-sys"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#47ad3af8ac69a09ef6158aa403777822472217e7"
+source = "git+https://github.com/tezedge/redbpf.git?branch=develop#47ad3af8ac69a09ef6158aa403777822472217e7"
 dependencies = [
  "bindgen",
  "cc",
@@ -295,7 +295,7 @@ checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
 [[package]]
 name = "cargo-bpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#47ad3af8ac69a09ef6158aa403777822472217e7"
+source = "git+https://github.com/tezedge/redbpf.git?branch=develop#47ad3af8ac69a09ef6158aa403777822472217e7"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -529,7 +529,7 @@ dependencies = [
 [[package]]
 name = "crypto"
 version = "1.1.4"
-source = "git+https://github.com/simplestaking/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
+source = "git+https://github.com/tezedge/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
 dependencies = [
  "base58",
  "failure",
@@ -2018,7 +2018,7 @@ dependencies = [
 [[package]]
 name = "redbpf"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#47ad3af8ac69a09ef6158aa403777822472217e7"
+source = "git+https://github.com/tezedge/redbpf.git?branch=develop#47ad3af8ac69a09ef6158aa403777822472217e7"
 dependencies = [
  "bindgen",
  "bpf-sys",
@@ -2036,7 +2036,7 @@ dependencies = [
 [[package]]
 name = "redbpf-macros"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#47ad3af8ac69a09ef6158aa403777822472217e7"
+source = "git+https://github.com/tezedge/redbpf.git?branch=develop#47ad3af8ac69a09ef6158aa403777822472217e7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2047,7 +2047,7 @@ dependencies = [
 [[package]]
 name = "redbpf-probes"
 version = "1.3.0"
-source = "git+https://github.com/simplestaking/redbpf.git?branch=develop#47ad3af8ac69a09ef6158aa403777822472217e7"
+source = "git+https://github.com/tezedge/redbpf.git?branch=develop#47ad3af8ac69a09ef6158aa403777822472217e7"
 dependencies = [
  "cargo-bpf",
  "cty",
@@ -2445,7 +2445,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "storage"
 version = "1.1.4"
-source = "git+https://github.com/simplestaking/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
+source = "git+https://github.com/tezedge/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
 dependencies = [
  "bincode",
  "blake2",
@@ -2675,7 +2675,7 @@ dependencies = [
 [[package]]
 name = "tezos_api"
 version = "1.1.4"
-source = "git+https://github.com/simplestaking/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
+source = "git+https://github.com/tezedge/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
 dependencies = [
  "chrono",
  "crypto",
@@ -2694,7 +2694,7 @@ dependencies = [
 [[package]]
 name = "tezos_context"
 version = "1.1.4"
-source = "git+https://github.com/simplestaking/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
+source = "git+https://github.com/tezedge/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
 dependencies = [
  "crossbeam",
  "lazy_static",
@@ -2705,7 +2705,7 @@ dependencies = [
 [[package]]
 name = "tezos_encoding"
 version = "1.1.4"
-source = "git+https://github.com/simplestaking/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
+source = "git+https://github.com/tezedge/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
 dependencies = [
  "bit-vec",
  "byteorder",
@@ -2722,7 +2722,7 @@ dependencies = [
 [[package]]
 name = "tezos_messages"
 version = "1.1.4"
-source = "git+https://github.com/simplestaking/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
+source = "git+https://github.com/tezedge/tezedge?tag=v1.1.5#a2a7aee6a33c5bfbddddf04354e9c042d3c8acc7"
 dependencies = [
  "bytes 1.0.1",
  "chrono",
