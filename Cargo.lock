@@ -652,7 +652,7 @@ dependencies = [
 [[package]]
 name = "ebpf-kern"
 version = "0.1.5"
-source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#cd91a8fe04136e76f1e92429b707666f95616f43"
+source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#d0dadda24dde8990b52c332369c738eff677ff20"
 dependencies = [
  "cty",
  "ebpf-kern-macros",
@@ -661,7 +661,7 @@ dependencies = [
 [[package]]
 name = "ebpf-kern-macros"
 version = "0.1.4"
-source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#cd91a8fe04136e76f1e92429b707666f95616f43"
+source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#d0dadda24dde8990b52c332369c738eff677ff20"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -671,7 +671,7 @@ dependencies = [
 [[package]]
 name = "ebpf-user"
 version = "0.1.5"
-source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#cd91a8fe04136e76f1e92429b707666f95616f43"
+source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#d0dadda24dde8990b52c332369c738eff677ff20"
 dependencies = [
  "cty",
  "ebpf-user-macros",
@@ -681,19 +681,10 @@ dependencies = [
 [[package]]
 name = "ebpf-user-macros"
 version = "0.1.4"
-source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#cd91a8fe04136e76f1e92429b707666f95616f43"
+source = "git+https://github.com/vlad9486/ebpf-tools?branch=develop#d0dadda24dde8990b52c332369c738eff677ff20"
 dependencies = [
  "quote",
  "syn",
-]
-
-[[package]]
-name = "ed25519"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d0860415b12243916284c67a9be413e044ee6668247b99ba26d94b2bc06c8f6"
-dependencies = [
- "signature",
 ]
 
 [[package]]
@@ -922,7 +913,7 @@ dependencies = [
  "futures-sink",
  "futures-task",
  "memchr",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "pin-utils",
  "proc-macro-hack",
  "proc-macro-nested",
@@ -1026,9 +1017,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.9.1"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7afe4a420e3fe79967a00898cc1f4db7c8a49a9333a29f8a4bd76a253d5cd04"
+checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
 
 [[package]]
 name = "headers"
@@ -1066,9 +1057,9 @@ dependencies = [
 
 [[package]]
 name = "hermit-abi"
-version = "0.1.18"
+version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "322f4de77956e22ed0e5032c359a0f1273f1f7f0d79bfa3b8ffbc730d7fbcc5c"
+checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
 dependencies = [
  "libc",
 ]
@@ -1098,7 +1089,7 @@ checksum = "60daa14be0e0786db0f03a9e57cb404c9d756eed2b6c62b9ea98ec5743ec75a9"
 dependencies = [
  "bytes 1.0.1",
  "http",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
 ]
 
 [[package]]
@@ -1138,7 +1129,7 @@ dependencies = [
  "httparse",
  "httpdate",
  "itoa",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "socket2",
  "tokio 1.7.1",
  "tower-service",
@@ -1193,9 +1184,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "1.6.2"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "824845a0bf897a9042383849b02c1bc219c2383772efcd5c6f9766fa4b81aef3"
+checksum = "bc633605454125dec4b66843673f01c7df2b89479b32e0ed634e43a91cff62a5"
 dependencies = [
  "autocfg",
  "hashbrown",
@@ -1853,9 +1844,9 @@ checksum = "257b64915a082f7811703966789728173279bdebb956b143dbcd23f6f970a777"
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc0e1f259c92177c30a4c9d177246edd0a3568b25756a977d0632cf8fa37e905"
+checksum = "8d31d11c69a6b52a174b42bdc0c30e5e11670f90788b2c471c31c1d17d449443"
 
 [[package]]
 name = "pin-utils"
@@ -2146,7 +2137,7 @@ dependencies = [
  "mime",
  "native-tls",
  "percent-encoding",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "serde",
  "serde_urlencoded",
  "tokio 1.7.1",
@@ -2397,12 +2388,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signature"
-version = "1.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c19772be3c4dd2ceaacf03cb41d5885f2a02c4d8804884918e3a258480803335"
-
-[[package]]
 name = "sized-chunks"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2464,11 +2449,10 @@ dependencies = [
 
 [[package]]
 name = "sodiumoxide"
-version = "0.2.7"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e26be3acb6c2d9a7aac28482586a7856436af4cfe7100031d219de2d2ecb0028"
+checksum = "7038b67c941e23501573cb7242ffb08709abe9b11eb74bceff875bbda024a6a8"
 dependencies = [
- "ed25519",
  "libc",
  "libsodium-sys",
  "serde",
@@ -2870,7 +2854,7 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "parking_lot",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "signal-hook-registry",
  "tokio-macros 1.2.0",
  "winapi 0.3.9",
@@ -2915,7 +2899,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8864d706fdb3cc0843a49647ac892720dac98a6eeb818b77190592cf4994066"
 dependencies = [
  "futures-core",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "tokio 1.7.1",
 ]
 
@@ -2942,7 +2926,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "log",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "tokio 1.7.1",
 ]
 
@@ -2980,7 +2964,7 @@ checksum = "09adeb8c97449311ccd28a427f96fb563e7fd31aabf994189879d9da2394b89d"
 dependencies = [
  "cfg-if 1.0.0",
  "log",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "tracing-attributes",
  "tracing-core",
 ]
@@ -3028,9 +3012,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.2.18"
+version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa5553bf0883ba7c9cbe493b085c29926bd41b66afc31ff72cf17ff4fb60dcd5"
+checksum = "ab69019741fca4d98be3c62d2b75254528b5432233fd8a4d2739fec20278de48"
 dependencies = [
  "ansi_term 0.12.1",
  "chrono",
