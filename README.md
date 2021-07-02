@@ -155,7 +155,7 @@ See `docker-compose.yml` and `memprof.sh` for details.
 The TezEdge node and the memory profiler should be running to do this test.
 Specify the URL where the memory profiler is running.
 
-`URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof -- compare`
+`URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof -- positive compare`
 
 ### HTTP API
 
