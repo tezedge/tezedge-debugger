@@ -20,7 +20,7 @@ pub struct App {
     pub lost_events: ebpf::HashMapRef<4, 4>,
     #[array_percpu(size = 1)]
     pub stack: ebpf::ArrayPerCpuRef<0x400>,
-    #[ringbuf(size = 0x4000000)]
+    #[ringbuf(size = 0x8000000)]
     pub event_queue: ebpf::RingBufferRef,
     #[prog("tracepoint/syscalls/sys_enter_execve")]
     pub execve: ebpf::ProgRef,
