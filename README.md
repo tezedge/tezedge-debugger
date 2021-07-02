@@ -430,7 +430,6 @@ Build memory profiler:
 
 ```
 cargo +nightly-2021-03-23 build -p bpf-memprof --release
-cargo +nightly-2021-03-23 build -p tezedge-memprof --release
 ```
 
 Build network recorder:
@@ -475,19 +474,19 @@ There might be multiple such sections.
 
 ### Run memory profiler
 
-In one terminal:
+If you run the TezEdge node in docker, set environment variable
+`TEZEDGE_NODE_NAME` to be equal the name of the docker container of TezEdge node.
+
+Run the memory profiler:
+
+```
+TEZEDGE_NODE_NAME=... sudo ./target/none/release/bpf-memprof-user
+```
+
+or 
+
 ```
 sudo ./target/none/release/bpf-memprof-user
-```
-
-In another terminal:
-```
-sudo ./target/none/release/tezedge-memprof
-```
-
-Or in single terminal:
-```
-sudo ./target/none/release/bpf-memprof-user & sleep 0.5 && sudo ./target/none/release/tezedge-memprof
 ```
 
 ### Run network recorder
