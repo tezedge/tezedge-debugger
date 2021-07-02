@@ -9,7 +9,7 @@ use ebpf_kern as ebpf;
 use ebpf_user as ebpf;
 
 #[cfg(feature = "kern")]
-ebpf::license!("GPL");
+ebpf::license!("Dual MIT/GPL");
 
 #[cfg(any(feature = "kern", feature = "user"))]
 #[derive(ebpf::BpfApp)]
