@@ -4,14 +4,6 @@ version = "0.1.0"
 authors = ["Vladislav Melnik <vladislav.melnik@viablesystems.io>"]
 edition = "2018"
 
-[[bin]]
-name = "tezedge-memprof-new"
-path = "src/bin/profiler.rs"
-
-[[bin]]
-name = "tezedge-memprof"
-path = "src/bin/main.rs"
-
 [dev-dependencies]
 reqwest = "0.11"
 rand = "0.8"
@@ -33,4 +25,4 @@ tracing = "0.1"
 warp = "0.3"
 tokio = { version = "1.6", features = ["rt-multi-thread", "macros"] }
 
-bpf-memprof = { path = "../bpf-memprof", features = ["client"] }
+bpf-memprof-common = { path = "../bpf-memprof-common", features = ["client"] }

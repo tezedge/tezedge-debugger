@@ -14,10 +14,24 @@ use warp::{
 use serde::{Serialize, Deserialize};
 use super::{StackResolver, Reporter};
 
-pub fn routes<T>(
-    history: Arc<Mutex<T>>,
+pub fn run<T>(
+    reporter: Arc<Mutex<T>>,
     resolver: Arc<RwLock<StackResolver>>,
-    p: Arc<AtomicU32>,
+    pid: Arc<AtomicU32>,
+) -> (tokio::task::JoinHandle<()>, tokio::runtime::Runtime)
+where
+    T: Reporter + Send + 'static,
+{
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let server = routes(reporter, resolver, pid.clone());
+    let handler = runtime.spawn(warp::serve(server).run(([0, 0, 0, 0], 17832)));
+    (handler, runtime)
+}
+
+fn routes<T>(
+    reporter: Arc<Mutex<T>>,
+    resolver: Arc<RwLock<StackResolver>>,
+    pid: Arc<AtomicU32>,
 ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static
 where
     T: Reporter + Send + 'static,
@@ -25,12 +39,12 @@ where
     use warp::reply::with;
 
     warp::get()
-        .and(tree(history, resolver, p.clone()).or(pid(p)))
+        .and(tree(reporter, resolver, pid.clone()).or(get_pid(pid)))
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
 }
 
-fn pid(p: Arc<AtomicU32>) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
+fn get_pid(p: Arc<AtomicU32>) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
     warp::path!("v1" / "pid")
         .and(warp::query::query())
         .map(move |()| -> WithStatus<Json> {
@@ -59,7 +73,7 @@ fn rss_anon(p: Arc<AtomicU32>) -> Result<u64, Error> {
 fn tree<T>(
     history: Arc<Mutex<T>>,
     resolver: Arc<RwLock<StackResolver>>,
-    p: Arc<AtomicU32>,
+    pid: Arc<AtomicU32>,
 ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
 where
     T: Reporter + Send + 'static,
@@ -74,10 +88,10 @@ where
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
     struct ShortReport {
-        usage_total: u64,
-        usage: u64,
-        usage_cache: u64,
-        rss_anon: u64,
+        total: u64,
+        cache: u64,
+        anon: u64,
+        system_report_anon: u64,
     }
 
     warp::path!("v1" / "tree")
@@ -86,13 +100,13 @@ where
             let resolver = resolver.read().unwrap();
             let history = history.lock().unwrap();
             if params.short.unwrap_or(false) {
-                let (usage_total, usage_cache) = history.short_report();
-                let rss_anon = rss_anon(p.clone()).unwrap_or(0);
+                let (total, cache) = history.short_report();
+                let system_report_anon = rss_anon(pid.clone()).unwrap_or(0);
                 let report = ShortReport {
-                    usage_total,
-                    usage: usage_total - usage_cache,
-                    usage_cache,
-                    rss_anon,
+                    total,
+                    cache,
+                    anon: total - cache,
+                    system_report_anon,
                 };
                 reply::with_status(reply::json(&report), StatusCode::OK)
             } else {

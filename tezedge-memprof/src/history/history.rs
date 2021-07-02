@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 use serde::{Serialize, ser};
-use bpf_memprof::{Hex32, Hex64, Stack};
+use bpf_memprof_common::{Hex32, Hex64, Stack};
 use super::{
     page::Page,
     error::ErrorReport,
@@ -175,7 +175,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use bpf_memprof::{Hex64, Hex32, Stack};
+    use bpf_memprof_common::{Hex64, Hex32, Stack};
     use crate::{History, EventLast, Page, Tracker, Reporter};
 
     #[test]

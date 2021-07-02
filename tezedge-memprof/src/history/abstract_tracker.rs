@@ -1,5 +1,5 @@
 use std::ops::Deref;
-use bpf_memprof::{Hex32, Stack};
+use bpf_memprof_common::{Hex32, Stack};
 use super::{page::Page, report::FrameReport, stack::StackResolver};
 
 pub trait Tracker {

@@ -1,5 +1,5 @@
 use std::ops::Range;
-use bpf_memprof::Hex32;
+use bpf_memprof_common::Hex32;
 use thiserror::Error;
 use serde::Serialize;
 
