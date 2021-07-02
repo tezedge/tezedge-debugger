@@ -16,6 +16,7 @@ use super::event::{
     PageFreeBatched,
 };
 use super::event::{RssStat, PercpuAlloc, PercpuFree, AddToPageCache, RemoveFromPageCache};
+use super::event::MigratePages;
 
 pub struct Client {
     stream: UnixStream,
@@ -113,6 +114,7 @@ pub enum EventKind {
     PercpuFree(PercpuFree),
     AddToPageCache(AddToPageCache),
     RemoveFromPageCache(RemoveFromPageCache),
+    MigratePages(MigratePages),
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -286,6 +288,9 @@ impl Event {
             },
             x if Some(x) == RemoveFromPageCache::DISCRIMINANT => {
                 (EventKind::RemoveFromPageCache(RemoveFromPageCache::from_slice(slice).ok_or(0)?), RemoveFromPageCache::SIZE)
+            },
+            x if Some(x) == MigratePages::DISCRIMINANT => {
+                (EventKind::MigratePages(MigratePages::from_slice(slice).ok_or(0)?), MigratePages::SIZE)
             },
             _ => return Err(1),
         };

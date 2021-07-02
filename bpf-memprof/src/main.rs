@@ -36,6 +36,8 @@ pub struct App {
     pub add_to_page_cache: ebpf::ProgRef,
     #[prog("tracepoint/filemap/mm_filemap_delete_from_page_cache")]
     pub remove_from_page_cache: ebpf::ProgRef,
+    #[prog("tracepoint/migrate/mm_migrate_pages")]
+    pub migrate_pages: ebpf::ProgRef,
 }
 
 #[cfg(feature = "kern")]
@@ -44,6 +46,7 @@ use {
     bpf_memprof_common::{
         KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageFree,
         PageFreeBatched, RssStat, PercpuAlloc, PercpuFree, AddToPageCache, RemoveFromPageCache,
+        MigratePages,
     },
     ebpf::helpers,
 };
@@ -334,6 +337,11 @@ impl App {
     #[inline(always)]
     pub fn remove_from_page_cache(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.output_unconditional::<RemoveFromPageCache>(ctx)
+    }
+
+    #[inline(always)]
+    pub fn migrate_pages(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.output_unconditional::<MigratePages>(ctx)
     }
 }
 

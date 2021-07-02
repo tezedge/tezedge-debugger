@@ -87,7 +87,10 @@ impl Consumer {
             },
             &EventKind::RssStat(ref v) if v.member == 1 && self.has_pid => {
                 self.aggregator.lock().unwrap().track_rss_anon(v.size as _);
-            }
+            },
+            &EventKind::MigratePages(ref v) => {
+                log::warn!("{:?}", v);
+            },
             _ => (),
         }
         self.last = Some(event.event);

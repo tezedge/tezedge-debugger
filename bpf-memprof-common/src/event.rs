@@ -451,3 +451,37 @@ impl Pod for RemoveFromPageCache {
         })
     }
 }
+
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigratePages {
+    pub succeeded: u64,
+    pub failed: u64,
+    pub thp_succeeded: u64,
+    pub thp_failed: u64,
+    pub thp_split: u64,
+    pub mode: u32,
+    pub reason: u32,
+}
+
+impl Pod for MigratePages {
+    const DISCRIMINANT: Option<u32> = Some(18);
+    const SIZE: usize = 0x30;
+
+    #[inline(always)]
+    fn from_slice(s: &[u8]) -> Option<Self> {
+        if s.len() < Self::SIZE {
+            return None;
+        }
+        Some(MigratePages {
+            succeeded: u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap()),
+            failed: u64::from_ne_bytes(TryFrom::try_from(&s[0x08..0x10]).unwrap()),
+            thp_succeeded: u64::from_ne_bytes(TryFrom::try_from(&s[0x10..0x18]).unwrap()),
+            thp_failed: u64::from_ne_bytes(TryFrom::try_from(&s[0x18..0x20]).unwrap()),
+            thp_split: u64::from_ne_bytes(TryFrom::try_from(&s[0x20..0x28]).unwrap()),
+            mode: u32::from_ne_bytes(TryFrom::try_from(&s[0x28..0x2c]).unwrap()),
+            reason: u32::from_ne_bytes(TryFrom::try_from(&s[0x2c..0x30]).unwrap()),
+        })
+    }
+}
