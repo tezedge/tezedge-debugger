@@ -148,13 +148,16 @@ impl Aggregator {
         }
     }
 
-    pub fn track_free(&mut self, page: u32, pid: u32) {
+    pub fn track_free(&mut self, page: u32, order: u8, pid: u32) {
         if let Some(dump) = &mut self.dump {
             dump.push(RawEvent::Free { pid, page });
         }
 
         let address = PageAddress(page);
         if let Some(info) = self.pages.remove(&address) {
+            if info.order != order {
+                log::warn!("free order: {}, but alloc order: {}, missed merge", order, info.order);
+            }
             let pages_count = 1 << info.order;
             let usage = self.groups.get_mut(&info.func_path_index).unwrap();
             if info.is_allocated {
