@@ -156,7 +156,12 @@ impl Aggregator {
         let address = PageAddress(page);
         if let Some(info) = self.pages.remove(&address) {
             if info.order != order {
-                log::warn!("free order: {}, but alloc order: {}, missed merge", order, info.order);
+                log::warn!(
+                    "page: {}, free order: {}, but alloc order: {}, missed merge",
+                    page,
+                    order,
+                    info.order,
+                );
             }
             let pages_count = 1 << info.order;
             let usage = self.groups.get_mut(&info.func_path_index).unwrap();
