@@ -37,16 +37,20 @@ pub struct Usage {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum RawEvent {
     Alloc {
+        pid: u32,
         page: u32,
         order: u8,
     },
     Free {
+        pid: u32,
         page: u32,
     },
     Cache {
+        pid: u32,
         page: u32,
     },
     UnCache {
+        pid: u32,
         page: u32,
     },
     RssAnon(u32),
@@ -74,9 +78,9 @@ impl Aggregator {
         }
     }
 
-    pub fn track_alloc(&mut self, page: u32, order: u8, stack: &Stack) {
+    pub fn track_alloc(&mut self, page: u32, order: u8, stack: &Stack, pid: u32) {
         if let Some(dump) = &mut self.dump {
-            dump.push(RawEvent::Alloc { page, order });
+            dump.push(RawEvent::Alloc { pid, page, order });
         }
         let &mut Aggregator { ref mut counter, .. } = self;
         let path = FuncPath::new(stack);
@@ -144,9 +148,9 @@ impl Aggregator {
         }
     }
 
-    pub fn track_free(&mut self, page: u32) {
+    pub fn track_free(&mut self, page: u32, pid: u32) {
         if let Some(dump) = &mut self.dump {
-            dump.push(RawEvent::Free { page });
+            dump.push(RawEvent::Free { pid, page });
         }
 
         let address = PageAddress(page);
@@ -172,12 +176,12 @@ impl Aggregator {
         }
     }
 
-    pub fn mark_cache(&mut self, page: u32, b: bool) {
+    pub fn mark_cache(&mut self, page: u32, b: bool, pid: u32) {
         if let Some(dump) = &mut self.dump {
             if b {
-                dump.push(RawEvent::Cache { page });
+                dump.push(RawEvent::Cache { pid, page });
             } else {
-                dump.push(RawEvent::UnCache { page });
+                dump.push(RawEvent::UnCache { pid, page });
             }
         }
 

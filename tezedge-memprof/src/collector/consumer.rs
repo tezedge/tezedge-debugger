@@ -74,16 +74,16 @@ impl Consumer {
             &EventKind::PageAlloc(ref v) if v.pfn.0 != 0 => {
                 self.has_pid = true;
                 self.pid.store(event.pid, Ordering::SeqCst);
-                self.aggregator.lock().unwrap().track_alloc(v.pfn.0 as u32, v.order as u8, &event.stack);
+                self.aggregator.lock().unwrap().track_alloc(v.pfn.0 as u32, v.order as u8, &event.stack, event.pid);
             }
             &EventKind::PageFree(ref v) if v.pfn.0 != 0 && self.has_pid => {
-                self.aggregator.lock().unwrap().track_free(v.pfn.0 as u32);
+                self.aggregator.lock().unwrap().track_free(v.pfn.0 as u32, event.pid);
             },
             &EventKind::AddToPageCache(ref v) if v.pfn.0 != 0 && self.has_pid => {
-                self.aggregator.lock().unwrap().mark_cache(v.pfn.0 as u32, true);
+                self.aggregator.lock().unwrap().mark_cache(v.pfn.0 as u32, true, event.pid);
             },
             &EventKind::RemoveFromPageCache(ref v) if v.pfn.0 != 0 && self.has_pid => {
-                self.aggregator.lock().unwrap().mark_cache(v.pfn.0 as u32, false);
+                self.aggregator.lock().unwrap().mark_cache(v.pfn.0 as u32, false, event.pid);
             },
             &EventKind::RssStat(ref v) if v.member == 1 && self.has_pid => {
                 self.aggregator.lock().unwrap().track_rss_anon(v.size as _);
