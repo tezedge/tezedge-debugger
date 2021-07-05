@@ -79,8 +79,8 @@ steps:
       # run tezedge-node in docker
       - docker run --rm -d --name tezedge_node -v /tmp/volume/tezedge:/tmp/tezedge tezedge/tezedge:latest-frame-pointers-enabled --network mainnet
       # test the recorder
-      - DEBUGGER_URL="http://localhost:17742" cargo +nightly-2021-03-23 test -p tester --release -- wait --nocapture
-      - DEBUGGER_URL="http://localhost:17742" cargo +nightly-2021-03-23 test -p tester --release -- p2p_limit p2p_cursor p2p_types_filter --nocapture
+      - DEBUGGER_URL="http://localhost:17745" cargo +nightly-2021-03-23 test -p tester --release -- wait --nocapture
+      - DEBUGGER_URL="http://localhost:17745" cargo +nightly-2021-03-23 test -p tester --release -- p2p_limit p2p_cursor p2p_types_filter --nocapture
       # stop the node
       - docker stop tezedge_node
 
