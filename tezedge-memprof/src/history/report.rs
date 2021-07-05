@@ -1,5 +1,5 @@
 use std::{collections::{HashMap, BTreeMap}, ops::Deref, cmp::Ordering};
-use bpf_memprof::Hex64;
+use bpf_memprof_common::Hex64;
 use serde::ser::{self, SerializeSeq};
 use super::stack::{SymbolInfo, StackResolver};
 
@@ -111,7 +111,7 @@ impl FrameReportInner {
 
 pub struct FrameReport<R> {
     resolver: R,
-    pub(super) inner: FrameReportInner,
+    pub(crate) inner: FrameReportInner,
 }
 
 impl<R> FrameReport<R> {

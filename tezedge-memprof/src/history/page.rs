@@ -1,5 +1,5 @@
 use std::{fmt, hash::{Hash, Hasher}};
-use bpf_memprof::Hex64;
+use bpf_memprof_common::Hex64;
 use serde::{Serialize, ser};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -40,11 +40,23 @@ impl Page {
         Page { inner }
     }
 
+    pub fn pfn(&self) -> u32 {
+        self.inner & 0x0fffffff
+    }
+
     pub fn size_kib(&self) -> u64 {
         4u64 << (self.inner >> 28)
     }
 
     pub fn number(&self) -> u32 {
         1 << (self.inner >> 28)
+    }
+
+    pub fn order(&self) -> u8 {
+        (self.inner >> 28) as u8
+    }
+
+    pub fn set_order(&mut self, order: u8) {
+        self.inner = (self.inner & 0x0fffffff) + ((order as u32) << 28)
     }
 }

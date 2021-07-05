@@ -38,6 +38,6 @@ jemallocator = { version = "0.3.2", optional = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 bpf-sniffer-common = { path = "../bpf-sniffer-common", features = ["std"] }
 
-crypto = { tag = "v1.1.5", git = "https://github.com/simplestaking/tezedge" }
-storage = { tag = "v1.1.5", git = "htps://github.com/simplestaking/tezedge" }
-tezos_messages = { tag = "v1.1.5", git = "https://github.com/simplestaking/tezedge" }
+crypto = { tag = "v1.1.5", git = "https://github.com/tezedge/tezedge" }
+storage = { tag = "v1.1.5", git = "htps://github.com/tezedge/tezedge" }
+tezos_messages = { tag = "v1.1.5", git = "https://github.com/tezedge/tezedge" }

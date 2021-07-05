@@ -64,7 +64,7 @@ Two terminal sessions are needed. One for tezedge node, and another for the debu
 On the TezEdge terminal, clone the TezEdge repository, or change the directory into the repository if you have already done so.
 
 ```
-git clone https://github.com/simplestaking/tezedge.git
+git clone https://github.com/tezedge/tezedge.git
 cd tezedge
 ```
 
@@ -85,7 +85,7 @@ cargo build --release
 On the debugger's terminal, clone the `tezedge-debugger` repository
 
 ```
-git clone https://github.com/simplestaking/tezedge-debugger.git
+git clone https://github.com/tezedge/tezedge-debugger.git
 cd tezedge-debugger
 ```
 

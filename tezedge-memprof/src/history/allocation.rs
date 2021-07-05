@@ -1,12 +1,12 @@
 use std::{collections::HashMap, ops::Deref};
 use serde::Serialize;
-use bpf_memprof::{Hex32, Stack};
+use bpf_memprof_common::{Hex32, Stack};
 use super::{
     page::Page,
     report::FrameReport,
     stack::StackResolver,
     history::StackShort,
-    abstract_tracker::Tracker,
+    abstract_tracker::{Tracker, Reporter},
 };
 
 #[derive(Serialize, Hash, PartialEq, Eq, Clone)]
@@ -45,7 +45,7 @@ impl Usage {
         } else {
             if self.cache < page.number() {
                 self.cache = 0;
-                log::debug!("page {} was not marked as cache by mistake", page);
+                log::warn!("page {} was not marked as cache by mistake", page);
             } else {
                 self.cache -= page.number();
             }
@@ -57,13 +57,15 @@ impl Usage {
 pub struct PageState {
     stack_hash: StackHash,
     for_cache: bool,
+    order: u8,
 }
 
 impl PageState {
-    pub fn new(stack_hash: StackHash, for_cache: bool) -> Self {
+    pub fn new(stack_hash: StackHash, for_cache: bool, order: u8) -> Self {
         PageState {
             stack_hash,
             for_cache,
+            order,
         }
     }
 }
@@ -90,7 +92,7 @@ impl Group {
         // if `self.last_stack` contains state for some page
         // then `self.group` contains `usage` for the stack
         if let Some(state) = self.last_stack.get(&page) {
-            log::debug!("double alloc {}", page);
+            log::trace!("double alloc {}", page);
             if state.stack_hash.eq(&stack_hash) {
                 // double alloc in the same stack, do nothing
                 return;
@@ -111,7 +113,7 @@ impl Group {
             usage.increase(&page);
             self.group.insert(stack_hash.clone(), usage);
         }
-        self.last_stack.insert(page, PageState::new(stack_hash.clone(), for_cache));
+        self.last_stack.insert(page, PageState::new(stack_hash.clone(), for_cache, page.order()));
     }
 
     pub fn remove(&mut self, page: &Page) {
@@ -124,7 +126,7 @@ impl Group {
             }
             usage.decrease(page);
         } else {
-            log::debug!("double free, or free without alloc {}", page);
+            log::trace!("double free, or free without alloc {}", page);
         }
     }
 
@@ -134,12 +136,19 @@ impl Group {
         if let Some(state) = self.last_stack.get_mut(&page) {
             if state.for_cache != b {
                 let usage = self.group.get_mut(&state.stack_hash).unwrap();
+                let mut page = page;
+                page.set_order(state.order);
                 usage.cache(&page, b);
                 state.for_cache = b;
-
                 if !b {
                     usage.decrease(&page);
                     self.last_stack.remove(&page);
+                }
+            } else {
+                if b {
+                    log::warn!("seems the kernel marks as a cache the page already marked as a cache");
+                } else {
+                    log::warn!("seems the kernel marks as not a cache the page that was not marked as a cache");
                 }
             }
         }
@@ -173,7 +182,9 @@ impl Tracker for AllocationState {
     fn mark_page_cache(&mut self, page: Page, b: bool) {
         self.group.mark_cache(page, b);
     }
+}
 
+impl Reporter for AllocationState {
     fn short_report(&self) -> (u64, u64) {
         let (mut node, mut cache) = (0, 0);
         for usage in self.group.iter() {

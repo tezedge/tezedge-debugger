@@ -115,14 +115,14 @@ browser.
 #### Without docker-compose
 
 The application is distributed as a docker image
-`simplestakingcom/tezedge-memprof`. The image needs to have privileged
+`tezedge/tezedge-memprof`. The image needs to have privileged
 permissions. It also needs `/sys/kernel/debug` and `/proc` directories mapped
 from the host system. The application is serving http requests on port `17832`.
 
 For example:
 
 ```
-docker run --rm --privileged -it -p 17832:17832 -v /proc:/proc:rw -v /sys/kernel/debug:/sys/kernel/debug:rw simplestakingcom/tezedge-memprof:latest
+docker run --rm --privileged -it -p 17832:17832 -v /proc:/proc:rw -v /sys/kernel/debug:/sys/kernel/debug:rw tezedge/tezedge-memprof:latest
 ```
 
 In order to determine function names, the memory profiler needs access
@@ -132,7 +132,7 @@ and system shared libraries. The files to which the memory profiler has access
 to should be the same files that the Tezedge node is using. That is why
 the docker image
 
-`simplestakingcom/tezedge-memprof:latest` is inherited from the `simplestakingcom/tezedge:latest` image.
+`tezedge/tezedge-memprof:latest` is inherited from the `tezedge/tezedge:latest` image.
 
 However, if `tezedge` is updated, but the `tezedge-memprof` image is still old,
 it can lead to problems. To avoid such situations, `tezedge-memprof` image has
@@ -155,7 +155,7 @@ See `docker-compose.yml` and `memprof.sh` for details.
 The TezEdge node and the memory profiler should be running to do this test.
 Specify the URL where the memory profiler is running.
 
-`URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof -- compare`
+`URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof -- positive compare`
 
 ### HTTP API
 
@@ -336,7 +336,7 @@ Messages are always sorted from newest to oldest.
 
 First, you must clone this repo.
 ```bash
-git clone https://github.com/simplestaking/tezedge-debugger.git
+git clone https://github.com/tezedge/tezedge-debugger.git
 ```
 
 Then change into the cloned directory
@@ -430,7 +430,6 @@ Build memory profiler:
 
 ```
 cargo +nightly-2021-03-23 build -p bpf-memprof --release
-cargo +nightly-2021-03-23 build -p tezedge-memprof --release
 ```
 
 Build network recorder:
@@ -475,19 +474,19 @@ There might be multiple such sections.
 
 ### Run memory profiler
 
-In one terminal:
+If you run the TezEdge node in docker, set environment variable
+`TEZEDGE_NODE_NAME` to be equal the name of the docker container of TezEdge node.
+
+Run the memory profiler:
+
+```
+sudo TEZEDGE_NODE_NAME=<name of node container> ./target/none/release/bpf-memprof-user
+```
+
+or 
+
 ```
 sudo ./target/none/release/bpf-memprof-user
-```
-
-In another terminal:
-```
-sudo ./target/none/release/tezedge-memprof
-```
-
-Or in single terminal:
-```
-sudo ./target/none/release/bpf-memprof-user & sleep 0.5 && sudo ./target/none/release/tezedge-memprof
 ```
 
 ### Run network recorder

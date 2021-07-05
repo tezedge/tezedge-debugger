@@ -1,4 +1,4 @@
-// Copyright (c) SimpleStaking and Tezedge Contributors
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
 #![cfg_attr(feature = "kern", no_std, no_main, feature(lang_items))]
@@ -9,7 +9,7 @@ use ebpf_kern as ebpf;
 use ebpf_user as ebpf;
 
 #[cfg(feature = "kern")]
-ebpf::license!("GPL");
+ebpf::license!("Dual MIT/GPL");
 
 #[cfg(any(feature = "kern", feature = "user"))]
 #[derive(ebpf::BpfApp)]
@@ -20,7 +20,7 @@ pub struct App {
     pub lost_events: ebpf::HashMapRef<4, 4>,
     #[array_percpu(size = 1)]
     pub stack: ebpf::ArrayPerCpuRef<0x400>,
-    #[ringbuf(size = 0x2000000)]
+    #[ringbuf(size = 0x8000000)]
     pub event_queue: ebpf::RingBufferRef,
     #[prog("tracepoint/syscalls/sys_enter_execve")]
     pub execve: ebpf::ProgRef,
@@ -40,8 +40,8 @@ pub struct App {
 
 #[cfg(feature = "kern")]
 use {
-    bpf_memprof::{Pod, STACK_MAX_DEPTH},
-    bpf_memprof::{
+    bpf_memprof_common::{Pod, STACK_MAX_DEPTH},
+    bpf_memprof_common::{
         KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageFree,
         PageFreeBatched, RssStat, PercpuAlloc, PercpuFree, AddToPageCache, RemoveFromPageCache,
     },
@@ -338,20 +338,9 @@ impl App {
 }
 
 #[cfg(feature = "user")]
-fn main() {
-    use ebpf::{Skeleton, kind::{AppItemKindMut, AppItem}};
-    use std::{
-        fs,
-        io::{Error, BufReader, BufRead},
-        os::unix::{fs::PermissionsExt, net::UnixListener},
-        process,
-    };
-    use tracing::Level;
-    use passfd::FdPassingExt;
-
-    sudo::escalate_if_needed().expect("failed to obtain superuser permission");
-    ctrlc::set_handler(move || process::exit(0)).expect("failed to setup ctrl+c handler");
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+#[allow(dead_code)]
+fn accept_client() -> std::os::unix::net::UnixStream {
+    use std::{fs, os::unix::{fs::PermissionsExt, net::UnixListener}};
 
     let socket = "/tmp/bpf-memprof.sock";
     let _ = fs::remove_file(socket);
@@ -363,6 +352,16 @@ fn main() {
         .permissions();
     perms.set_mode(0o666);
     fs::set_permissions(socket, perms).expect("failed to set permission for socket");
+
+    let (stream, address) = listener.accept().expect("failed to accept connection");
+    log::info!("accept client: {:?}", address);
+    stream
+}
+
+#[cfg(feature = "user")]
+fn run_bpf() -> (ebpf::Skeleton<App>, i32) {
+    use std::io::Error;
+    use ebpf::{Skeleton, kind::{AppItemKindMut, AppItem}};
 
     static CODE: &[u8] = include_bytes!(concat!("../", env!("BPF_CODE")));
 
@@ -395,31 +394,83 @@ fn main() {
         _ => unreachable!(),
     };
 
-    let (stream, address) = listener.accept().expect("failed to accept connection");
-    log::info!("accept client: {:?}", address);
+    (skeleton, fd)
+}
 
+#[cfg(feature = "user")]
+fn main() {
+    use std::{time::Duration, io, sync::{Arc, atomic::{Ordering, AtomicBool}}};
+    use tracing::Level;
+    use ebpf::RingBufferRegistry;
+    use tezedge_memprof::{Consumer, StackResolver, server};
+    //use passfd::FdPassingExt;
+
+    sudo::escalate_if_needed().expect("failed to obtain superuser permission");
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+
+    // spawn a thread listening ctrl+c
+    let running = Arc::new(AtomicBool::new(true));
+    {
+        let running = running.clone();
+        ctrlc::set_handler(move || running.store(false, Ordering::Relaxed))
+            .expect("failed to setup ctrl+c handler");
+    }
+
+    // attack bpf module and acquire fd of event stream
+    let (skeleton, fd) = run_bpf();
+
+    /*let stream = accept_client();
     stream
         .send_fd(fd)
-        .expect("failed to send ring buffer access");
+        .expect("failed to send ring buffer access");*/
 
-    let stream = BufReader::new(stream);
-    for line in stream.lines() {
-        // handle line
-        match line {
-            Ok(line) => {
-                log::info!("received command: {}", line);
-                if line == "check" {
+    let cli = Consumer::default();
+    let aggregator = cli.reporter();
+
+    if std::env::args().find(|s| s == "--dump").is_some() {
+        aggregator.lock().unwrap().turn_on_dump();
+    }
+
+    // spawn a thread monitoring process map from `/proc/<pid>/maps` and loading symbol tables
+    let resolver = StackResolver::spawn(cli.pid());
+
+    // spawn a thread-pool serving http requests, using tokio
+    let server = server::run(cli.reporter(), resolver, cli.pid());
+
+    let mut rb = RingBufferRegistry::default();
+    let mut cli = cli;
+    rb.add_fd(fd, move |data| cli.arrive(data))
+        .map_err(|_| io::Error::last_os_error())
+        .expect("failed to setup ring buffer");
+
+    let mut overall_cnt = 0;
+    let mut old_cnt = 0;
+    while running.load(Ordering::Relaxed) {
+        match rb.poll(Duration::from_secs(1)) {
+            Ok(_) => {
+                overall_cnt += 1;
+                if overall_cnt & 0xffff == 0 {
                     let cnt = skeleton.app.lost_events.get(&0u32.to_ne_bytes())
                         .map(u32::from_le_bytes)
                         .unwrap_or(0);
-                    if cnt != 0 {
-                        log::warn!("lost events: {}", cnt);
+                    if cnt - old_cnt != 0 {
+                        log::warn!("lost events: {}", cnt - old_cnt);
+                        old_cnt = cnt;
                     } else {
-                        log::info!("check: ok");
+                        log::debug!("check: ok");
                     }
                 }
-            }
-            Err(error) => log::error!("{:?}", error),
+            },
+            Err(c) => {
+                if c != -4 {
+                    log::error!("code: {}, error: {}", c, io::Error::last_os_error());
+                    break;
+                }
+            },
         }
     }
+
+    aggregator.lock().unwrap().store_dump();
+    log::info!("stop server");
+    let _ = server;
 }

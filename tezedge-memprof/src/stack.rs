@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, RwLock, atomic::{AtomicU32, Ordering}}, 
     path::PathBuf,
 };
-use bpf_memprof::Hex32;
+use bpf_memprof_common::Hex32;
 use serde::Serialize;
 use super::{memory_map::ProcessMap, table::SymbolTable};
 

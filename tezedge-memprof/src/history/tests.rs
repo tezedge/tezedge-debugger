@@ -1,11 +1,11 @@
 use std::collections::HashSet;
-use bpf_memprof::{Stack, Hex64, Hex32};
-use super::{Page, AllocationState, History, EventLast, Tracker};
-use crate::StackResolver;
+use bpf_memprof_common::{Stack, Hex64, Hex32};
+use super::{Page, AllocationState, History, EventLast, Tracker, Reporter};
+use crate::{StackResolver, Aggregator};
 
 fn allocate_sequence<T, I, F>(history: T, pages: I, stack: F) -> T
 where
-    T: Tracker,
+    T: Tracker + Reporter,
     I: Iterator<Item = u64>,
     F: Fn(u64) -> u64,
 {
@@ -19,7 +19,7 @@ where
 
 fn deallocate_sequence<T, I>(history: T, pages: I) -> T
 where
-    T: Tracker,
+    T: Tracker + Reporter,
     I: Iterator<Item = u64>,
 {
     pages.fold(history, |mut h, i| {
@@ -31,7 +31,7 @@ where
 
 fn alloc<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let history = allocate_sequence(T::default(), 0..0x1000, |_| 1);
     let (value, cache) = history.short_report();
@@ -41,7 +41,7 @@ where
 
 fn alloc_free<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let history = allocate_sequence(T::default(), 0..0x1000, |_| 1);
     let history = deallocate_sequence(history, 0x600..0xa00);
@@ -52,7 +52,7 @@ where
 
 fn free_without_alloc<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let history = allocate_sequence(T::default(), 0..0x1000, |_| 1);
     let history = deallocate_sequence(history, 0xa00..0x1100);
@@ -63,7 +63,7 @@ where
 
 fn double_alloc<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let history = allocate_sequence(T::default(), 0..0x1000, |_| 1);
     let history = allocate_sequence(history, 0x100..0x1100, |_| 1);
@@ -74,7 +74,7 @@ where
 
 fn alloc_random<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let mut pages = HashSet::<u64>::new();
     let mut history = T::default();
@@ -93,7 +93,7 @@ where
 
 fn free_random<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let mut pages = HashSet::<u64>::new();
     let mut history = allocate_sequence(T::default(), 0..0x1000, |_| 1);
@@ -111,7 +111,7 @@ where
 
 fn alloc_free_random<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let mut pages = HashSet::<u64>::new();
     let mut history = T::default();
@@ -141,7 +141,7 @@ where
 
 fn alloc_cache_random<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let mut pages = HashSet::<u64>::new();
     let mut cache_pages = HashSet::<u64>::new();
@@ -166,7 +166,7 @@ where
 
 fn free_cache_random<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let mut pages = HashSet::<u64>::new();
     let mut cache_pages = HashSet::<u64>::new();
@@ -195,7 +195,7 @@ where
 
 fn alloc_free_cache_random<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let mut pages = HashSet::<u64>::new();
     let mut cache_pages = HashSet::<u64>::new();
@@ -232,7 +232,7 @@ where
 
 fn alloc_in_different_stacks<T>()
 where
-    T: Default + Tracker,
+    T: Default + Tracker + Reporter,
 {
     let history = allocate_sequence(T::default(), 0..0x1000, |i| (i * 7) % 0x100);
     let resolver = StackResolver::mock();
@@ -254,6 +254,11 @@ fn alloc_history() {
 }
 
 #[test]
+fn alloc_aggregator() {
+    alloc::<Aggregator>()
+}
+
+#[test]
 fn alloc_free_simple() {
     alloc_free::<AllocationState>()
 }
@@ -261,6 +266,11 @@ fn alloc_free_simple() {
 #[test]
 fn alloc_free_history() {
     alloc_free::<History<EventLast>>()
+}
+
+#[test]
+fn alloc_free_aggregator() {
+    alloc_free::<Aggregator>()
 }
 
 #[test]
@@ -274,6 +284,11 @@ fn free_without_alloc_history() {
 }
 
 #[test]
+fn free_without_alloc_aggregator() {
+    free_without_alloc::<Aggregator>()
+}
+
+#[test]
 fn double_alloc_simple() {
     double_alloc::<AllocationState>()
 }
@@ -281,6 +296,11 @@ fn double_alloc_simple() {
 #[test]
 fn double_alloc_history() {
     double_alloc::<History<EventLast>>()
+}
+
+#[test]
+fn double_alloc_aggregator() {
+    double_alloc::<Aggregator>()
 }
 
 #[test]
@@ -294,6 +314,11 @@ fn alloc_random_history() {
 }
 
 #[test]
+fn alloc_random_aggregator() {
+    alloc_random::<Aggregator>()
+}
+
+#[test]
 fn free_random_simple() {
     free_random::<AllocationState>()
 }
@@ -301,6 +326,11 @@ fn free_random_simple() {
 #[test]
 fn free_random_history() {
     free_random::<History<EventLast>>()
+}
+
+#[test]
+fn free_random_aggregator() {
+    free_random::<Aggregator>()
 }
 
 #[test]
@@ -314,6 +344,11 @@ fn alloc_free_random_history() {
 }
 
 #[test]
+fn alloc_free_random_aggregator() {
+    alloc_free_random::<Aggregator>()
+}
+
+#[test]
 fn alloc_cache_random_simple() {
     alloc_cache_random::<AllocationState>()
 }
@@ -321,6 +356,11 @@ fn alloc_cache_random_simple() {
 #[test]
 fn alloc_cache_random_history() {
     alloc_cache_random::<History<EventLast>>()
+}
+
+#[test]
+fn alloc_cache_random_aggregator() {
+    alloc_cache_random::<Aggregator>()
 }
 
 #[test]
@@ -334,6 +374,11 @@ fn free_cache_random_history() {
 }
 
 #[test]
+fn free_cache_random_aggregator() {
+    free_cache_random::<Aggregator>()
+}
+
+#[test]
 fn alloc_free_cache_random_simple() {
     alloc_free_cache_random::<AllocationState>()
 }
@@ -344,6 +389,11 @@ fn alloc_free_cache_random_history() {
 }
 
 #[test]
+fn alloc_free_cache_random_aggregator() {
+    alloc_free_cache_random::<Aggregator>()
+}
+
+#[test]
 fn alloc_in_different_stacks_simple() {
     alloc_in_different_stacks::<AllocationState>()
 }
@@ -351,4 +401,9 @@ fn alloc_in_different_stacks_simple() {
 #[test]
 fn alloc_in_different_stacks_history() {
     alloc_in_different_stacks::<History<EventLast>>()
+}
+
+#[test]
+fn alloc_in_different_stacks_aggregator() {
+    alloc_in_different_stacks::<Aggregator>()
 }
