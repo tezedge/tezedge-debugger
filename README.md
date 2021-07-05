@@ -22,7 +22,19 @@
     + [API](#api)
     + [Requirements](#requirements-1)
     + [How to run](#how-to-run-1)
-
+  * [Build from sources](#build-from-sources)
+    + [Prepare system dependencies](#prepare-system-dependencies)
+    + [Rust](#rust)
+    + [BPF linker](#bpf-linker-needed-only-for-memory-profiler)
+    + [Kernel sources](#kernel-sources-needed-only-for-network-recorder)
+    + [Build](#build)
+    + [Run tests](#run-tests)
+      - [Unit tests](#unit-tests)
+      - [Integration tests](#integration-tests)
+    + [Important note before run](#important-note-before-run)
+    + [Configure network recorder](#configure-network-recorder)
+    + [Run memory profiler](#run-memory-profiler)
+    + [Run network recorder](#run-network-recorder)
  
 
 ## Memory Profiler  
@@ -425,15 +437,15 @@ cargo +nightly-2020-12-31 build -p bpf-sniffer --release
 cargo +nightly-2021-03-23 build -p tezedge-recorder --release
 ```
 
-### How to run tests
+### Run tests
 
 #### Unit tests
 
 `cargo +nightly-2021-03-23 test -p tezedge-memprof -- history`
 
-#### Integration test
+#### Integration tests
 
-The TezEdge node and the memory profiler should be running to do this test.
+The TezEdge node and the memory profiler should be running to do this tests.
 Specify the URL where the memory profiler is running.
 
 `URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof -- positive compare`
