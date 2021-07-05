@@ -26,6 +26,7 @@ steps:
       - cargo +nightly-2021-03-23 build -p bpf-memprof --release
       - cargo +nightly-2021-03-23 build -p tezedge-memprof --tests --release
       # run tezedge-node in docker
+      - docker stop tezedge_node || true
       - TEZEDGE_NODE_NAME=tezedge_node ./target/none/release/bpf-memprof-user &
       - docker run --rm -d --name tezedge_node tezedge/tezedge:latest-frame-pointers-enabled --network mainnet
       # do tests
@@ -75,10 +76,10 @@ steps:
       # configure
       - rm config.toml && cp config-drone.toml config.toml
       # run recorder
+      - docker stop tezedge_node || true
       - ./target/none/release/bpf-sniffer & sleep 0.5 && ./target/none/release/tezedge-recorder &
       # run tezedge-node in docker
       - docker run --rm -d --name tezedge_node -v /tmp/volume/tezedge:/tmp/tezedge tezedge/tezedge:latest-frame-pointers-enabled --network mainnet
-      # test the recorder
       - DEBUGGER_URL="http://localhost:17745" cargo +nightly-2021-03-23 test -p tester --release -- wait --nocapture
       - DEBUGGER_URL="http://localhost:17745" cargo +nightly-2021-03-23 test -p tester --release -- p2p_limit p2p_cursor p2p_types_filter --nocapture
       # stop the node
