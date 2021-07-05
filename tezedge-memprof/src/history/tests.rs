@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::collections::HashSet;
 use bpf_memprof_common::{Stack, Hex64, Hex32};
 use super::{Page, AllocationState, History, EventLast, Tracker, Reporter};

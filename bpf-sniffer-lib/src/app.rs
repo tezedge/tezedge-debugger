@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use core::{slice, convert::TryFrom};
 use redbpf_probes::{kprobe::prelude::*, helpers};
 use bpf_sniffer_common::{DataTag, SocketId, EventId};

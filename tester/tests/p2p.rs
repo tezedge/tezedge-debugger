@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::{env, time::Duration};
 
 pub async fn get_p2p(params: &str) -> Result<serde_json::value::Value, serde_json::error::Error> {

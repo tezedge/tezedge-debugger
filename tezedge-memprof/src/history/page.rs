@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::{fmt, hash::{Hash, Hasher}};
 use bpf_memprof_common::Hex64;
 use serde::{Serialize, ser};

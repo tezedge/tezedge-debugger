@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::ops::Deref;
 use std::sync::{Arc, Mutex, atomic::{Ordering, AtomicU32}};
 use bpf_memprof_common::{EventKind, Event};

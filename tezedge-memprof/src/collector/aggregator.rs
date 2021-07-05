@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::{sync::Arc, collections::HashMap};
 use serde::{Serialize, Deserialize};
 use bpf_memprof_common::{Hex64, Hex32, Stack};
