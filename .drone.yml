@@ -14,7 +14,7 @@ steps:
       - name: docker_sock
         path: /var/run/docker.sock
     commands:
-      - apt-get install -y pkg-config libssl-dev curl
+      - apt-get install -y pkg-config
       - rustup install nightly-2021-03-23
       # docker client
       - curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.0.tgz
@@ -40,6 +40,57 @@ volumes:
   - name: proc-dir
     host:
       path: /proc
+  - name: docker_sock
+    host:
+      path: /var/run/docker.sock
+
+---
+
+kind: pipeline
+type: docker
+name: test-recorder
+
+steps:
+  - name: test-recorder
+    image: tezedge/tezedge-bpf-builder:latest
+    privileged: true
+    volumes:
+      - name: tezedge-shared-data
+        path: /tmp/volume
+      - name: kernel-debug
+        path: /sys/kernel/debug
+      - name: docker_sock
+        path: /var/run/docker.sock
+    commands:
+      - apt-get install -y pkg-config clang
+      - rustup install nightly-2021-03-23
+      # docker client
+      - curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.0.tgz
+      - tar xzf docker-20.10.0.tgz --strip 1 -C /usr/local/bin docker/docker
+      - rm docker-20.10.0.tgz
+      # build recorder and tester
+      - cargo +nightly-2020-12-31 build -p bpf-sniffer --release
+      - cargo +nightly-2021-03-23 build -p tester --tests --release
+      - cargo +nightly-2021-03-23 build -p tezedge-recorder --release
+      # configure
+      - rm config.toml && cp config-drone.toml config.toml
+      # run recorder
+      - ./target/none/release/bpf-sniffer & sleep 0.5 && ./target/none/release/tezedge-recorder &
+      # run tezedge-node in docker
+      - docker run --rm -d --name tezedge_node -v /tmp/volume/tezedge:/tmp/tezedge tezedge/tezedge:latest-frame-pointers-enabled --network mainnet
+      # test the recorder
+      - DEBUGGER_URL="http://localhost:17742" cargo +nightly-2021-03-23 test -p tester --release -- wait --nocapture
+      - DEBUGGER_URL="http://localhost:17742" cargo +nightly-2021-03-23 test -p tester --release -- p2p_limit p2p_cursor p2p_types_filter --nocapture
+      # stop the node
+      - docker stop tezedge_node
+
+volumes:
+  - name: tezedge-shared-data
+    host:
+      path: /tmp/volume
+  - name: kernel-debug
+    host:
+      path: /sys/kernel/debug
   - name: docker_sock
     host:
       path: /var/run/docker.sock
@@ -76,6 +127,7 @@ image_pull_secrets:
 
 depends_on:
   - test-memprof
+  - test-recorder
 
 trigger:
   branch: develop
@@ -115,6 +167,7 @@ image_pull_secrets:
 
 depends_on:
   - test-memprof
+  - test-recorder
 
 trigger:
   ref: refs/tags/**
