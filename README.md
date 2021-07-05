@@ -480,7 +480,7 @@ If you run the TezEdge node in docker, set environment variable
 Run the memory profiler:
 
 ```
-TEZEDGE_NODE_NAME=... sudo ./target/none/release/bpf-memprof-user
+sudo TEZEDGE_NODE_NAME=<name of node container> ./target/none/release/bpf-memprof-user
 ```
 
 or 
