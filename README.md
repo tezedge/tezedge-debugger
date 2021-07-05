@@ -67,7 +67,7 @@ so that the profiler has call-stack virtual addresses.
 
 #### 2. TezEdge memprof binary
 
-The second part is the `tezedge-memprof` binary.
+The second part is the `tezedge-memprof` library.
 It performs the following tasks:
 
 * Connects to the socket and receives a stream of kernel events.

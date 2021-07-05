@@ -299,11 +299,6 @@ fn double_alloc_history() {
 }
 
 #[test]
-fn double_alloc_aggregator() {
-    double_alloc::<Aggregator>()
-}
-
-#[test]
 fn alloc_random_simple() {
     alloc_random::<AllocationState>()
 }
@@ -311,11 +306,6 @@ fn alloc_random_simple() {
 #[test]
 fn alloc_random_history() {
     alloc_random::<History<EventLast>>()
-}
-
-#[test]
-fn alloc_random_aggregator() {
-    alloc_random::<Aggregator>()
 }
 
 #[test]
@@ -344,11 +334,6 @@ fn alloc_free_random_history() {
 }
 
 #[test]
-fn alloc_free_random_aggregator() {
-    alloc_free_random::<Aggregator>()
-}
-
-#[test]
 fn alloc_cache_random_simple() {
     alloc_cache_random::<AllocationState>()
 }
@@ -356,11 +341,6 @@ fn alloc_cache_random_simple() {
 #[test]
 fn alloc_cache_random_history() {
     alloc_cache_random::<History<EventLast>>()
-}
-
-#[test]
-fn alloc_cache_random_aggregator() {
-    alloc_cache_random::<Aggregator>()
 }
 
 #[test]

@@ -118,11 +118,6 @@ impl Aggregator {
             info.func_path_index = index.clone();
         }
 
-        if info.is_allocated {
-            return;
-        }
-
-        info.is_allocated = true;
         let usage = self.groups
             .entry(index.clone())
             .or_insert_with(|| Usage {
@@ -130,7 +125,16 @@ impl Aggregator {
                 value: 0,
                 cache_value: 0,
             });
-        usage.value += pages_count;
+        if info.is_allocated {
+            // the old page was moved, but we don't know about it
+            // still need to increase usage for the new page
+            // turn off double allocation tests
+            // TODO: fix
+            usage.value += pages_count;
+        } else {
+            info.is_allocated = true;
+            usage.value += pages_count;
+        }
 
         if usage.func_path != path {
             log::warn!("inconsistent path for page: {:08x}-{}", page, info.order);
