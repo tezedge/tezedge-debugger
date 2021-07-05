@@ -1,6 +1,7 @@
 use std::{sync::Arc, collections::HashMap};
 use serde::{Serialize, Deserialize};
-use bpf_memprof_common::{Hex64, Stack};
+use bpf_memprof_common::{Hex64, Hex32, Stack};
+use crate::{Tracker, Page};
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct FuncPath(Arc<Vec<Hex64>>);
@@ -117,6 +118,10 @@ impl Aggregator {
             info.func_path_index = index.clone();
         }
 
+        if info.is_allocated {
+            return;
+        }
+
         info.is_allocated = true;
         let usage = self.groups
             .entry(index.clone())
@@ -203,5 +208,21 @@ impl Aggregator {
             (usage.cache_value as u64) * 4,
             usage.func_path.0.as_ref().as_ref(),
         ))
+    }
+}
+
+impl Tracker for Aggregator {
+    fn track_alloc(&mut self, page: Page, stack: &Stack, flags: Hex32, pid: u32) {
+        let _ = (flags, pid);
+        Self::track_alloc(self, page.pfn(), page.order(), stack)
+    }
+
+    fn track_free(&mut self, page: Page, pid: u32) {
+        let _ = pid;
+        Self::track_free(self, page.pfn())
+    }
+
+    fn mark_page_cache(&mut self, page: Page, b: bool) {
+        Self::mark_cache(self, page.pfn(), b)
     }
 }

@@ -40,6 +40,10 @@ impl Page {
         Page { inner }
     }
 
+    pub fn pfn(&self) -> u32 {
+        self.inner & 0x0fffffff
+    }
+
     pub fn size_kib(&self) -> u64 {
         4u64 << (self.inner >> 28)
     }

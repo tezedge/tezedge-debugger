@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use bpf_memprof_common::{Stack, Hex64, Hex32};
 use super::{Page, AllocationState, History, EventLast, Tracker, Reporter};
-use crate::StackResolver;
+use crate::{StackResolver, Aggregator};
 
 fn allocate_sequence<T, I, F>(history: T, pages: I, stack: F) -> T
 where
@@ -254,6 +254,11 @@ fn alloc_history() {
 }
 
 #[test]
+fn alloc_aggregator() {
+    alloc::<Aggregator>()
+}
+
+#[test]
 fn alloc_free_simple() {
     alloc_free::<AllocationState>()
 }
@@ -261,6 +266,11 @@ fn alloc_free_simple() {
 #[test]
 fn alloc_free_history() {
     alloc_free::<History<EventLast>>()
+}
+
+#[test]
+fn alloc_free_aggregator() {
+    alloc_free::<Aggregator>()
 }
 
 #[test]
@@ -274,6 +284,11 @@ fn free_without_alloc_history() {
 }
 
 #[test]
+fn free_without_alloc_aggregator() {
+    free_without_alloc::<Aggregator>()
+}
+
+#[test]
 fn double_alloc_simple() {
     double_alloc::<AllocationState>()
 }
@@ -281,6 +296,11 @@ fn double_alloc_simple() {
 #[test]
 fn double_alloc_history() {
     double_alloc::<History<EventLast>>()
+}
+
+#[test]
+fn double_alloc_aggregator() {
+    double_alloc::<Aggregator>()
 }
 
 #[test]
@@ -294,6 +314,11 @@ fn alloc_random_history() {
 }
 
 #[test]
+fn alloc_random_aggregator() {
+    alloc_random::<Aggregator>()
+}
+
+#[test]
 fn free_random_simple() {
     free_random::<AllocationState>()
 }
@@ -301,6 +326,11 @@ fn free_random_simple() {
 #[test]
 fn free_random_history() {
     free_random::<History<EventLast>>()
+}
+
+#[test]
+fn free_random_aggregator() {
+    free_random::<Aggregator>()
 }
 
 #[test]
@@ -314,6 +344,11 @@ fn alloc_free_random_history() {
 }
 
 #[test]
+fn alloc_free_random_aggregator() {
+    alloc_free_random::<Aggregator>()
+}
+
+#[test]
 fn alloc_cache_random_simple() {
     alloc_cache_random::<AllocationState>()
 }
@@ -321,6 +356,11 @@ fn alloc_cache_random_simple() {
 #[test]
 fn alloc_cache_random_history() {
     alloc_cache_random::<History<EventLast>>()
+}
+
+#[test]
+fn alloc_cache_random_aggregator() {
+    alloc_cache_random::<Aggregator>()
 }
 
 #[test]
@@ -334,6 +374,11 @@ fn free_cache_random_history() {
 }
 
 #[test]
+fn free_cache_random_aggregator() {
+    free_cache_random::<Aggregator>()
+}
+
+#[test]
 fn alloc_free_cache_random_simple() {
     alloc_free_cache_random::<AllocationState>()
 }
@@ -344,6 +389,11 @@ fn alloc_free_cache_random_history() {
 }
 
 #[test]
+fn alloc_free_cache_random_aggregator() {
+    alloc_free_cache_random::<Aggregator>()
+}
+
+#[test]
 fn alloc_in_different_stacks_simple() {
     alloc_in_different_stacks::<AllocationState>()
 }
@@ -351,4 +401,9 @@ fn alloc_in_different_stacks_simple() {
 #[test]
 fn alloc_in_different_stacks_history() {
     alloc_in_different_stacks::<History<EventLast>>()
+}
+
+#[test]
+fn alloc_in_different_stacks_aggregator() {
+    alloc_in_different_stacks::<Aggregator>()
 }
