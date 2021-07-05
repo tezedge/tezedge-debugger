@@ -3,14 +3,7 @@ type: docker
 name: test-memprof
 
 steps:
-  - name: unit-tests
-    image: tezedge/tezedge-bpf-builder:latest
-    commands:
-      - apt-get install -y pkg-config libssl-dev
-      - cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
-      - cargo test --package tezedge-memprof --lib -- history::history
-      - cargo test --package tezedge-memprof --lib -- history::tests
-  - name: memprof-compare-test
+  - name: test-memprof
     image: tezedge/tezedge-bpf-builder:latest
     privileged: true
     volumes:
@@ -22,20 +15,23 @@ steps:
         path: /var/run/docker.sock
     commands:
       - apt-get install -y pkg-config libssl-dev curl
+      - rustup install nightly-2021-03-23
       # docker client
       - curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.0.tgz
       - tar xzf docker-20.10.0.tgz --strip 1 -C /usr/local/bin docker/docker
       - rm docker-20.10.0.tgz
-      # build and run memprof
-      - cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
-      - cargo build -p bpf-memprof --release && cargo build -p tezedge-memprof --tests --release
-      - ./target/none/release/bpf-memprof-user &
+      # build memprof
+      - cargo +nightly-2021-03-23 install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
+      - cargo +nightly-2021-03-23 test --package tezedge-memprof --lib --release -- history::history history::tests
+      - cargo +nightly-2021-03-23 build -p bpf-memprof --release
+      - cargo +nightly-2021-03-23 build -p tezedge-memprof --tests --release
       # run tezedge-node in docker
-      - export NODE_CONTAINER=$(docker run --rm -d tezedge/tezedge:latest-frame-pointers-enabled --network mainnet)
+      - TEZEDGE_NODE_NAME=tezedge_node ./target/none/release/bpf-memprof-user &
+      - docker run --rm -d --name tezedge_node tezedge/tezedge:latest-frame-pointers-enabled --network mainnet
       # do tests
-      - URL=http://localhost:17832 cargo test -p tezedge-memprof --release -- positive compare --nocapture
+      - URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof --release -- positive compare --nocapture
       # stop the node
-      - docker stop $NODE_CONTAINER
+      - docker stop tezedge_node
 
 volumes:
   - name: kernel-debug
@@ -70,8 +66,6 @@ steps:
       repo: tezedge/tezedge-memprof
       tag: latest
       dockerfile: Dockerfile.memprof
-      build_args:
-        - TEZEDGE_IMAGE=tezedge/tezedge:latest-frame-pointers-enabled
       username:
         from_secret: docker_hub_username
       password:
@@ -111,8 +105,6 @@ steps:
       repo: tezedge/tezedge-memprof
       tag: latest-release
       dockerfile: Dockerfile.memprof
-      build_args:
-        - TEZEDGE_IMAGE=tezedge/tezedge:latest-frame-pointers-enabled-release
       username:
         from_secret: docker_hub_username
       password:
