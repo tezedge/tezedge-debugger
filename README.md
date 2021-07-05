@@ -144,19 +144,6 @@ name and map `/var/run/docker.sock` file from host to enable such behavior.
 
 See `docker-compose.yml` and `memprof.sh` for details.
 
-### How to run tests
-
-#### Unit tests
-
-`cargo +nightly-2021-03-23 test -p tezedge-memprof -- history`
-
-#### Integration test
-
-The TezEdge node and the memory profiler should be running to do this test.
-Specify the URL where the memory profiler is running.
-
-`URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof -- positive compare`
-
 ### HTTP API
 
 ### `/v1/tree`
@@ -437,6 +424,19 @@ Build network recorder:
 cargo +nightly-2020-12-31 build -p bpf-sniffer --release
 cargo +nightly-2021-03-23 build -p tezedge-recorder --release
 ```
+
+### How to run tests
+
+#### Unit tests
+
+`cargo +nightly-2021-03-23 test -p tezedge-memprof -- history`
+
+#### Integration test
+
+The TezEdge node and the memory profiler should be running to do this test.
+Specify the URL where the memory profiler is running.
+
+`URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof -- positive compare`
 
 ### Important note before run
 
