@@ -1,0 +1,343 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Tezedge Network Recorder",
+        "description": "Records p2p messages of sent and received by the node. Can work with multiple nodes simultaneously.",
+        "contact": {
+            "name": "API Support",
+            "url": "https://github.com/tezedge/tezedge-debugger",
+            "email": "vladislav.melnik@viablesystems.io"
+        },
+        "license": {
+            "name": "MIT License",
+            "url": "https://github.com/tezedge/tezedge-debugger/blob/master/LICENSE"
+        },
+        "version": "1.6.0"
+    },
+    "servers": [
+        {
+            "url": "http://develop.dev.tezedge.com:{port}",
+            "description": "Network Recorder",
+            "variables": {
+                "port": {
+                    "enum": [
+                        "17732"
+                    ],
+                    "default": "17732"
+                }
+            }
+        },
+        {
+            "url": "http://master.dev.tezedge.com:{port}",
+            "description": "Network Recorder",
+            "variables": {
+                "port": {
+                    "enum": [
+                        "17732"
+                    ],
+                    "default": "17732"
+                }
+            }
+        }
+    ],
+    "paths": {
+        "/v2/version": {
+            "get": {
+                "description": "Get git commit hash",
+                "responses": {
+                    "200": {
+                        "description": "Git commit hash",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/log": {
+            "get": {
+                "description": "Get a list of log records emitted by the node",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Maximal number of records to fetch",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "Offset in the database",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "log_level",
+                        "in": "query",
+                        "description": "The log level filter",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "The minimal timestamp",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "description": "The maximal timestamp",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "A log record",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "level": {
+                                            "type": "string"
+                                        },
+                                        "timestamp": {
+                                            "type": "integer"
+                                        },
+                                        "section": {
+                                            "type": "string"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/p2p": {
+            "get": {
+                "description": "Get a list of p2p messages sent and received by the node",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Maximal number of message to fetch",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "Offset in the database",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "remote_addr",
+                        "in": "query",
+                        "description": "Fetch the messages sent to received from the particular node at the address",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "source_type",
+                        "in": "query",
+                        "description": "Fetch only messages originating from 'local' node or from 'remote' node",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "incoming",
+                        "in": "query",
+                        "description": "Filter to fetch only incoming or outgoing messages",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "types",
+                        "in": "query",
+                        "description": "Comma separated types of messages to fetch",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "The minimal timestamp",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "description": "The maximal timestamp",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The list",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/p2pBrief"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/p2p/{id}": {
+            "get": {
+                "description": "Get a full p2p message by its id",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "An id of the message",
+                        "required": true,
+                        "schema": {
+                          "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "node_name",
+                        "in": "query",
+                        "description": "A port where the node which sent or received the p2p message is running",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "A full p2p message",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/p2p"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "p2p": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "message": {
+                        "type": "object"
+                    },
+                    "original_bytes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "decrypted_bytes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "p2pBrief": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "timestamp": {
+                        "type": "integer"
+                    },
+                    "remote_addr": {
+                        "type": "string"
+                    },
+                    "source_type": {
+                        "type": "string"
+                    },
+                    "incoming": {
+                        "type": "boolean"
+                    },
+                    "category": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "type": "string"
+                    },
+                    "message_preview": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "timestamp",
+                    "remote_addr",
+                    "source_type",
+                    "incoming",
+                    "category",
+                    "kind",
+                    "message_preview"
+                ]
+            }
+        }
+    }
+}
