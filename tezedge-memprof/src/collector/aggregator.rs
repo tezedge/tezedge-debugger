@@ -233,15 +233,15 @@ impl Aggregator {
 impl Tracker for Aggregator {
     fn track_alloc(&mut self, page: Page, stack: &Stack, flags: Hex32, pid: u32) {
         let _ = (flags, pid);
-        Self::track_alloc(self, page.pfn(), page.order(), stack)
+        Self::track_alloc(self, page.pfn(), page.order(), stack, pid)
     }
 
     fn track_free(&mut self, page: Page, pid: u32) {
         let _ = pid;
-        Self::track_free(self, page.pfn())
+        Self::track_free(self, page.pfn(), page.order(), pid)
     }
 
     fn mark_page_cache(&mut self, page: Page, b: bool) {
-        Self::mark_cache(self, page.pfn(), b)
+        Self::mark_cache(self, page.pfn(), b, 0)
     }
 }
