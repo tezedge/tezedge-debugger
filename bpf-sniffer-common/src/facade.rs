@@ -170,10 +170,10 @@ impl RingBufferData for SnifferEvent {
             DataTag::Listen => Ok(SnifferEvent::Listen { id: descriptor.id }),
             DataTag::Accept => Ok(SnifferEvent::Accept {
                 id: descriptor.id.clone(),
-                listen_on_fd: u32::from_le_bytes(TryFrom::try_from(&data[0..4]).unwrap()),
+                // TODO: remove it
+                listen_on_fd: 0,
                 // should not fail, already checked inside bpf code
-                // but happens, probably due to old kernel (5.8) has bad sync
-                address: parse_socket_address(&data[4..])
+                address: parse_socket_address(data)
                     .map_err(|()| SnifferError::AcceptBadAddress { id: descriptor.id })?,
             }),
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),

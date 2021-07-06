@@ -42,7 +42,7 @@ services:
 
   tezedge-node:
     image: tezedge/tezedge:${TAG:-v1.6.0}-frame-pointers-enabled
-    command: ["--network", "mainnet", "--tezos-context-storage", "irmin", "--peer-thresh-low", "30", "--peer-thresh-high", "45"]
+    command: ["--network", "mainnet", "--log", "terminal", "file", "--log-file", "/tmp/tezedge/tezedge.log", "--tezos-context-storage", "irmin", "--peer-thresh-low", "30", "--peer-thresh-high", "45"]
     depends_on:
       - "memprof"
     init: true
@@ -65,11 +65,8 @@ services:
   explorer:
     image: tezedge/tezedge-explorer:${TAG:-v1.6.0}
     environment:
-      - SANDBOX=http://localhost:3030
-      - DEBUGGER=http://localhost:17732
-      - MEMORYPROFILER=http://localhost:17832
       # need a better way to provide such information
-      - API=[{"id":"rust","name":"rust.localhost","http":"http://localhost:18732","ws":"ws://localhost:4927","monitoring":"http://localhost:38732/resources/tezedge","p2p_port":9732,"features":["MONITORING","RESOURCES","MEMPOOL_ACTION","STORAGE_BLOCK","NETWORK_ACTION","LOGS_ACTION"]},{"id":"ocaml","name":"ocaml.localhost","http":"http://localhost:18733","ws":false,"monitoring":"http://localhost:38732/resources/ocaml","p2p_port":9733,"features":["MONITORING","RESOURCES","MEMPOOL_ACTION","NETWORK_ACTION","LOGS_ACTION"]}]
+      - API=[{"id":"rust","name":"rust.localhost","http":"http://localhost:18732","p2p_port":9732,"features":[{"name":"ws","url":"ws://localhost:4927"},{"name":"debugger","url":"http://localhost:17732"},{"name":"resources/memory","memoryProfilerUrl":"http://develop.dev.tezedge.com:17832"},{"name":"commit","id":""},{"name":"monitoring"},{"name":"resources/system","monitoringUrl":"http://localhost:38732/resources/tezedge"},{"name":"resources/storage"},{"name":"mempool"},{"name":"storage"},{"name":"network"},{"name":"logs"}]}]
     ports:
       - "80:80"
 

@@ -227,15 +227,15 @@ impl<App: AppIo> AppProbes for App {
                 if regs.is_syscall_success() {
                     let fd = regs.rc() as u32;
 
-                    let mut tmp = [0xff; Address::RAW_SIZE + 4];
+                    let mut tmp = [0xff; Address::RAW_SIZE];
                     unsafe {
                         gen::bpf_probe_read_user(
-                            tmp[4..].as_mut_ptr() as _,
+                            tmp.as_mut_ptr() as _,
                             Address::RAW_SIZE.min(address.len()) as u32,
                             address.as_ptr() as _,
                         )
                     };
-                    tmp[0..4].clone_from_slice(listen_on_fd.to_le_bytes().as_ref());
+                    let _ = listen_on_fd;
     
                     let id = EventId::new(SocketId { pid, fd }, ts0, ts);
                     if let Ok(_) = Address::try_from(tmp.as_ref()) {
