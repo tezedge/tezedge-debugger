@@ -446,9 +446,12 @@ cargo +nightly-2021-03-23 build -p tezedge-recorder --release
 #### Integration tests
 
 The TezEdge node and the memory profiler should be running to do this tests.
-Specify the URL where the memory profiler is running.
 
 `URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof -- positive compare`
+
+The TezEdge node and the network recorder should be running to do this tests.
+
+`DEBUGGER_URL=http://localhost:17742 cargo +nightly-2021-03-23 test -p tester -- p2p_limit p2p_cursor p2p_types_filter`
 
 ### Important note before run
 

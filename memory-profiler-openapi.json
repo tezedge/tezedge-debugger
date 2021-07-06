@@ -1,0 +1,129 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Tezedge Memory Profiler",
+        "description": "Monitor memory usage of each machine code function of light-node binary",
+        "contact": {
+            "name": "API Support",
+            "url": "https://github.com/tezedge/tezedge-debugger",
+            "email": "vladislav.melnik@viablesystems.io"
+        },
+        "license": {
+            "name": "MIT License",
+            "url": "https://github.com/tezedge/tezedge-debugger/blob/master/LICENSE"
+        },
+        "version": "1.6.0"
+    },
+    "servers": [
+        {
+            "url": "http://develop.dev.tezedge.com:{port}",
+            "description": "Memory profiler",
+            "variables": {
+                "port": {
+                    "enum": [
+                        "17832"
+                    ],
+                    "default": "17832"
+                }
+            }
+        },
+        {
+            "url": "http://master.dev.tezedge.com:{port}",
+            "description": "Memory profiler",
+            "variables": {
+                "port": {
+                    "enum": [
+                        "17832"
+                    ],
+                    "default": "17832"
+                }
+            }
+        }
+    ],
+    "paths": {
+        "/v1/tree": {
+            "get": {
+                "description": "The tree of light-node functions in machine code",
+                "parameters": [
+                    {
+                        "name": "threshold",
+                        "in": "query",
+                        "description": "Threshold memory usage to include the tree branch into response",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    },
+                    {
+                        "name": "reverse",
+                        "in": "query",
+                        "description": "Reverse the tree",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The memory usage in each light-node function in machine code",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/tree"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "tree": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "offset": {
+                                        "type": "string"
+                                    },
+                                    "executable": {
+                                        "type": "string"
+                                    },
+                                    "functionName": {
+                                        "type": "string"
+                                    },
+                                    "functionCategory": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
+                    },
+                    "value": {
+                        "type": "integer"
+                    },
+                    "cacheValue": {
+                        "type": "integer"
+                    },
+                    "frames": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/tree"
+                        }
+                    }
+                },
+                "required": ["value", "cacheValue"]
+            }
+        }
+    }
+}

@@ -1,3 +1,5 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
 
 async fn get(path: &str, params: &str) -> serde_json::Value {
     use std::env;

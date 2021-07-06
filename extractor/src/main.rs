@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 #[tokio::main]
 async fn main() {
     let types = "connection_message,metadata,ack_message,disconnect,advertise,swap_request,\

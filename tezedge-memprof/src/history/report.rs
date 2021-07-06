@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::{collections::{HashMap, BTreeMap}, ops::Deref, cmp::Ordering};
 use bpf_memprof_common::Hex64;
 use serde::ser::{self, SerializeSeq};

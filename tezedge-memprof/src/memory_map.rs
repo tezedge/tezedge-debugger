@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::{ops::Range, num::Wrapping, str::FromStr, io::{self, Read}, fs::File, path::PathBuf};
 
 #[derive(Default, Clone, PartialEq, Eq)]

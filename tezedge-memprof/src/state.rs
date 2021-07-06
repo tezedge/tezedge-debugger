@@ -1,3 +1,6 @@
+// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// SPDX-License-Identifier: MIT
+
 use std::{collections::HashMap, fmt, sync::{Arc, atomic::{Ordering, AtomicU64}}, time::Duration};
 use bpf_memprof_common::EventKind;
 
