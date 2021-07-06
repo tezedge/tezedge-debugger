@@ -157,7 +157,9 @@ steps:
     image: plugins/docker
     settings:
       repo: tezedge/tezedge-memprof
-      tag: latest-release
+      tags: 
+        - ${DRONE_TAG}
+        - latest-release
       dockerfile: Dockerfile.memprof
       username:
         from_secret: docker_hub_username
