@@ -17,7 +17,8 @@ pub async fn get_p2p(params: &str) -> Result<serde_json::value::Value, serde_jso
 async fn wait() {
     let mut t = 0u8;
 
-    let timeout = 12u8;
+    // timeout * duration = 4 minutes
+    let timeout = 24u8;
     let duration = Duration::from_secs(10);
 
     while t < timeout {
