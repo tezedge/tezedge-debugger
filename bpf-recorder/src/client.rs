@@ -52,7 +52,9 @@ pub enum SnifferEvent {
 pub enum SnifferError {
     SliceTooShort(usize),
     Data { id: EventId, code: SnifferErrorCode, net: bool, incoming: bool },
-    AcceptBadAddress { id: EventId },
+    BindBadAddress { id: EventId, code: SnifferErrorCode },
+    ConnectBadAddress { id: EventId, code: SnifferErrorCode },
+    AcceptBadAddress { id: EventId, code: SnifferErrorCode },
     Debug { id: EventId, code: SnifferErrorCode },
 }
 
@@ -81,10 +83,11 @@ impl SnifferError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum SnifferErrorCode {
     SliceTooShort(usize, usize),
     Unknown(i32),
+    UnknownAddressFamily(u16),
     Fault,
 }
 
@@ -92,19 +95,20 @@ impl RingBufferData for SnifferEvent {
     type Error = SnifferError;
 
     fn from_rb_slice(value: &[u8]) -> Result<Self, Self::Error> {
-        fn parse_socket_address(b: &[u8]) -> Result<SocketAddr, ()> {
-            let address_family = u16::from_le_bytes(TryFrom::try_from(&b[0..2]).map_err(|_| ())?);
-            let port = u16::from_be_bytes(TryFrom::try_from(&b[2..4]).map_err(|_| ())?);
+        fn parse_socket_address(b: &[u8]) -> Result<SocketAddr, SnifferErrorCode> {
+            let e = SnifferErrorCode::SliceTooShort(28, b.len());
+            let address_family = u16::from_ne_bytes(TryFrom::try_from(&b[0..2]).map_err(|_| e)?);
+            let port = u16::from_be_bytes(TryFrom::try_from(&b[2..4]).map_err(|_| e)?);
             match address_family {
                 2 => {
-                    let ip = <[u8; 4]>::try_from(&b[4..8]).map_err(|_| ())?;
+                    let ip = <[u8; 4]>::try_from(&b[4..8]).map_err(|_| e)?;
                     Ok(SocketAddr::new(IpAddr::V4(ip.into()), port))
                 },
                 10 => {
-                    let ip = <[u8; 16]>::try_from(&b[8..24]).map_err(|_| ())?;
+                    let ip = <[u8; 16]>::try_from(&b[8..24]).map_err(|_| e)?;
                     Ok(SocketAddr::new(IpAddr::V6(ip.into()), port))
                 },
-                _ => Err(()),
+                u => Err(SnifferErrorCode::UnknownAddressFamily(u)),
             }
         }
 
@@ -156,22 +160,22 @@ impl RingBufferData for SnifferEvent {
                 Ok(SnifferEvent::Connect {
                     id: descriptor.id.clone(),
                     address: parse_socket_address(data)
-                        .map_err(|()| SnifferError::AcceptBadAddress { id: descriptor.id })?,
+                        .map_err(|code| SnifferError::ConnectBadAddress { id: descriptor.id, code })?,
                 })
             },
             DataTag::Bind => {
                 Ok(SnifferEvent::Bind {
                     id: descriptor.id.clone(),
                     address: parse_socket_address(data)
-                        .map_err(|()| SnifferError::AcceptBadAddress { id: descriptor.id })?,
+                        .map_err(|code| SnifferError::BindBadAddress { id: descriptor.id, code })?,
                 })
             },
             DataTag::Listen => Ok(SnifferEvent::Listen { id: descriptor.id }),
             DataTag::Accept => Ok(SnifferEvent::Accept {
                 id: descriptor.id.clone(),
-                listen_on_fd: u32::from_le_bytes(TryFrom::try_from(&data[0..4]).unwrap()),
+                listen_on_fd: 0,
                 address: parse_socket_address(data)
-                    .map_err(|()| SnifferError::AcceptBadAddress { id: descriptor.id })?,
+                    .map_err(|code| SnifferError::AcceptBadAddress { id: descriptor.id, code })?,
             }),
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
             DataTag::GetFd => Ok(SnifferEvent::GetFd { id: descriptor.id }),

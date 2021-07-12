@@ -137,7 +137,7 @@ impl App {
     }
 
     fn reg_connection(&mut self, socket_id: SocketId, incoming: bool) -> Result<(), i32> {
-        self.forget_connection(socket_id)?;
+        let _ = self.forget_connection(socket_id);
         let v = if incoming { 2u32 } else { 1u32 };
         self.connections.insert(socket_id.to_ne_bytes(), v.to_ne_bytes())
     }
@@ -439,7 +439,7 @@ fn main() {
     for line in stream.lines() {
         // handle line
         match line {
-            Ok(line) => match Command::from_str(&line) {
+            Ok(line) => match { log::info!("command: {}", line); Command::from_str(&line) } {
                 Ok(Command::FetchCounter) => (),
                 Ok(Command::WatchPort { port }) => {
                     match skeleton.app.ports.insert(port.to_ne_bytes(), 1u32.to_ne_bytes()) {
@@ -475,4 +475,6 @@ fn main() {
             Err(error) => tracing::warn!("failed to read command: {}", error),
         }
     }
+
+    log::info!("detached bpf module");
 }

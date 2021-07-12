@@ -18,16 +18,17 @@ impl Address {
             return Err(-1);
         }
 
-        let mut address = Address {
-            sa_family: 0,
-            port: 0,
-        };
+        let mut address_header = [[0; 2]; 2];
         let c = unsafe {
-            helpers::probe_read_user(&mut address as *mut Address as _, 4, addr_ptr as *const _)
+            helpers::probe_read_user(address_header.as_mut_ptr() as _, 4, addr_ptr as *const _)
         };
         if c < 0 {
             return Err(c as _);
         }
+        let address = Address {
+            sa_family: u16::from_ne_bytes(address_header[0]),
+            port: u16::from_be_bytes(address_header[1]),
+        };
         if address.sa_family != Self::AF_INET && address.sa_family != Self::AF_INET6 {
             return Err(-1);
         }
