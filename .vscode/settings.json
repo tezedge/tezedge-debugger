@@ -3,6 +3,7 @@
         "BACKTRACE",
         "Bincode",
         "Cryptobox",
+        "EINPROGRESS",
         "EMSGSIZE",
         "Inet",
         "Jemalloc",
