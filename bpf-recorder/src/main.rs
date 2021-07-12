@@ -17,7 +17,7 @@ ebpf::license!("GPL");
 #[cfg(any(feature = "kern", feature = "user"))]
 #[derive(ebpf::BpfApp)]
 pub struct App {
-    #[ringbuf(size = 0x40000000)]
+    #[ringbuf(size = 0x8000000)]
     pub event_queue: ebpf::RingBufferRef,
     #[hashmap(size = 64)]
     pub ports: ebpf::HashMapRef<2, 4>,

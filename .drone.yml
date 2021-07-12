@@ -71,6 +71,7 @@ steps:
       - tar xzf docker-20.10.0.tgz --strip 1 -C /usr/local/bin docker/docker
       - rm docker-20.10.0.tgz
       # build recorder and tester
+      - cargo +stable install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
       - cargo +stable build -p bpf-recorder --release
       - cargo +nightly-2021-03-23 build -p tester --tests --release
       - cargo +nightly-2021-03-23 build -p tezedge-recorder --release
