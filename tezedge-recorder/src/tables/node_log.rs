@@ -9,6 +9,7 @@ use storage::persistent::{BincodeEncoded, KeyValueSchema};
 /// Received logs saved in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
+    pub id: u64,
     pub level: LogLevel,
     #[serde(alias = "time")]
     pub timestamp: u128,
@@ -127,6 +128,7 @@ where
         if pos == 15 {
             if let Some((level, message)) = rust_log_line(line) {
                 Item {
+                    id: 0,
                     timestamp,
                     level: LogLevel::from_str(level).unwrap_or(LogLevel::Fatal),
                     message: message.to_string(),
@@ -134,6 +136,7 @@ where
                 }
             } else {
                 Item {
+                    id: 0,
                     timestamp,
                     level: LogLevel::Fatal,
                     section: "".to_string(),
@@ -143,6 +146,7 @@ where
         } else {
             if let Some((level, message)) = ocaml_log_line(line) {
                 Item {
+                    id: 0,
                     timestamp,
                     level: LogLevel::from_str(level).unwrap_or(LogLevel::Fatal),
                     message: message.to_string(),
@@ -150,6 +154,7 @@ where
                 }
             } else {
                 Item {
+                    id: 0,
                     timestamp,
                     level: LogLevel::Fatal,
                     section: "".to_string(),
