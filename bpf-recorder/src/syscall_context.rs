@@ -5,6 +5,7 @@ use core::convert::TryFrom;
 use bpf_recorder::DataTag;
 
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub struct SyscallContext {
     pub data: SyscallContextData,
     pub ts: u64,
@@ -67,19 +68,19 @@ impl SyscallContext {
             0x5 => {
                 let fd = u32::from_ne_bytes(TryFrom::try_from(&bytes[0x04..0x08]).unwrap());
                 let addr_ptr = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x08..0x10]).unwrap());
-                let addr_len = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x08..0x10]).unwrap());
+                let addr_len = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x10..0x18]).unwrap());
                 SyscallContextData::Bind { fd, addr_ptr, addr_len }
             },
             0x6 => {
                 let fd = u32::from_ne_bytes(TryFrom::try_from(&bytes[0x04..0x08]).unwrap());
                 let addr_ptr = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x08..0x10]).unwrap());
-                let addr_len = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x08..0x10]).unwrap());
+                let addr_len = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x10..0x18]).unwrap());
                 SyscallContextData::Connect { fd, addr_ptr, addr_len }
             },
             0x7 => {
                 let fd = u32::from_ne_bytes(TryFrom::try_from(&bytes[0x04..0x08]).unwrap());
                 let addr_ptr = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x08..0x10]).unwrap());
-                let addr_len = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x08..0x10]).unwrap());
+                let addr_len = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x10..0x18]).unwrap());
                 SyscallContextData::Accept { listen_on_fd: fd, addr_ptr, addr_len }
             },
             0x8 => {

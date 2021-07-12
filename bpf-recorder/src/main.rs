@@ -204,7 +204,22 @@ impl App {
         pid: u32,
     ) -> Result<(), i32> {
         if ret < 0 {
-            return Ok(());
+            // TODO: need a better fix
+            // EINPROGRESS
+            //     The socket is nonblocking and the connection cannot be
+            //     completed immediately.  (UNIX domain sockets failed with
+            //     EAGAIN instead.)  It is possible to select(2) or poll(2)
+            //     for completion by selecting the socket for writing.  After
+            //     select(2) indicates writability, use getsockopt(2) to read
+            //     the SO_ERROR option at level SOL_SOCKET to determine
+            //     whether connect() completed successfully (SO_ERROR is
+            //     zero) or unsuccessfully (SO_ERROR is one of the usual
+            //     error codes listed here, explaining the reason for the
+            //     failure).
+            const EINPROGRESS: i64 = -115;
+            if !(matches!(&data, &SyscallContextData::Connect { .. }) && ret == EINPROGRESS) {
+                return Ok(());
+            }
         }
 
         match data {
