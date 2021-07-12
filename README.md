@@ -421,7 +421,7 @@ cd ..
 Get the code:
 
 ```
-git clone https://github.com/tezedge/tezedge-debugger --branch develop
+git clone https://github.com/tezedge/tezedge-debugger
 cd tezedge-debugger
 ```
 
