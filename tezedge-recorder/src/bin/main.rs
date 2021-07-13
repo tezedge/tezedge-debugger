@@ -19,7 +19,7 @@ fn main() -> anyhow::Result<()> {
     use tezedge_recorder::{System, database::rocks::Db, main_loop};
 
     let bpf = if env::args().find(|a| a == "--run-bpf").is_some() {
-        let h = Command::new("bpf-sniffer").spawn().expect("cannot run bpf");
+        let h = Command::new("bpf-recorder").spawn().expect("cannot run bpf");
         thread::sleep(Duration::from_millis(500));
         Some(h)
     } else {

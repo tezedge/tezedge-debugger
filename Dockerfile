@@ -8,12 +8,11 @@ RUN cargo +stable install bpf-linker --git https://github.com/tezedge/bpf-linker
 RUN cargo +stable build -p bpf-recorder --release && \
     cargo +nightly-2021-03-23 build -p tezedge-recorder --release
 
-FROM ubuntu:21.04
+FROM tezedge/tezedge-libs:latest-profile
 
-RUN DEBIAN_FRONTEND='noninteractive' apt-get update && apt-get install -y libelf-dev
-
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libelf.so.1 /usr/lib/x86_64-linux-gnu/libelf.so.1
+COPY --from=builder /lib/x86_64-linux-gnu/libz.so.1 /lib/x86_64-linux-gnu/libz.so.1
 COPY --from=builder /home/appuser/target/none/release/bpf-recorder /usr/local/bin/bpf-recorder
 COPY --from=builder /home/appuser/target/none/release/tezedge-recorder /usr/local/bin/tezedge-recorder
 
-WORKDIR /home/appuser/
-CMD bpf-recorder & sleep 0.5 && tezedge-recorder
+ENTRYPOINT [ "tezedge-recorder", "--run-bpf" ]
