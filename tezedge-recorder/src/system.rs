@@ -153,7 +153,8 @@ impl<Db> System<Db> {
         use std::{fs::File, io::Read};
 
         let mut settings_file = File::open("config.toml")
-            .or_else(|_| File::open("/etc/config.toml"))?;
+            .or_else(|_| File::open("/etc/config.toml"))
+            .or_else(|_| File::open("/home/appuser/config.toml"))?;
         let mut settings_toml = String::new();
         settings_file.read_to_string(&mut settings_toml)?;
         let config = toml::from_str(&settings_toml)?;
