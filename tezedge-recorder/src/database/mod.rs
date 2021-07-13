@@ -40,7 +40,7 @@ pub struct MessagesFilter {
     pub from: Option<u64>,
     pub to: Option<u64>,
     // compatibility
-    pub node_name: Option<u16>,
+    pub node_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -51,7 +51,7 @@ pub struct LogsFilter {
     pub from: Option<u64>,
     pub to: Option<u64>,
     // compatibility
-    pub node_name: Option<u16>,
+    pub node_name: Option<String>,
 }
 
 pub trait DatabaseFetch
