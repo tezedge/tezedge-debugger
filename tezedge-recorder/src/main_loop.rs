@@ -56,7 +56,9 @@ where
                     net,
                     incoming,
                 } => {
-                    list.handle_data(id, data, net, incoming);
+                    if !data.is_empty() {
+                        list.handle_data(id, data, net, incoming);
+                    }
                 },
                 SnifferEvent::Close { id } => {
                     list.handle_close(id);
