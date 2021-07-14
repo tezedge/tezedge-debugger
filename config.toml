@@ -16,4 +16,4 @@ db = "./target/debugger_db"
 p2p = { identity = "../tezedge/light_node/etc/tezedge/identity.json", port = 9732 }
 # debugger will run syslog server on this port
 # this is an inner port inside docker's virtual network of the debugger's container
-# log = { port = "0" }
+log = { port = 10000 }

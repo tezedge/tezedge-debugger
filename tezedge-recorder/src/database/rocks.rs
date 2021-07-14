@@ -1,11 +1,7 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{
-    net::SocketAddr,
-    path::Path,
-    sync::atomic::{Ordering, AtomicU64},
-};
+use std::{net::SocketAddr, ops::Add, path::Path, sync::atomic::{Ordering, AtomicU64}};
 use rocksdb::{Cache, DB, ReadOptions};
 use storage::{
     Direction, IteratorMode,
@@ -91,8 +87,14 @@ impl DatabaseNew for Db {
         fn counter<S>(db: &DB) -> Option<S::Key>
         where
             S: KeyValueSchema,
+            S::Key: Add<u64, Output = S::Key>,
         {
-            KeyValueStoreWithSchema::<S>::iterator(db, IteratorMode::End).ok()?.next()?.0.ok()
+            KeyValueStoreWithSchema::<S>::iterator(db, IteratorMode::End)
+                .ok()?
+                .next()?
+                .0
+                .ok()
+                .map(|c| c + 1)
         }
 
         Ok(Db {
@@ -522,7 +524,7 @@ impl DatabaseFetch for Db {
         }
     }
 
-    fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::Item>, Self::Error> {
+    fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::ItemWithId>, Self::Error> {
         let limit = filter.limit.unwrap_or(100) as usize;
 
         if filter.log_level.is_none() && filter.from.is_none() && filter.to.is_none() {
@@ -535,7 +537,15 @@ impl DatabaseFetch for Db {
                 .as_kv::<node_log::Schema>()
                 .iterator(mode)?
                 .filter_map(|(k, v)| match (k, v) {
-                    (Ok(_), Ok(value)) => Some(value),
+                    (Ok(id), Ok(value)) => {
+                        Some(node_log::ItemWithId {
+                            id,
+                            level: value.level,
+                            timestamp: value.timestamp,
+                            section: value.section,
+                            message: value.message,
+                        })
+                    },
                     (Ok(index), Err(err)) => {
                         log::warn!("Failed to load value at {:?}: {}", index, err);
                         None
@@ -584,7 +594,7 @@ impl DatabaseFetch for Db {
             if filter.from.is_some() || filter.to.is_some() {
                 let mut timestamp = timestamp::Item {
                     timestamp: u64::MAX,
-                    index: u64::MAX,
+                    index: cursor,
                 };
                 let mode = if let Some(end) = filter.to {
                     timestamp.timestamp = end;
@@ -605,12 +615,47 @@ impl DatabaseFetch for Db {
                     iters.push(Box::new(it.map(|k| k.index)));
                 }
             }
+            if let &Some(t) = &filter.timestamp {
+                let timestamp = timestamp::Item {
+                    timestamp: t,
+                    index: cursor,
+                };
+                let mode = IteratorMode::From(&timestamp, Direction::Reverse);
+                let it = self
+                    .as_kv::<timestamp::LogSchema>()
+                    .iterator(mode)?
+                    .filter_map(|(k, _)| k.ok())
+                    .map(|k| k.index)
+                    .take(limit / 2);
+                let timestamp = timestamp::Item {
+                    timestamp: t,
+                    index: 0,
+                };
+                let mode = IteratorMode::From(&timestamp, Direction::Forward);
+                let it_forward = self
+                    .as_kv::<timestamp::LogSchema>()
+                    .iterator(mode)?
+                    .filter_map(|(k, _)| k.ok())
+                    .take(limit - (limit / 2))
+                    .map(|k| k.index)
+                    .collect::<Vec<_>>();
+                let it = it_forward.into_iter().chain(it);
+                iters.push(Box::new(it));
+            }
 
             let v = sorted_intersect(iters.as_mut_slice(), limit)
                 .into_iter()
                 .filter_map(
                     move |index| match self.as_kv::<node_log::Schema>().get(&index) {
-                        Ok(Some(value)) => Some(value),
+                        Ok(Some(value)) => {
+                            Some(node_log::ItemWithId {
+                                id: index,
+                                level: value.level,
+                                timestamp: value.timestamp,
+                                section: value.section,
+                                message: value.message,
+                            })
+                        },
                         Ok(None) => {
                             log::info!("No value at index: {}", index);
                             None

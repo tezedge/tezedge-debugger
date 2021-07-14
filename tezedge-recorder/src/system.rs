@@ -65,7 +65,7 @@ pub enum NodeError {
     ParseSk,
 }
 
-pub struct NodeServer {
+struct NodeServer {
     _server: Option<JoinHandle<()>>,
     log_client: Option<thread::JoinHandle<()>>,
 }

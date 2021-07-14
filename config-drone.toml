@@ -1,5 +1,5 @@
 [[nodes]]
 db = "/tmp/volume/tezedge_debugger"
 name = "tezedge"
-http_v3 = 17745
-p2p = { identity = "/tmp/volume/tezedge/identity.json", port = 9732 }
+http_v3 = 17742
+log = { port = 10000 }

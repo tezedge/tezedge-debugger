@@ -50,6 +50,7 @@ pub struct LogsFilter {
     pub log_level: Option<String>,
     pub from: Option<u64>,
     pub to: Option<u64>,
+    pub timestamp: Option<u64>,
     // compatibility
     pub node_name: Option<String>,
 }
@@ -77,7 +78,7 @@ where
 
     fn fetch_message(&self, id: u64) -> Result<Option<message::MessageDetails>, Self::Error>;
 
-    fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::Item>, Self::Error>;
+    fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::ItemWithId>, Self::Error>;
 }
 
 pub trait DatabaseNew
