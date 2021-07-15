@@ -45,6 +45,7 @@ pub struct MessagesFilter {
 
 #[derive(Deserialize)]
 pub struct LogsFilter {
+    pub direction: Option<String>,
     pub limit: Option<u64>,
     pub cursor: Option<u64>,
     pub log_level: Option<String>,

@@ -527,11 +527,18 @@ impl DatabaseFetch for Db {
     fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::ItemWithId>, Self::Error> {
         let limit = filter.limit.unwrap_or(100) as usize;
 
-        if filter.log_level.is_none() && filter.from.is_none() && filter.to.is_none() {
+        let forward = filter.direction == Some("forward".to_string());
+        let direction = || if forward { Direction::Forward } else { Direction::Reverse };
+
+        if filter.log_level.is_none() && filter.from.is_none() && filter.to.is_none() && filter.timestamp.is_none() {
             let mode = if let Some(cursor) = &filter.cursor {
-                IteratorMode::From(cursor, Direction::Reverse)
+                IteratorMode::From(cursor, direction())
             } else {
-                IteratorMode::End
+                if forward {
+                    IteratorMode::Start
+                } else {
+                    IteratorMode::End
+                }
             };
             let vec = self
                 .as_kv::<node_log::Schema>()
@@ -559,10 +566,10 @@ impl DatabaseFetch for Db {
                 .collect();
             Ok(vec)
         } else {
-            let cursor = filter.cursor.clone().unwrap_or(u64::MAX);
             let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(5);
 
             if let Some(lv) = &filter.log_level {
+                let cursor = filter.cursor.clone().unwrap_or(u64::MAX);
                 let mut lvs = Vec::new();
                 for lv in lv.split(',') {
                     let lv =
@@ -574,7 +581,7 @@ impl DatabaseFetch for Db {
                     let key = key
                         .encode()
                         .map_err(|error| DBError::SchemaError { error })?;
-                    let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                    let mode = rocksdb::IteratorMode::From(&key, direction().into());
                     let cf = self
                         .inner
                         .cf_handle(log_level::Schema::name())
@@ -594,13 +601,17 @@ impl DatabaseFetch for Db {
             if filter.from.is_some() || filter.to.is_some() {
                 let mut timestamp = timestamp::Item {
                     timestamp: u64::MAX,
-                    index: cursor,
+                    index: u64::MAX,
                 };
                 let mode = if let Some(end) = filter.to {
                     timestamp.timestamp = end;
-                    IteratorMode::From(&timestamp, Direction::Reverse)
+                    IteratorMode::From(&timestamp, direction())
                 } else {
-                    IteratorMode::End
+                    if forward {
+                        IteratorMode::Start
+                    } else {
+                        IteratorMode::End
+                    }
                 };
                 let it = self
                     .as_kv::<timestamp::LogSchema>()
@@ -608,38 +619,24 @@ impl DatabaseFetch for Db {
                     .filter_map(|(k, _)| k.ok());
                 if let Some(begin) = filter.from {
                     let it = it
-                        .take_while(move |k| k.timestamp >= begin)
+                        .take_while(move |k| (k.timestamp >= begin) ^ forward)
                         .map(|k| k.index);
                     iters.push(Box::new(it));
                 } else {
                     iters.push(Box::new(it.map(|k| k.index)));
                 }
             }
-            if let &Some(t) = &filter.timestamp {
-                let timestamp = timestamp::Item {
-                    timestamp: t,
-                    index: cursor,
+            if let Some(middle) = filter.timestamp {
+                let middle = timestamp::Item {
+                    timestamp: middle,
+                    index: u64::MAX,
                 };
-                let mode = IteratorMode::From(&timestamp, Direction::Reverse);
+
                 let it = self
                     .as_kv::<timestamp::LogSchema>()
-                    .iterator(mode)?
+                    .iterator(IteratorMode::From(&middle, direction()))?
                     .filter_map(|(k, _)| k.ok())
-                    .map(|k| k.index)
-                    .take(limit / 2);
-                let timestamp = timestamp::Item {
-                    timestamp: t,
-                    index: 0,
-                };
-                let mode = IteratorMode::From(&timestamp, Direction::Forward);
-                let it_forward = self
-                    .as_kv::<timestamp::LogSchema>()
-                    .iterator(mode)?
-                    .filter_map(|(k, _)| k.ok())
-                    .take(limit - (limit / 2))
-                    .map(|k| k.index)
-                    .collect::<Vec<_>>();
-                let it = it_forward.into_iter().chain(it);
+                    .map(|k| k.index);
                 iters.push(Box::new(it));
             }
 
