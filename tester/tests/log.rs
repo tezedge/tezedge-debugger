@@ -21,8 +21,9 @@ async fn level() {
     }
 
     impl TestCase {
-        async fn run(&self) {
-            let params = format!("limit=1000&log_level={}", self.query);
+        async fn run(&self, forward: bool) {
+            let direction = if forward { "direction=forward&cursor=0" } else { "direction=backward" };
+            let params = format!("limit=1000&log_level={}&{}", self.query, direction);
             let items = get_log(&params).await.unwrap();
             assert!(!items.is_empty());
             for item in items {
@@ -42,7 +43,8 @@ async fn level() {
     ];
 
     for case in &cases {
-        case.run().await
+        case.run(false).await;
+        case.run(true).await;
     }
 }
 
@@ -73,4 +75,46 @@ async fn pagination() {
     }
 
     request_cursor(1234, 1234).await;
+}
+
+#[tokio::test]
+async fn timestamp() {
+    struct TestCase {
+        shift: u64,
+        expected: usize,
+        forward: bool,
+    }
+
+    impl TestCase {
+        async fn run(self) {
+            let time = 1626264000 + self.shift;
+            let direction = if self.forward { "forward" } else { "backward" };
+            let params = format!("timestamp={}&limit=500&direction={}", time, direction);
+            let items = get_log(&params).await.unwrap();
+            assert_eq!(items.len(), self.expected);
+            let mut time = time;
+            for item in items {
+                let this = (item.timestamp / 1_000_000_000) as u64;
+                if self.forward {
+                    assert!(this > time);
+                } else {
+                    assert!(this <= time);
+                }
+                time = this;
+            }
+        }
+    }
+
+    let test_cases = vec![
+        TestCase { shift: 321, expected: 322, forward: false },
+        TestCase { shift: 321, expected: 500, forward: true },
+        TestCase { shift: 6789, expected: 500, forward: false },
+        TestCase { shift: 6789, expected: 500, forward: true },
+        TestCase { shift: 9876, expected: 500, forward: false },
+        TestCase { shift: 9876, expected: 9999 - 9876, forward: true },
+    ];
+
+    for test_case in test_cases {
+        test_case.run().await;
+    }
 }

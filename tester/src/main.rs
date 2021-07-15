@@ -40,6 +40,6 @@ fn prepare_db_range(range: Range<i64>, socket: &UdpSocket) {
         );
 
         let _ = socket.send_to(msg.as_bytes(), "127.0.0.1:10000").unwrap();
-        thread::sleep(Duration::from_micros(100));
+        thread::sleep(Duration::from_micros(400));
     }
 }
