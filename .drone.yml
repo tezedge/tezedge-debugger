@@ -63,7 +63,7 @@ steps:
       - name: docker_sock
         path: /var/run/docker.sock
     commands:
-      - apt-get install -y pkg-config clang
+      - apt-get install -y pkg-config clang libev-dev
       - rustup install nightly-2021-03-23
       - rustup install stable
       # docker client
@@ -81,11 +81,12 @@ steps:
       - rm -Rf /tmp/volume/tezedge_debugger || true
       # configure
       - rm config.toml && cp config-drone.toml config.toml
+      - cp /usr/local/cargo/git/checkouts/tezedge-*/*/tezos/sys/lib_tezos/artifacts/libtezos.so /usr/lib/x86_64-linux-gnu/libtezos.so
       # test logs
-      - ./tester/log.sh
+      - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu ./tester/log.sh
       # run recorder
       - echo 'p2p = { identity = "/tmp/volume/tezedge/identity.json", port = 9732 }' >> config.toml
-      - ./target/none/release/tezedge-recorder --run-bpf & sleep 2
+      - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu ./target/none/release/tezedge-recorder --run-bpf & sleep 2
       # run tezedge-node in docker
       - docker run --rm -d --name tezedge_node -v /tmp/volume/tezedge:/tmp/tezedge tezedge/tezedge:latest-frame-pointers-enabled --network mainnet
       # test p2p
