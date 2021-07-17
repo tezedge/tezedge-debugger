@@ -1,5 +1,0 @@
-[[nodes]]
-db = "/tmp/volume/tezedge_debugger"
-name = "tezedge"
-http_v3 = 17742
-log = { port = 10000 }

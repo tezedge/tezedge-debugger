@@ -14,6 +14,13 @@ pub async fn get_p2p(params: &str) -> Result<serde_json::value::Value, serde_jso
 }
 
 #[tokio::test]
+async fn check_messages() {
+    let items = get_p2p("").await.unwrap();
+    assert!(items.as_array().unwrap().len() > 0);
+    // TODO:
+}
+
+#[tokio::test]
 async fn wait() {
     let mut t = 0u8;
 

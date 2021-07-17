@@ -205,7 +205,7 @@ impl<Db> System<Db> {
     }
 
     pub fn should_ignore(&self, address: &SocketAddr) -> bool {
-        use std::net::IpAddr;
+        //use std::net::IpAddr;
 
         match address.port() {
             0 | 65535 => {
@@ -228,13 +228,13 @@ impl<Db> System<Db> {
             },
         }
         // lo v6
-        if address.ip() == "::1".parse::<IpAddr>().unwrap() {
-            return true;
-        }
+        //if address.ip() == "::1".parse::<IpAddr>().unwrap() {
+        //    return true;
+        //}
         // lo v4
-        if address.ip() == "127.0.0.1".parse::<IpAddr>().unwrap() {
-            return true;
-        }
+        //if address.ip() == "127.0.0.1".parse::<IpAddr>().unwrap() {
+        //    return true;
+        //}
 
         false
     }

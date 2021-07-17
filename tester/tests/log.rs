@@ -1,10 +1,13 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+use std::env;
 use tezedge_recorder::tables::node_log;
 
 pub async fn get_log(params: &str) -> Result<Vec<node_log::ItemWithId>, serde_json::error::Error> {
-    let res = reqwest::get(&format!("http://localhost:17742/v3/logs?{}", params))
+    let debugger = env::var("DEBUGGER_URL")
+        .unwrap();
+    let res = reqwest::get(&format!("{}/v3/logs?{}", debugger, params))
         .await.unwrap()
         .text()
         .await.unwrap();

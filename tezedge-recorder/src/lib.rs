@@ -3,6 +3,9 @@
 
 #![forbid(unsafe_code)]
 
+pub use crypto;
+pub use tezos_messages;
+
 mod common;
 pub mod tables;
 mod system;

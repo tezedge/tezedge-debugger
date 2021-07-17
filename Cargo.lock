@@ -2128,6 +2128,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6446ced80d6c486436db5c078dde11a9f73d42b57fb273121e160b84f63d894c"
 
 [[package]]
+name = "structopt"
+version = "0.3.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b041cdcb67226aca307e6e7be44c8806423d83e018bd662360a93dabce4d71"
+dependencies = [
+ "clap",
+ "lazy_static",
+ "structopt-derive",
+]
+
+[[package]]
+name = "structopt-derive"
+version = "0.4.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7813934aecf5f51a54775e00068c237de98489463968231a51746bbbc03f9c10"
+dependencies = [
+ "heck",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "strum"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2230,9 +2254,13 @@ name = "tester"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "hex",
+ "rand 0.8.4",
  "reqwest",
  "serde_json",
+ "structopt",
  "tezedge-recorder",
+ "tezos_identity",
  "tokio",
 ]
 
@@ -2360,6 +2388,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "tezos_identity"
+version = "1.6.5"
+source = "git+https://github.com/tezedge/tezedge?tag=v1.6.5#7d026e869f688deaf80f38d9db2c5e8127e9d7e1"
+dependencies = [
+ "crypto",
+ "failure",
+ "failure_derive",
+ "hex",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
