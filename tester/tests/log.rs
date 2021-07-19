@@ -3,6 +3,7 @@
 
 use std::env;
 use tezedge_recorder::tables::node_log;
+use tester::START_TIME;
 
 pub async fn get_log(params: &str) -> Result<Vec<node_log::ItemWithId>, serde_json::error::Error> {
     let debugger = env::var("DEBUGGER_URL")
@@ -90,7 +91,7 @@ async fn timestamp() {
 
     impl TestCase {
         async fn run(self) {
-            let time = 1626264000 + self.shift;
+            let time = START_TIME as u64 + self.shift;
             let direction = if self.forward { "forward" } else { "backward" };
             let params = format!("timestamp={}&limit=500&direction={}", time, direction);
             let items = get_log(&params).await.unwrap();
