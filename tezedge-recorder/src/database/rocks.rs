@@ -308,7 +308,7 @@ impl DatabaseFetch for Db {
                         let preview = match details(&value, key, self.as_kv()) {
                             Ok(details) => match details.json_string() {
                                 Ok(p) => p.map(|mut s| {
-                                    s.truncate(100);
+                                    utf8_truncate(&mut s, 100);
                                     s
                                 }),
                                 Err(error) => {
@@ -479,7 +479,7 @@ impl DatabaseFetch for Db {
                             let preview = match details(&value, index, self.as_kv()) {
                                 Ok(details) => match details.json_string() {
                                     Ok(p) => p.map(|mut s| {
-                                        s.truncate(100);
+                                        utf8_truncate(&mut s, 100);
                                         s
                                     }),
                                     Err(error) => {
@@ -684,4 +684,12 @@ fn details(
         }
     }
     Ok(message::MessageDetails::new(id, &message_item.ty, &chunks))
+}
+
+fn utf8_truncate(input: &mut String, max_size: usize) {
+    let mut m = max_size;
+    while !input.is_char_boundary(m) {
+        m -= 1;
+    }
+    input.truncate(m);
 }

@@ -83,14 +83,14 @@ steps:
       - cp /usr/local/cargo/git/checkouts/tezedge-*/*/tezos/sys/lib_tezos/artifacts/libtezos.so /usr/lib/x86_64-linux-gnu/libtezos.so
       - mkdir target/debugger_db
       # test
-      - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu DEBUGGER_URL="http://localhost:17742" ./tester/test.sh
+      - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu DEBUGGER_URL="http://localhost:17732" ./tester/test.sh
       # test with real node
       - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu ./target/none/release/tezedge-recorder --run-bpf & sleep 2
       # run tezedge-node in docker
       - docker run --rm -d --name tezedge_node -v /tmp/volume/tezedge:/tmp/tezedge tezedge/tezedge:latest-frame-pointers-enabled --network mainnet --p2p-port 29734
       # test p2p
-      - DEBUGGER_URL="http://localhost:17744" cargo +nightly-2021-03-23 test -p tester --release -- wait --nocapture
-      - DEBUGGER_URL="http://localhost:17744" cargo +nightly-2021-03-23 test -p tester --release -- p2p_limit p2p_cursor p2p_types_filter --nocapture
+      - DEBUGGER_URL="http://localhost:17732" cargo +nightly-2021-03-23 test -p tester --release -- wait --nocapture
+      - DEBUGGER_URL="http://localhost:17732" cargo +nightly-2021-03-23 test -p tester --release -- p2p_limit p2p_cursor p2p_types_filter --nocapture
       # stop the node
       - docker stop tezedge_node
 

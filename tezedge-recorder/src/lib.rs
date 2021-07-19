@@ -6,7 +6,7 @@
 pub use crypto;
 pub use tezos_messages;
 
-mod common;
+pub mod common;
 pub mod tables;
 mod system;
 mod log_client;

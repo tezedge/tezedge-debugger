@@ -45,15 +45,15 @@ impl Item {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageFrontend {
-    id: u64,
+    pub id: u64,
     timestamp: u128,
     remote_addr: SocketAddr,
-    source_type: Initiator,
-    incoming: bool,
-    category: MessageCategory,
-    kind: Option<MessageKind>,
+    pub source_type: Initiator,
+    pub incoming: bool,
+    pub category: MessageCategory,
+    pub kind: Option<MessageKind>,
     message_preview: Option<String>,
 }
 

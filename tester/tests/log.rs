@@ -7,7 +7,7 @@ use tezedge_recorder::tables::node_log;
 pub async fn get_log(params: &str) -> Result<Vec<node_log::ItemWithId>, serde_json::error::Error> {
     let debugger = env::var("DEBUGGER_URL")
         .unwrap();
-    let res = reqwest::get(&format!("{}/v3/logs?{}", debugger, params))
+    let res = reqwest::get(&format!("{}/v2/log?node_name=initiator&{}", debugger, params))
         .await.unwrap()
         .text()
         .await.unwrap();

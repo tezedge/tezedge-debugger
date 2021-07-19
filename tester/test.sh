@@ -17,11 +17,7 @@ function stop_recorder {
 }
 
 run_recorder
-# populate p2p messages
-./target/none/release/tester p2p-responder 29733 29732 &
-./target/none/release/tester p2p-initiator 29732 29733 && sleep 1
 ./target/none/release/tester log 0 # populate first half log messages
-# test
 ./target/none/release/deps/log-???????????????? -- pagination level || fail
 stop_recorder
 
@@ -33,5 +29,8 @@ stop_recorder
 
 run_recorder
 ./target/none/release/deps/log-???????????????? -- pagination level timestamp || fail
-./target/none/release/deps/p2p-???????????????? -- check_messages || fail
+# populate p2p messages
+./target/none/release/tester p2p-responder 29733 29732 & RESPONDER_PID=$!
+./target/none/release/tester p2p-initiator 29732 29733 && wait $RESPONDER_PID && sleep 1
+./target/none/release/deps/p2p-???????????????? --nocapture -- check_messages || fail
 stop_recorder
