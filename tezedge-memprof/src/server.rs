@@ -14,6 +14,9 @@ use warp::{
 use serde::{Serialize, Deserialize};
 use super::{StackResolver, Reporter};
 
+
+static OPEN_API_JSON_FILE: &'static [u8] = include_bytes!("../../memory-profiler-openapi.json");
+
 pub fn run<T>(
     reporter: Arc<Mutex<T>>,
     resolver: Arc<RwLock<StackResolver>>,
@@ -39,7 +42,7 @@ where
     use warp::reply::with;
 
     warp::get()
-        .and(tree(reporter, resolver, pid.clone()).or(get_pid(pid)))
+        .and(tree(reporter, resolver, pid.clone()).or(get_pid(pid)).or(get_open_api()))
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
 }
@@ -49,6 +52,29 @@ fn get_pid(p: Arc<AtomicU32>) -> impl Filter<Extract = (WithStatus<Json>,), Erro
         .and(warp::query::query())
         .map(move |()| -> WithStatus<Json> {
             reply::with_status(reply::json(&p.load(Ordering::Relaxed)), StatusCode::OK)
+        })
+}
+
+fn get_open_api() -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
+    use warp::reply::Response;
+    use warp::http::header::{HeaderName, HeaderValue, CONTENT_TYPE};
+
+    pub struct RawJson(&'static [u8]);
+
+    impl Reply for RawJson {
+        #[inline]
+        fn into_response(self) -> Response {
+            let mut res = Response::new(self.0.into());
+            res.headers_mut()
+                .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+            res
+        }
+    }
+
+    warp::path!("openapi" / "memory-profiler-openapi.json")
+        .and(warp::query::query())
+        .map(move |()| -> WithStatus<RawJson> {
+            reply::with_status(RawJson(OPEN_API_JSON_FILE), StatusCode::OK)
         })
 }
 
