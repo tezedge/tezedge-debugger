@@ -39,7 +39,7 @@ where
     use warp::reply::with;
 
     warp::get()
-        .and(tree(reporter, resolver, pid.clone()).or(get_pid(pid)))
+        .and(tree(reporter, resolver, pid.clone()).or(get_pid(pid)).or(openapi()))
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
 }
@@ -117,5 +117,18 @@ where
                 );
                 reply::with_status(reply::json(&report), StatusCode::OK)
             }
+        })
+}
+
+pub fn openapi() -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
+    warp::path!("openapi" / "memory-profiler-openapi.json")
+        .and(warp::query::query())
+        .map(move |()| -> reply::WithStatus<Json> {
+            let s = include_str!("../../memory-profiler-openapi.json");
+            let d = serde_json::from_str::<serde_json::Value>(s).unwrap();
+            reply::with_status(
+                reply::json(&d),
+                StatusCode::OK,
+            )
         })
 }
