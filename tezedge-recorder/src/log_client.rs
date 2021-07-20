@@ -8,6 +8,7 @@ use std::{
     },
     thread, io,
     net::UdpSocket,
+    time::Duration,
 };
 use super::{database::Database, tables::node_log};
 
@@ -20,6 +21,7 @@ where
     Db: Database + Sync + Send + 'static,
 {
     let socket = UdpSocket::bind(("0.0.0.0", port))?;
+    socket.set_read_timeout(Some(Duration::from_secs(5)))?;
     Ok(thread::spawn(move || {
         let mut buffer = [0u8; 0x10000];
         while running.load(Ordering::Relaxed) {
@@ -31,7 +33,13 @@ where
                         db.store_log(item);
                     }
                 },
-                Err(error) => log::error!("receiving log error: {}", error),
+                Err(error) => {
+                    if error.kind() == io::ErrorKind::WouldBlock {
+                        log::trace!("receiving log timeout");
+                    } else {
+                        log::error!("receiving log error: {}", error)
+                    }
+                },
             }
         }
     }))

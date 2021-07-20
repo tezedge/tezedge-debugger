@@ -12,7 +12,7 @@
             "name": "MIT License",
             "url": "https://github.com/tezedge/tezedge-debugger/blob/master/LICENSE"
         },
-        "version": "1.6.0"
+        "version": "1.6.7"
     },
     "servers": [
         {
@@ -103,6 +103,24 @@
                         "in": "query",
                         "description": "The maximal timestamp",
                         "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "timestamp",
+                        "in": "query",
+                        "description": "The timestamp from which the logs are shown",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "node_name",
+                        "in": "query",
+                        "description": "The name of the node from which the logs are shown",
+                        "required": true,
                         "schema": {
                             "type": "integer"
                         }

@@ -4,17 +4,26 @@
 use std::{str::FromStr, convert::TryFrom};
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
-use storage::persistent::{BincodeEncoded, KeyValueSchema};
+use storage::persistent::{BincodeEncoded, KeyValueSchema, database::RocksDbKeyValueSchema};
 
-/// Received logs saved in the database
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Item {
+#[derive(Serialize, Deserialize)]
+pub struct ItemWithId {
+    pub id: u64,
     pub level: LogLevel,
     #[serde(alias = "time")]
     pub timestamp: u128,
     #[serde(alias = "module")]
     pub section: String,
     #[serde(alias = "msg")]
+    pub message: String,
+}
+
+/// Received logs saved in the database
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Item {
+    pub level: LogLevel,
+    pub timestamp: u128,
+    pub section: String,
     pub message: String,
 }
 
@@ -167,7 +176,9 @@ pub struct Schema;
 impl KeyValueSchema for Schema {
     type Key = u64;
     type Value = Item;
+}
 
+impl RocksDbKeyValueSchema for Schema {
     fn name() -> &'static str {
         "log_storage"
     }

@@ -1,18 +1,17 @@
-// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
 use std::{
     convert::TryFrom,
     io::{self, Write},
-    fmt, mem,
+    mem,
     net::{SocketAddr, IpAddr},
     os::unix::net::UnixStream,
     path::Path,
-    str::FromStr,
 };
 use bpf_ring_buffer::{RingBuffer, RingBufferSync, RingBufferData};
 use passfd::FdPassingExt;
-use super::{EventId, DataDescriptor, DataTag};
+use super::{EventId, DataDescriptor, DataTag, Command};
 
 pub enum SnifferEvent {
     Data {
@@ -53,7 +52,9 @@ pub enum SnifferEvent {
 pub enum SnifferError {
     SliceTooShort(usize),
     Data { id: EventId, code: SnifferErrorCode, net: bool, incoming: bool },
-    AcceptBadAddress { id: EventId },
+    BindBadAddress { id: EventId, code: SnifferErrorCode },
+    ConnectBadAddress { id: EventId, code: SnifferErrorCode },
+    AcceptBadAddress { id: EventId, code: SnifferErrorCode },
     Debug { id: EventId, code: SnifferErrorCode },
 }
 
@@ -82,10 +83,11 @@ impl SnifferError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum SnifferErrorCode {
     SliceTooShort(usize, usize),
     Unknown(i32),
+    UnknownAddressFamily(u16),
     Fault,
 }
 
@@ -93,19 +95,20 @@ impl RingBufferData for SnifferEvent {
     type Error = SnifferError;
 
     fn from_rb_slice(value: &[u8]) -> Result<Self, Self::Error> {
-        fn parse_socket_address(b: &[u8]) -> Result<SocketAddr, ()> {
-            let address_family = u16::from_le_bytes(TryFrom::try_from(&b[0..2]).map_err(|_| ())?);
-            let port = u16::from_be_bytes(TryFrom::try_from(&b[2..4]).map_err(|_| ())?);
+        fn parse_socket_address(b: &[u8]) -> Result<SocketAddr, SnifferErrorCode> {
+            let e = SnifferErrorCode::SliceTooShort(28, b.len());
+            let address_family = u16::from_ne_bytes(TryFrom::try_from(&b[0..2]).map_err(|_| e)?);
+            let port = u16::from_be_bytes(TryFrom::try_from(&b[2..4]).map_err(|_| e)?);
             match address_family {
                 2 => {
-                    let ip = <[u8; 4]>::try_from(&b[4..8]).map_err(|_| ())?;
+                    let ip = <[u8; 4]>::try_from(&b[4..8]).map_err(|_| e)?;
                     Ok(SocketAddr::new(IpAddr::V4(ip.into()), port))
                 },
                 10 => {
-                    let ip = <[u8; 16]>::try_from(&b[8..24]).map_err(|_| ())?;
+                    let ip = <[u8; 16]>::try_from(&b[8..24]).map_err(|_| e)?;
                     Ok(SocketAddr::new(IpAddr::V6(ip.into()), port))
                 },
-                _ => Err(()),
+                u => Err(SnifferErrorCode::UnknownAddressFamily(u)),
             }
         }
 
@@ -155,26 +158,24 @@ impl RingBufferData for SnifferEvent {
             },
             DataTag::Connect => {
                 Ok(SnifferEvent::Connect {
-                    id: descriptor.id,
-                    // should not fail, already checked inside bpf code
-                    address: parse_socket_address(data).unwrap(),
+                    id: descriptor.id.clone(),
+                    address: parse_socket_address(data)
+                        .map_err(|code| SnifferError::ConnectBadAddress { id: descriptor.id, code })?,
                 })
             },
             DataTag::Bind => {
                 Ok(SnifferEvent::Bind {
-                    id: descriptor.id,
-                    // should not fail, already checked inside bpf code
-                    address: parse_socket_address(data).unwrap(),
+                    id: descriptor.id.clone(),
+                    address: parse_socket_address(data)
+                        .map_err(|code| SnifferError::BindBadAddress { id: descriptor.id, code })?,
                 })
             },
             DataTag::Listen => Ok(SnifferEvent::Listen { id: descriptor.id }),
             DataTag::Accept => Ok(SnifferEvent::Accept {
                 id: descriptor.id.clone(),
-                // TODO: remove it
                 listen_on_fd: 0,
-                // should not fail, already checked inside bpf code
                 address: parse_socket_address(data)
-                    .map_err(|()| SnifferError::AcceptBadAddress { id: descriptor.id })?,
+                    .map_err(|code| SnifferError::AcceptBadAddress { id: descriptor.id, code })?,
             }),
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
             DataTag::GetFd => Ok(SnifferEvent::GetFd { id: descriptor.id }),
@@ -184,55 +185,6 @@ impl RingBufferData for SnifferEvent {
                     SnifferEvent::Debug { id, msg }
                 })
             },
-        }
-    }
-}
-
-pub enum Command {
-    WatchPort { port: u16 },
-    IgnoreConnection { pid: u32, fd: u32 },
-    FetchCounter,
-}
-
-impl FromStr for Command {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut words = s.split(' ');
-        match words.next() {
-            Some("watch_port") => {
-                let port = words
-                    .next()
-                    .ok_or_else(|| "bad port".to_string())?
-                    .parse()
-                    .map_err(|e| format!("failed to parse port: {}", e))?;
-                Ok(Command::WatchPort { port })
-            },
-            Some("ignore_connection") => {
-                let pid = words
-                    .next()
-                    .ok_or_else(|| "bad pid".to_string())?
-                    .parse()
-                    .map_err(|e| format!("failed to parse pid: {}", e))?;
-                let fd = words
-                    .next()
-                    .ok_or_else(|| "bad fd".to_string())?
-                    .parse()
-                    .map_err(|e| format!("failed to parse fd: {}", e))?;
-                Ok(Command::IgnoreConnection { pid, fd })
-            },
-            Some("fetch_counter") => Ok(Command::FetchCounter),
-            _ => Err("unexpected command".to_string()),
-        }
-    }
-}
-
-impl fmt::Display for Command {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Command::WatchPort { port } => write!(f, "watch_port {}", port),
-            Command::IgnoreConnection { pid, fd } => write!(f, "ignore_connection {} {}", pid, fd),
-            Command::FetchCounter => write!(f, "fetch_counter"),
         }
     }
 }

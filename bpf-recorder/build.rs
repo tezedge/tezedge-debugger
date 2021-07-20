@@ -1,4 +1,4 @@
-// Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
+// Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
 fn main() {
@@ -16,8 +16,8 @@ fn build_bpf() {
     let args = &[
         "+nightly-2020-12-31",
         "rustc",
-        "--package=bpf-memprof",
-        "--bin=bpf-memprof-kern",
+        "--package=bpf-recorder",
+        "--bin=bpf-recorder-kern",
         "--features=kern",
         "--no-default-features",
         "--",
@@ -40,11 +40,11 @@ fn build_bpf() {
         .current_dir(&target_dir)
         .arg("-i")
         .arg("s/ty__/type/g")
-        .arg("debug/bpf-memprof-kern")
+        .arg("debug/bpf-recorder-kern")
         .output()
         .expect("failed to patch bpf object");
 
-    println!("cargo:rustc-env=BPF_CODE_MEMPROF={}/debug/bpf-memprof-kern", target_dir);
+    println!("cargo:rustc-env=BPF_CODE_RECORDER={}/debug/bpf-recorder-kern", target_dir);
     println!("cargo:rerun-if-changed=src/main.rs");
     println!("cargo:rerun-if-changed=src/event.rs");
 }

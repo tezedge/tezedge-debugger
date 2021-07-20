@@ -10,7 +10,7 @@ use std::{
     },
 };
 use anyhow::Result;
-use bpf_sniffer_common::{BpfModuleClient, SnifferEvent, Command, EventId, SocketId};
+use bpf_recorder::{BpfModuleClient, SnifferEvent, Command, EventId, SocketId};
 
 use super::{
     processor::Connection,
@@ -18,7 +18,7 @@ use super::{
     system::System,
 };
 
-pub fn run<Db>(system: System<Db>, running: Arc<AtomicBool>) -> Result<()>
+pub fn run<Db>(system: &mut System<Db>, running: Arc<AtomicBool>) -> Result<()>
 where
     Db: Database + DatabaseNew + DatabaseFetch + Sync + Send + 'static,
 {
@@ -56,7 +56,9 @@ where
                     net,
                     incoming,
                 } => {
-                    list.handle_data(id, data, net, incoming);
+                    if !data.is_empty() {
+                        list.handle_data(id, data, net, incoming);
+                    }
                 },
                 SnifferEvent::Close { id } => {
                     list.handle_close(id);
@@ -74,17 +76,17 @@ where
     Ok(())
 }
 
-struct ConnectionList<Db> {
+struct ConnectionList<'a, Db> {
     client: BpfModuleClient,
-    system: System<Db>,
+    system: &'a mut System<Db>,
     connections: HashMap<SocketId, Connection<Db>>,
 }
 
-impl<Db> ConnectionList<Db>
+impl<'a, Db> ConnectionList<'a, Db>
 where
     Db: Database + DatabaseNew + DatabaseFetch + Sync + Send + 'static,
 {
-    fn new(client: BpfModuleClient, system: System<Db>) -> Self {
+    fn new(client: BpfModuleClient, system: &'a mut System<Db>) -> Self {
         ConnectionList {
             client,
             system,
@@ -93,9 +95,9 @@ where
     }
 
     fn watching(&mut self) -> Result<()> {
-        for node_config in self.system.node_configs() {
+        for p2p_config in self.system.p2p_configs() {
             self.client.send_command(Command::WatchPort {
-                port: node_config.p2p_port,
+                port: p2p_config.port,
             })?;
         }
 

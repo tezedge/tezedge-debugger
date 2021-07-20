@@ -1,8 +1,0 @@
-bpf_sniffer_path = "/tmp/bpf-sniffer.sock"
-
-[[nodes]]
-db_path = "/tmp/volume/tezedge_debugger"
-identity_path = "/tmp/volume/tezedge/identity.json"
-p2p_port = 9732
-syslog_port = 0
-rpc_port = 17745

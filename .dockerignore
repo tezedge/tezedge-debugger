@@ -24,3 +24,4 @@ setcap.sh
 LICENSE
 rustfmt.toml
 *.heap
+.drone.yml

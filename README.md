@@ -302,27 +302,29 @@ meaning it is simple to paginate real-time data. All data are from local storage
 Endpoint for checking all P2P communication on running node. 
 Messages are always sorted from newest to oldest.
 ##### Query arguments
-* `cursor_id : 64bit integer value` - Cursor offset, used for easier navigating in messages. Default is the last message.
+* `node_name : string` - Name of the node, required
+* `cursor : 64bit integer value` - Cursor offset, used for easier navigating in messages. Default is the last message.
 * `limit : 64bit integer value` - Maximum number of messages returned by the RPC. Default is 100 messages.
 * `remote_addr : String representing socket address in format "<IP>:<PORT>"` - Filter message belonging to communication with given remote node.
 * `incoming : Boolean` - Filter messages by their direction
 * `types : comma separated list of types` - Filter messages by given types
-* `source_type: "local" or "remote"` - Filter messages by source of the message
+* `source_type : "local" or "remote"` - Filter messages by source of the message
 ##### Example
 * `/v2/p2p` - Return last 100 P2P messages
-* `/v2/p2p?cursor_id=100&types=connection_message,metadata` - Return all connection and metadata messages from first 100 messages.
+* `/v2/p2p?cursor=100&types=connection_message,metadata` - Return connection and metadata messages skipping first 100 messages.
 
 #### `/v2/log`
 ##### Description
 Endpoint for checking all captured logs on running node
 Messages are always sorted from newest to oldest.
 ##### Query arguments
-* `cursor_id : 64bit integer value` - Cursor offset, used for easier navigating in messages. Default is the last message.
+* `node_name : string` - Name of the node, required
+* `cursor : 64bit integer value` - Cursor offset, used for easier navigating in messages. Default is the last message.
 * `limit : 64bit integer value` - Maximum number of messages returned by the RPC. Default is 100 messages.
-* `level : string` - Log level, should be on of `trace, debug, info, warn, error`
+* `log_level : string` - Log level, should be on of `trace, debug, info, warn, error`
 * `timestamp : string` - Unix timestamp representing time from which the logs are shown.
 ##### Example
-* `/v2/log?level=error` - Return all errors in last one hundred logs,
+* `/v2/log?log_level=error` - Return all errors in last one hundred logs,
 
 ### Requirements
 
@@ -356,11 +358,11 @@ If you are running another OS with an older kernel, you need to update the kerne
 
 ### Prepare system dependencies
 
-* curl, wget and git to get the code
-* zlib, clang and llvm 11 to build the BPF linker
-* libelf, make to build the memory profiler
-* libsodium, gcc, g++, libssl, pkg-config to build the network recorder
-* libarchive-tools, flex, bison to prepare the kernel code (needed for the network recorder).
+* `curl`, `wget` and `git` to get the code
+* `zlib`, `clang` and `llvm 11` to build the BPF linker
+* `libelf`, `make` to build the memory profiler
+* `libsodium`, `gcc`, `g++`, `libssl`, `pkg-config` to build the network recorder
+* `libarchive-tools`, `flex`, `bison` to prepare the kernel code (needed for the network recorder).
 
 In Ubuntu 20.04 or Ubuntu 20.10 or Ubuntu 21.04:
 
@@ -379,14 +381,16 @@ But internally also used nightly-2020-12-31 for building bpf module.
 If you have no rustup:
 
 ```
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2020-12-31
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 source $HOME/.cargo/env
+rustup update nightly-2020-12-31
 rustup update nightly-2021-03-23
 ```
 
 If you have rustup:
 
 ```
+rustup update stable
 rustup update nightly-2020-12-31
 rustup update nightly-2021-03-23
 ```
@@ -394,26 +398,7 @@ rustup update nightly-2021-03-23
 ### BPF linker (needed only for memory profiler)
 
 ```
-cargo install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
-```
-
-### Kernel sources (needed only for network recorder)
-
-The minimal required version of Linux kernel is 5.8, but if the version is lower 5.11,
-the debugger work unreliable. The recommended version of kernel is 5.11 or higher.
-
-However, for building, you need kernel sources of version 5.8.18
-no matter what the actual version you run.
-
-```
-export KERNEL_VERSION=5.8.18
-wget -cq https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-$KERNEL_VERSION.tar.xz
-tar xf linux-$KERNEL_VERSION.tar.xz
-cd linux-$KERNEL_VERSION
-make defconfig
-make modules_prepare
-export KERNEL_SOURCE=$(pwd)
-cd ..
+cargo +stable install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
 ```
 
 ### Build
@@ -433,7 +418,7 @@ cargo +nightly-2021-03-23 build -p bpf-memprof --release
 
 Build network recorder:
 ```
-cargo +nightly-2020-12-31 build -p bpf-sniffer --release
+cargo +stable install --path bpf-recorder
 cargo +nightly-2021-03-23 build -p tezedge-recorder --release
 ```
 
@@ -449,9 +434,21 @@ The TezEdge node and the memory profiler should be running to do this tests.
 
 `URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof -- positive compare`
 
-The TezEdge node and the network recorder should be running to do this tests.
+The TezEdge node and the network recorder should *not* be running to do this tests.
 
-`DEBUGGER_URL=http://localhost:17742 cargo +nightly-2021-03-23 test -p tester -- p2p_limit p2p_cursor p2p_types_filter`
+Make sure the database is empty `rm -Rf target/debugger_db`.
+
+Set a proper path to `libtezos.so`, if you are using rustup at default path, it should be:
+
+```
+export LD_LIBRARY_PATH=$HOME/.cargo/git/checkouts/tezedge-????????????????/???????/tezos/sys/lib_tezos/artifacts
+```
+
+Run the tests:
+
+```
+DEBUGGER_URL=http://localhost:17732 ./tester/test.sh
+```
 
 ### Important note before run
 
@@ -466,26 +463,24 @@ multiple TezEdge and/or Tezos nodes on the same computer.
 The network recorder expect `config.toml` file in the directory where it is running.
 It contains keys:
 
-```
-bpf_sniffer_path = "/tmp/bpf-sniffer.sock"
-rpc_port = 17732
-```
-
-The `bpf_sniffer_path` is legacy, do not change it.
-The `rpc_port` is the port where the network recorder serves http requests (v2).
+The `http_v2` is the port where the network recorder serves http requests (v2).
 
 The `[[nodes]]` section contains settings related to some TezEdge or Tezos node.
 There might be multiple such sections.
 
-* `db_path` it is path to the database where debugger store intercepted network data. 
+* `name` the identifier if the node, it should be passed to api (v2) requests.
 
-* `identity_path` is the path where node generated or will generate `identity.json` file.
+* `http_v3` is the port where the network recorder serves http requests (v3).
 
-* `p2p_port` is the port where the node will be listening incoming p2p connections.
+* `db` it is path to the database where debugger store intercepted network data. 
 
-* `rpc_port` is the port where the network recorder serves http requests (v3).
+* `p2p` section contains subkeys: `identity` is path to `identity.json` file
+and `port` is the port where the node will be listening incoming p2p connections.
 
-* `syslog_port` is the UDP port where the network recorder receives nodes logs in syslog format.
+* `log` section contains subkey `port` is the UDP port where the network recorder receives nodes logs in syslog format.
+
+Keys `p2p` and `log` are optional. The recorder can work on old kernel without bpf,
+but in such case it only record log, and unable to record p2p traffic.
 
 ### Run memory profiler
 
@@ -509,5 +504,6 @@ sudo ./target/none/release/bpf-memprof-user
 Run the network recorder:
 
 ```
-sudo ./target/none/release/bpf-sniffer & sleep 0.5 && ./target/none/release/tezedge-recorder
+export LD_LIBRARY_PATH=$HOME/.cargo/git/checkouts/tezedge-????????????????/???????/tezos/sys/lib_tezos/artifacts
+./target/none/release/tezedge-recorder --run-bpf
 ```
