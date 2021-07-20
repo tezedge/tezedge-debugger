@@ -2,6 +2,7 @@
 members = [
     "tester",
     "extractor",
+    "common",
 
     # recorder and its bpf tools
     "tezedge-recorder",

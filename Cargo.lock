@@ -298,6 +298,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "warp",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2218,6 +2225,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "bpf-memprof-common",
+ "common",
  "cpp_demangle",
  "ctrlc",
  "elf64",

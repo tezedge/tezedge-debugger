@@ -13,6 +13,8 @@ use super::{
     tables::chunk,
 };
 
+static OPEN_API_JSON_FILE: &'static [u8] = include_bytes!("../../network-recorder-openapi.json");
+
 fn connections<Db>(
     db: Arc<Db>,
 ) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
@@ -155,7 +157,8 @@ where
                 .or(messages(db.clone()))
                 .or(message(db.clone()))
                 .or(logs(db))
-                .or(version()),
+                .or(version())
+                .or(get_open_api()),
         )
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
@@ -256,4 +259,13 @@ where
         )
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
+}
+
+
+fn get_open_api() -> impl Filter<Extract = (WithStatus<RawJson>,), Error = Rejection> + Clone + Sync + Send + 'static {
+    warp::path!("openapi" / "network-recorder-openapi.json")
+        .and(warp::query::query())
+        .map(move |()| -> WithStatus<RawJson> {
+            reply::with_status(RawJson(OPEN_API_JSON_FILE), StatusCode::OK)
+        })
 }

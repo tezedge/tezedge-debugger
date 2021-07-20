@@ -13,6 +13,7 @@ use warp::{
 };
 use serde::{Serialize, Deserialize};
 use super::{StackResolver, Reporter};
+use common::RawJson;
 
 
 static OPEN_API_JSON_FILE: &'static [u8] = include_bytes!("../../memory-profiler-openapi.json");
@@ -55,22 +56,7 @@ fn get_pid(p: Arc<AtomicU32>) -> impl Filter<Extract = (WithStatus<Json>,), Erro
         })
 }
 
-fn get_open_api() -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
-    use warp::reply::Response;
-    use warp::http::header::{HeaderName, HeaderValue, CONTENT_TYPE};
-
-    pub struct RawJson(&'static [u8]);
-
-    impl Reply for RawJson {
-        #[inline]
-        fn into_response(self) -> Response {
-            let mut res = Response::new(self.0.into());
-            res.headers_mut()
-                .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-            res
-        }
-    }
-
+fn get_open_api() -> impl Filter<Extract = (WithStatus<RawJson>,), Error = Rejection> + Clone + Sync + Send + 'static {
     warp::path!("openapi" / "memory-profiler-openapi.json")
         .and(warp::query::query())
         .map(move |()| -> WithStatus<RawJson> {
