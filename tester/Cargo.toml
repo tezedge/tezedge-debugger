@@ -8,7 +8,8 @@ edition = "2018"
 structopt = { version = "0.3"}
 chrono = { version = "0.4" }
 rand = { version = "0.8.4", features = ["small_rng"] }
-tezedge-recorder = { path = "../tezedge-recorder" }
+crypto = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
+tezos_messages = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
 tezos_identity = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
 hex = "0.4"
 
@@ -16,3 +17,4 @@ hex = "0.4"
 reqwest = "0.11"
 tokio = { version = "1.8", features = ["full"] }
 serde_json = "1.0"
+tezedge-recorder = { path = "../tezedge-recorder" }

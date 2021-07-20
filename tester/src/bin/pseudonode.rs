@@ -39,8 +39,8 @@ fn generate_p2p(this: u16, peer: u16, initiator: bool) {
     use std::net::{SocketAddr, TcpListener, TcpStream};
     use tester::{handshake, Message, ChunkBuffer};
     //use tester::{RandomState, Generator};
-    use tezedge_recorder::crypto::nonce::NoncePair;
-    use tezedge_recorder::tezos_messages::p2p::encoding::{
+    use crypto::nonce::NoncePair;
+    use tezos_messages::p2p::encoding::{
         metadata::MetadataMessage,
         ack::AckMessage,
         //peer::{PeerMessage, PeerMessageResponse},

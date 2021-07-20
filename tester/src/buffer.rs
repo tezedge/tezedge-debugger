@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 use std::{convert::{TryInto, TryFrom}, io::{Read, Write, ErrorKind}};
-use tezedge_recorder::{tezos_messages, crypto};
 
 use tezos_messages::p2p::binary_message::{BinaryRead, BinaryMessage, BinaryChunk};
 use crypto::{crypto_box::PrecomputedKey, nonce::Nonce};

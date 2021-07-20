@@ -2254,6 +2254,7 @@ name = "tester"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "crypto",
  "hex",
  "rand 0.8.4",
  "reqwest",
@@ -2261,6 +2262,7 @@ dependencies = [
  "structopt",
  "tezedge-recorder",
  "tezos_identity",
+ "tezos_messages",
  "tokio",
 ]
 
