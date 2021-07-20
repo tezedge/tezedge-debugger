@@ -31,7 +31,7 @@ tracing = "0.1"
 
 warp = "0.3"
 tokio = { version = "1.8", features = ["rt-multi-thread"] }
-
+common = { path = "../common" }
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 jemallocator = { version = "0.3.2", optional = true }
 

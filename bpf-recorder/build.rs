@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 fn main() {
-    #[cfg(feature = "user")]
-    build_bpf()
+    /*#[cfg(feature = "user")]
+    build_bpf()*/
 }
 
 #[cfg(feature = "user")]

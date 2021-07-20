@@ -12,6 +12,7 @@ use super::{
     database::{DatabaseFetch, ConnectionsFilter, ChunksFilter, MessagesFilter, LogsFilter},
     tables::chunk,
 };
+use common::RawJson;
 
 static OPEN_API_JSON_FILE: &'static [u8] = include_bytes!("../../network-recorder-openapi.json");
 
