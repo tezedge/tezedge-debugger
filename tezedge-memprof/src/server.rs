@@ -121,7 +121,7 @@ where
 }
 
 pub fn openapi() -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
-    warp::path!("v2" / "openapi")
+    warp::path!("openapi" / "memory-profiler-openapi.json")
         .and(warp::query::query())
         .map(move |()| -> reply::WithStatus<Json> {
             let s = include_str!("../../memory-profiler-openapi.json");
