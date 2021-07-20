@@ -106,6 +106,24 @@
                         "schema": {
                             "type": "integer"
                         }
+                    },
+                    {
+                        "name": "timestamp",
+                        "in": "query",
+                        "description": "The timestamp from which the logs are shown",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "node_name",
+                        "in": "query",
+                        "description": "The name of the node from which the logs are shown",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
                     }
                 ],
                 "responses": {
