@@ -139,6 +139,19 @@ pub fn version() -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> +
         })
 }
 
+pub fn openapi() -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
+    warp::path!("v2" / "openapi")
+        .and(warp::query::query())
+        .map(move |()| -> reply::WithStatus<Json> {
+            let s = include_str!("../../network-recorder-openapi.json");
+            let d = serde_json::from_str::<serde_json::Value>(s).unwrap();
+            reply::with_status(
+                reply::json(&d),
+                StatusCode::OK,
+            )
+        })
+}
+
 pub fn routes<Db>(
     db: Arc<Db>,
 ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static
@@ -155,7 +168,8 @@ where
                 .or(messages(db.clone()))
                 .or(message(db.clone()))
                 .or(logs(db))
-                .or(version()),
+                .or(version()
+                .or(openapi())),
         )
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
@@ -252,7 +266,8 @@ where
             p2p(dbs.clone())
                 .or(p2p_details(dbs.clone()))
                 .or(log_old(dbs))
-                .or(version()),
+                .or(version())
+                .or(openapi()),
         )
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
