@@ -28,6 +28,7 @@ fn build_bpf() {
         "-Clink-arg=-O3",
     ];
     let output = Command::new("cargo")
+        .env("RUSTFLAGS", "")
         .env("CARGO_TARGET_DIR", &target_dir)
         .args(args)
         .output()
