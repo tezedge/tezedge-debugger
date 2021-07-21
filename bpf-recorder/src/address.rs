@@ -13,7 +13,7 @@ impl Address {
     const AF_INET6: u16 = 10;
 
     #[inline(always)]
-    pub fn read(addr_ptr: u64, addr_len: u64) -> Result<Self, i32> {
+    pub fn read(addr_ptr: u64, addr_len: u64) -> Result<Option<Self>, i32> {
         if addr_len < 4 {
             return Err(-1);
         }
@@ -30,10 +30,10 @@ impl Address {
             port: u16::from_be_bytes(address_header[1]),
         };
         if address.sa_family != Self::AF_INET && address.sa_family != Self::AF_INET6 {
-            return Err(-1);
+            return Ok(None);
         }
 
-        Ok(address)
+        Ok(Some(address))
     }
 
     #[inline(always)]

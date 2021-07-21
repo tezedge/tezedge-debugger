@@ -225,7 +225,7 @@ impl App {
         match data {
             SyscallContextData::Empty => Ok(()),
             SyscallContextData::Bind { fd, addr_ptr, addr_len } => {
-                let address = Address::read(addr_ptr, addr_len)?;
+                let address = Address::read(addr_ptr, addr_len)?.ok_or(-1)?;
                 let port = address.port();
                 if !self.is_interesting_port(port) {
                     return Ok(());
@@ -244,6 +244,9 @@ impl App {
             },
             SyscallContextData::Connect { fd, addr_ptr, addr_len } => {
                 let socket_id = SocketId { pid, fd };
+                if Address::read(addr_ptr, addr_len)?.is_none() {
+                    return self.forget_connection(socket_id);
+                }
                 self.reg_connection(socket_id, false)?;
                 let id = EventId::new(socket_id, ts0, ts1);
                 send::sized::<typenum::U28, typenum::B0>(
@@ -259,6 +262,9 @@ impl App {
                 let _ = listen_on_fd;
                 let fd = ret as u32;
                 let socket_id = SocketId { pid, fd };
+                if Address::read(addr_ptr, addr_len)?.is_none() {
+                    return self.forget_connection(socket_id);
+                }
                 self.reg_connection(socket_id, true)?;
                 let id = EventId::new(socket_id, ts0, ts1);
                 send::sized::<typenum::U28, typenum::B0>(
