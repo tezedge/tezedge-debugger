@@ -91,14 +91,14 @@ async fn timestamp() {
 
     impl TestCase {
         async fn run(self) {
-            let time = START_TIME as u64 + self.shift;
+            let time = (START_TIME as u64 + self.shift) * 1000;
             let direction = if self.forward { "forward" } else { "backward" };
             let params = format!("timestamp={}&limit=500&direction={}", time, direction);
             let items = get_log(&params).await.unwrap();
             assert_eq!(items.len(), self.expected);
             let mut time = time;
             for item in items {
-                let this = (item.timestamp / 1_000_000_000) as u64;
+                let this = (item.timestamp / 1_000_000) as u64;
                 if self.forward {
                     assert!(this > time);
                 } else {

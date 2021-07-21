@@ -176,7 +176,7 @@ impl Database for Db {
             index,
         };
         let timestamp_index = timestamp::Item {
-            timestamp: (item.timestamp / 1_000_000_000) as u64,
+            timestamp: (item.timestamp / 1_000_000) as u64,
             index,
         };
         let inner = || -> Result<(), DbError> {
