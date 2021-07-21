@@ -38,12 +38,11 @@ fn main() {
 fn generate_p2p(this: u16, peer: u16, initiator: bool) {
     use std::net::{SocketAddr, TcpListener, TcpStream};
     use tester::{handshake, Message, ChunkBuffer};
-    //use tester::{RandomState, Generator};
     use crypto::nonce::NoncePair;
     use tezos_messages::p2p::encoding::{
         metadata::MetadataMessage,
         ack::AckMessage,
-        //peer::{PeerMessage, PeerMessageResponse},
+        peer::{PeerMessage, PeerMessageResponse},
     };
 
     let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], this))).unwrap();
@@ -63,13 +62,8 @@ fn generate_p2p(this: u16, peer: u16, initiator: bool) {
         let (_, _msg) = AckMessage::read_msg(&mut stream, &mut buffer, &key, remote, false)
             .unwrap();
 
-        //let mut random_state = RandomState::new(0x1234567788, 10);
-        //let local = PeerMessageResponse::from(PeerMessage::GetOperations(random_state.gen())).write_msg(&mut stream, &key, local);
-        //let local = PeerMessageResponse::from(PeerMessage::Operation(random_state.gen())).write_msg(&mut stream, &key, local);
-        //let local = PeerMessageResponse::from(PeerMessage::GetProtocols(random_state.gen())).write_msg(&mut stream, &key, local);
-        //let local = PeerMessageResponse::from(PeerMessage::Protocol(random_state.gen())).write_msg(&mut stream, &key, local);
-        //let local = PeerMessageResponse::from(PeerMessage::GetOperationsForBlocks(random_state.gen())).write_msg(&mut stream, &key, local);
-        //let local = PeerMessageResponse::from(PeerMessage::OperationsForBlocks(random_state.gen())).write_msg(&mut stream, &key, local);
+        let fake_operation = serde_json::from_str(include_str!("operation_example.json")).unwrap();
+        let local = PeerMessageResponse::from(PeerMessage::Operation(fake_operation)).write_msg(&mut stream, &key, local);
         let _ = local;
     } else {    
         let mut stream = {
@@ -87,23 +81,8 @@ fn generate_p2p(this: u16, peer: u16, initiator: bool) {
             .unwrap();
         let _ = AckMessage::Ack.write_msg(&mut stream, &key, local);
 
-        //let (remote, msg) = PeerMessageResponse::read_msg(&mut stream, &mut buffer, &key, remote, true).unwrap();
-        //assert!(matches!(msg.message(), &PeerMessage::GetOperations(_)));
-
-        //let (remote, msg) = PeerMessageResponse::read_msg(&mut stream, &mut buffer, &key, remote, true).unwrap();
-        //assert!(matches!(msg.message(), &PeerMessage::Operation(_)));
-
-        //let (remote, msg) = PeerMessageResponse::read_msg(&mut stream, &mut buffer, &key, remote, true).unwrap();
-        //assert!(matches!(msg.message(), &PeerMessage::GetProtocols(_)));
-
-        //let (remote, msg) = PeerMessageResponse::read_msg(&mut stream, &mut buffer, &key, remote, true).unwrap();
-        //assert!(matches!(msg.message(), &PeerMessage::Protocol(_)));
-
-        //let (remote, msg) = PeerMessageResponse::read_msg(&mut stream, &mut buffer, &key, remote, true).unwrap();
-        //assert!(matches!(msg.message(), &PeerMessage::GetOperationsForBlocks(_)));
-
-        //let (remote, msg) = PeerMessageResponse::read_msg(&mut stream, &mut buffer, &key, remote, true).unwrap();
-        //assert!(matches!(msg.message(), &PeerMessage::OperationsForBlocks(_)));
+        let (remote, msg) = PeerMessageResponse::read_msg(&mut stream, &mut buffer, &key, remote, true).unwrap();
+        assert!(matches!(msg.message(), &PeerMessage::Operation(_)));
 
         let _ = remote;
     }

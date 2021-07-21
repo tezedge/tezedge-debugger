@@ -16,8 +16,7 @@ pub async fn get_p2p(params: &str, name: &str) -> Result<Vec<message::MessageFro
 
 #[tokio::test]
 async fn check_messages() {
-    use tezedge_recorder::common::MessageCategory;
-    //use tezedge_recorder::common::MessageKind;
+    use tezedge_recorder::common::{MessageCategory, MessageKind};
 
     let items = get_p2p("limit=100", "initiator").await.unwrap();
 
@@ -28,12 +27,7 @@ async fn check_messages() {
         (3, MessageCategory::Meta, None, true),
         (4, MessageCategory::Ack, None, false),
         (5, MessageCategory::Ack, None, true),
-        //(6, MessageCategory::P2p, Some(MessageKind::GetOperations), false),
-        //(7, MessageCategory::P2p, Some(MessageKind::Operation), false),
-        //(6, MessageCategory::P2p, Some(MessageKind::GetProtocols), false),
-        //(7, MessageCategory::P2p, Some(MessageKind::Protocol), false),
-        //(8, MessageCategory::P2p, Some(MessageKind::GetOperationsForBlocks), false),
-        //(9, MessageCategory::P2p, Some(MessageKind::OperationsForBlocks), false),
+        (6, MessageCategory::P2p, Some(MessageKind::Operation), false),
     ];
 
     for (id, category, kind, incoming) in &expected {
