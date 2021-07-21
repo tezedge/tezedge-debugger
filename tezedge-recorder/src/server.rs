@@ -143,7 +143,7 @@ pub fn openapi() -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> +
     warp::path!("openapi" / "network-recorder-openapi.json")
         .and(warp::query::query())
         .map(move |()| -> reply::WithStatus<Json> {
-            let s = include_str!("../../network-recorder-openapi.json");
+            let s = include_str!("../openapi.json");
             let d = serde_json::from_str::<serde_json::Value>(s).unwrap();
             reply::with_status(
                 reply::json(&d),
