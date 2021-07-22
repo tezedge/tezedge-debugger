@@ -79,6 +79,8 @@ pub struct Consumer {
     last: Option<EventKind>,
     limit: Arc<AtomicU32>,
     killed: bool,
+    first_brk: u64,
+    last_brk: u64,
 }
 
 impl Consumer {
@@ -105,6 +107,8 @@ impl Consumer {
             last: None,
             limit,
             killed: false,
+            first_brk: 0,
+            last_brk: 0,
         }
     }
 
@@ -168,8 +172,20 @@ impl Consumer {
                 self.vm_aggregator.lock().unwrap().track_alloc(&event.stack, v.new_address.0, v.new_len);
             },
             &EventKind::Brk(ref v) if self.has_pid => {
-                // TODO:
-                let _ = v;
+                if self.first_brk == 0 {
+                    self.first_brk = v.brk.0;
+                    self.last_brk = v.brk.0;
+                } else {
+                    if v.brk.0 > self.first_brk {
+                        if self.first_brk < self.last_brk {
+                            self.vm_aggregator.lock().unwrap().track_free(self.first_brk, self.last_brk - self.first_brk);
+                            self.last_brk = v.brk.0;
+                            self.vm_aggregator.lock().unwrap().track_alloc(&event.stack, self.first_brk, self.last_brk - self.first_brk);
+                        }
+                    } else {
+                        log::warn!("brk negative");
+                    }
+                }
             },
             _ => (),
         }
