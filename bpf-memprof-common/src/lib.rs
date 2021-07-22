@@ -10,6 +10,7 @@ pub use self::event::{
     PageFreeBatched,
 };
 pub use self::event::{RssStat, PercpuAlloc, PercpuFree, AddToPageCache, RemoveFromPageCache};
+pub use self::event::{Mmap, Munmap, Mremap, Brk};
 
 #[cfg(feature = "client")]
 mod client;

@@ -451,3 +451,111 @@ impl Pod for RemoveFromPageCache {
         })
     }
 }
+
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mmap {
+    pub address: Hex64,
+    pub len: u64,
+    prot: u64,
+    flags: u64,
+    fd: u64,
+    off: u64,
+}
+
+impl Pod for Mmap {
+    const DISCRIMINANT: Option<u32> = Some(18);
+    const SIZE: usize = 0x30;
+
+    #[inline(always)]
+    fn from_slice(s: &[u8]) -> Option<Self> {
+        if s.len() < Self::SIZE {
+            return None;
+        }
+        Some(Mmap {
+            address: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
+            len: u64::from_ne_bytes(TryFrom::try_from(&s[0x08..0x10]).unwrap()),
+            prot: u64::from_ne_bytes(TryFrom::try_from(&s[0x10..0x18]).unwrap()),
+            flags: u64::from_ne_bytes(TryFrom::try_from(&s[0x18..0x20]).unwrap()),
+            fd: u64::from_ne_bytes(TryFrom::try_from(&s[0x20..0x28]).unwrap()),
+            off: u64::from_ne_bytes(TryFrom::try_from(&s[0x28..0x30]).unwrap()),
+        })
+    }
+}
+
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Munmap {
+    pub address: Hex64,
+    pub len: u64,
+}
+
+impl Pod for Munmap {
+    const DISCRIMINANT: Option<u32> = Some(19);
+    const SIZE: usize = 0x10;
+
+    #[inline(always)]
+    fn from_slice(s: &[u8]) -> Option<Self> {
+        if s.len() < Self::SIZE {
+            return None;
+        }
+        Some(Munmap {
+            address: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
+            len: u64::from_ne_bytes(TryFrom::try_from(&s[0x08..0x10]).unwrap()),
+        })
+    }
+}
+
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mremap {
+    pub address: Hex64,
+    pub old_len: u64,
+    pub new_len: u64,
+    flags: u64,
+    pub new_address: Hex64,
+}
+
+impl Pod for Mremap {
+    const DISCRIMINANT: Option<u32> = Some(20);
+    const SIZE: usize = 0x28;
+
+    #[inline(always)]
+    fn from_slice(s: &[u8]) -> Option<Self> {
+        if s.len() < Self::SIZE {
+            return None;
+        }
+        Some(Mremap {
+            address: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
+            old_len: u64::from_ne_bytes(TryFrom::try_from(&s[0x08..0x10]).unwrap()),
+            new_len: u64::from_ne_bytes(TryFrom::try_from(&s[0x10..0x18]).unwrap()),
+            flags: u64::from_ne_bytes(TryFrom::try_from(&s[0x18..0x20]).unwrap()),
+            new_address: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x20..0x28]).unwrap())),
+        })
+    }
+}
+
+#[cfg_attr(feature = "client", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Brk {
+    pub brk: Hex64,
+}
+
+impl Pod for Brk {
+    const DISCRIMINANT: Option<u32> = Some(21);
+    const SIZE: usize = 0x08;
+
+    #[inline(always)]
+    fn from_slice(s: &[u8]) -> Option<Self> {
+        if s.len() < Self::SIZE {
+            return None;
+        }
+        Some(Brk {
+            brk: Hex64(u64::from_ne_bytes(TryFrom::try_from(&s[0x00..0x08]).unwrap())),
+        })
+    }
+}

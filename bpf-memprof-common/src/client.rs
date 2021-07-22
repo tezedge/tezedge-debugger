@@ -16,6 +16,7 @@ use super::event::{
     PageFreeBatched,
 };
 use super::event::{RssStat, PercpuAlloc, PercpuFree, AddToPageCache, RemoveFromPageCache};
+use super::event::{Mmap, Munmap, Mremap, Brk};
 
 pub struct Client {
     stream: UnixStream,
@@ -113,6 +114,10 @@ pub enum EventKind {
     PercpuFree(PercpuFree),
     AddToPageCache(AddToPageCache),
     RemoveFromPageCache(RemoveFromPageCache),
+    Mmap(Mmap),
+    Munmap(Munmap),
+    Mremap(Mremap),
+    Brk(Brk),
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -286,6 +291,18 @@ impl Event {
             },
             x if Some(x) == RemoveFromPageCache::DISCRIMINANT => {
                 (EventKind::RemoveFromPageCache(RemoveFromPageCache::from_slice(slice).ok_or(0)?), RemoveFromPageCache::SIZE)
+            },
+            x if Some(x) == Mmap::DISCRIMINANT => {
+                (EventKind::Mmap(Mmap::from_slice(slice).ok_or(0)?), Mmap::SIZE)
+            },
+            x if Some(x) == Munmap::DISCRIMINANT => {
+                (EventKind::Munmap(Munmap::from_slice(slice).ok_or(0)?), Munmap::SIZE)
+            },
+            x if Some(x) == Mremap::DISCRIMINANT => {
+                (EventKind::Mremap(Mremap::from_slice(slice).ok_or(0)?), Mremap::SIZE)
+            },
+            x if Some(x) == Brk::DISCRIMINANT => {
+                (EventKind::Brk(Brk::from_slice(slice).ok_or(0)?), Brk::SIZE)
             },
             _ => return Err(1),
         };

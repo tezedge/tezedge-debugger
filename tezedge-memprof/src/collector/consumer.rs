@@ -114,7 +114,20 @@ impl Consumer {
                     self.killed = true;
                 }
                 self.aggregator.lock().unwrap().track_rss_anon(v.size as _);
-            }
+            },
+            // TODO: handle virtual memory events
+            &EventKind::Mmap(ref v) if self.has_pid => {
+                let _ = v;
+            },
+            &EventKind::Munmap(ref v) if self.has_pid => {
+                let _ = v;
+            },
+            &EventKind::Mremap(ref v) if self.has_pid => {
+                let _ = v;
+            },
+            &EventKind::Brk(ref v) if self.has_pid => {
+                let _ = v;
+            },
             _ => (),
         }
         self.last = Some(event.event);

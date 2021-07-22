@@ -39,6 +39,14 @@ pub struct App {
     pub add_to_page_cache: ebpf::ProgRef,
     #[prog("tracepoint/filemap/mm_filemap_delete_from_page_cache")]
     pub remove_from_page_cache: ebpf::ProgRef,
+    #[prog("tracepoint/syscalls/sys_enter_mmap")]
+    pub mmap: ebpf::ProgRef,
+    #[prog("tracepoint/syscalls/sys_enter_munmap")]
+    pub munmap: ebpf::ProgRef,
+    #[prog("tracepoint/syscalls/sys_enter_mremap")]
+    pub mremap: ebpf::ProgRef,
+    #[prog("tracepoint/syscalls/sys_enter_brk")]
+    pub brk: ebpf::ProgRef,
 }
 
 #[cfg(feature = "kern")]
@@ -47,6 +55,7 @@ use {
     bpf_memprof_common::{
         KFree, KMAlloc, KMAllocNode, CacheAlloc, CacheAllocNode, CacheFree, PageAlloc, PageFree,
         PageFreeBatched, RssStat, PercpuAlloc, PercpuFree, AddToPageCache, RemoveFromPageCache,
+        Mmap, Munmap, Mremap, Brk,
     },
     ebpf::helpers,
 };
@@ -414,6 +423,26 @@ impl App {
     #[inline(always)]
     pub fn remove_from_page_cache(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.output_unconditional::<RemoveFromPageCache>(ctx)
+    }
+
+    #[inline(always)]
+    pub fn mmap(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.output::<Mmap>(ctx, true)
+    }
+
+    #[inline(always)]
+    pub fn munmap(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.output::<Munmap>(ctx, false)
+    }
+
+    #[inline(always)]
+    pub fn mremap(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.output::<Mremap>(ctx, false)
+    }
+
+    #[inline(always)]
+    pub fn brk(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
+        self.output::<Brk>(ctx, true)
     }
 }
 

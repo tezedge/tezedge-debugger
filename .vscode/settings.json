@@ -46,6 +46,7 @@
         "memprof",
         "memtable",
         "mmap",
+        "mremap",
         "msvc",
         "munmap",
         "nanos",
