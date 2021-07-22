@@ -437,7 +437,7 @@ impl App {
 
     #[inline(always)]
     pub fn mremap(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
-        self.output::<Mremap>(ctx, false)
+        self.output::<Mremap>(ctx, true)
     }
 
     #[inline(always)]

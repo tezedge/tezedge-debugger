@@ -156,18 +156,19 @@ impl Consumer {
                 }
                 self.aggregator.lock().unwrap().track_rss_anon(v.size as _);
             },
-            // TODO: handle virtual memory events
             &EventKind::Mmap(ref v) if self.has_pid => {
                 self.vm_aggregator.lock().unwrap().track_alloc(&event.stack, v.address.0, v.len);
-                let _ = v;
             },
             &EventKind::Munmap(ref v) if self.has_pid => {
-                let _ = v;
+                self.vm_aggregator.lock().unwrap().track_free(v.address.0, v.len);
             },
             &EventKind::Mremap(ref v) if self.has_pid => {
-                let _ = v;
+                // TODO: optimize
+                self.vm_aggregator.lock().unwrap().track_free(v.address.0, v.old_len);
+                self.vm_aggregator.lock().unwrap().track_alloc(&event.stack, v.new_address.0, v.new_len);
             },
             &EventKind::Brk(ref v) if self.has_pid => {
+                // TODO:
                 let _ = v;
             },
             _ => (),
