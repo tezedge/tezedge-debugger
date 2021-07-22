@@ -347,7 +347,7 @@ impl DatabaseFetch for Db {
 
             Ok(v)
         } else {
-            let cursor = filter.cursor.clone().unwrap_or(u64::MAX);
+            let cursor = filter.cursor.clone().unwrap_or(if forward { 0 } else { u64::MAX });
             let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(5);
             if let Some(ty) = &filter.types {
                 let mut tys = Vec::new();
@@ -495,7 +495,7 @@ impl DatabaseFetch for Db {
                 iters.push(Box::new(it));
             }
 
-            let v = sorted_intersect(iters.as_mut_slice(), limit)
+            let v = sorted_intersect(iters.as_mut_slice(), limit, forward)
                 .into_iter()
                 .filter_map(
                     move |index| match self.as_kv::<message::Schema>().get(&index) {
@@ -594,7 +594,7 @@ impl DatabaseFetch for Db {
             let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(5);
 
             if let Some(lv) = &filter.log_level {
-                let cursor = filter.cursor.clone().unwrap_or(u64::MAX);
+                let cursor = filter.cursor.clone().unwrap_or(if forward { 0 } else { u64::MAX });
                 let mut lvs = Vec::new();
                 for lv in lv.split(',') {
                     let lv =
@@ -665,7 +665,7 @@ impl DatabaseFetch for Db {
                 iters.push(Box::new(it));
             }
 
-            let v = sorted_intersect(iters.as_mut_slice(), limit)
+            let v = sorted_intersect(iters.as_mut_slice(), limit, forward)
                 .into_iter()
                 .filter_map(
                     move |index| match self.as_kv::<node_log::Schema>().get(&index) {

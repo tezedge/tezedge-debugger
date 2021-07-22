@@ -122,3 +122,14 @@ async fn timestamp() {
         test_case.run().await;
     }
 }
+
+#[tokio::test]
+async fn timestamp_and_level() {
+    let time = (START_TIME as u64 + 3_000) * 1000;
+    let params = format!("timestamp={}&limit=500&direction=backward&log_level=warn", time);
+    let items = get_log(&params).await.unwrap();
+    assert!(!items.is_empty());
+    let params = format!("timestamp={}&limit=500&direction=forward&log_level=warn", time);
+    let items = get_log(&params).await.unwrap();
+    assert!(!items.is_empty());
+}
