@@ -545,7 +545,7 @@ fn main() {
     let resolver = StackResolver::spawn(cli.pid());
 
     // spawn a thread-pool serving http requests, using tokio
-    let server = server::run(cli.reporter(), resolver, cli.pid());
+    let server = server::run(cli.reporter(), cli.vm_reporter(), resolver, cli.pid());
 
     let mut rb = RingBufferRegistry::default();
     let mut cli = cli;

@@ -4,7 +4,13 @@
 use std::ops::Deref;
 use std::sync::{Arc, Mutex, atomic::{Ordering, AtomicU32}};
 use bpf_memprof_common::{EventKind, Event};
-use super::{Reporter, StackResolver, FrameReport, aggregator::Aggregator};
+use super::{
+    Reporter,
+    StackResolver,
+    FrameReport,
+    aggregator::Aggregator,
+    vm_aggregator::VmAggregator,
+};
 
 impl Reporter for Aggregator {
     fn short_report(&self) -> (u64, u64) {
@@ -32,7 +38,36 @@ impl Reporter for Aggregator {
         report.inner.strip(threshold);
 
         report
+    }
+}
 
+// TODO: don't repeat yourself
+impl Reporter for VmAggregator {
+    fn short_report(&self) -> (u64, u64) {
+        let (mut value, mut cache_value) = (0, 0);
+        for (v, c, _) in self.report() {
+            value += v;
+            cache_value += c;
+        }
+
+        (value, cache_value)
+    }
+
+    fn tree_report<R>(&self, resolver: R, threshold: u64, reverse: bool) -> FrameReport<R>
+    where
+        R: Deref<Target = StackResolver>,
+    {
+        let mut report = FrameReport::new(resolver);
+        for (value, cache_value, stack) in self.report() {
+            if reverse {
+                report.inner.insert(stack.iter().rev(), value, cache_value);
+            } else {
+                report.inner.insert(stack.iter(), value, cache_value);
+            }
+        }
+        report.inner.strip(threshold);
+
+        report
     }
 }
 
@@ -40,6 +75,7 @@ pub struct Consumer {
     has_pid: bool,
     pid: Arc<AtomicU32>,
     aggregator: Arc<Mutex<Aggregator>>,
+    vm_aggregator: Arc<Mutex<VmAggregator>>,
     last: Option<EventKind>,
     limit: Arc<AtomicU32>,
     killed: bool,
@@ -48,6 +84,10 @@ pub struct Consumer {
 impl Consumer {
     pub fn reporter(&self) -> Arc<Mutex<Aggregator>> {
         self.aggregator.clone()
+    }
+
+    pub fn vm_reporter(&self) -> Arc<Mutex<VmAggregator>> {
+        self.vm_aggregator.clone()
     }
 
     pub fn pid(&self) -> Arc<AtomicU32> {
@@ -61,6 +101,7 @@ impl Consumer {
             has_pid: false,
             pid: Arc::new(AtomicU32::new(0)),
             aggregator: Arc::new(Mutex::new(Aggregator::default())),
+            vm_aggregator: Arc::new(Mutex::new(VmAggregator::default())),
             last: None,
             limit,
             killed: false,
@@ -117,6 +158,7 @@ impl Consumer {
             },
             // TODO: handle virtual memory events
             &EventKind::Mmap(ref v) if self.has_pid => {
+                self.vm_aggregator.lock().unwrap().track_alloc(&event.stack, v.address.0, v.len);
                 let _ = v;
             },
             &EventKind::Munmap(ref v) if self.has_pid => {

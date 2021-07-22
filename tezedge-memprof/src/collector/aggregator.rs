@@ -1,19 +1,11 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{sync::Arc, collections::HashMap};
+use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use bpf_memprof_common::{Hex64, Hex32, Stack};
+use super::func_path::FuncPath;
 use crate::{Tracker, Page};
-
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
-pub struct FuncPath(Arc<Vec<Hex64>>);
-
-impl FuncPath {
-    pub fn new(stack: &Stack) -> Self {
-        FuncPath(Arc::new(stack.ips().to_vec()))
-    }
-}
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub struct FuncPathIndex(u32);
@@ -213,7 +205,7 @@ impl Aggregator {
         self.groups.iter().map(|(_, usage)| (
             (usage.value as u64) * 4,
             (usage.cache_value as u64) * 4,
-            usage.func_path.0.as_ref().as_ref(),
+            usage.func_path.as_ref(),
         ))
     }
 }

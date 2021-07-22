@@ -14,32 +14,36 @@ use warp::{
 use serde::{Serialize, Deserialize};
 use super::{StackResolver, Reporter};
 
-pub fn run<T>(
-    reporter: Arc<Mutex<T>>,
+pub fn run<PmReporter, VmReporter>(
+    reporter: Arc<Mutex<PmReporter>>,
+    vm_reporter: Arc<Mutex<VmReporter>>,
     resolver: Arc<RwLock<StackResolver>>,
     pid: Arc<AtomicU32>,
 ) -> (tokio::task::JoinHandle<()>, tokio::runtime::Runtime)
 where
-    T: Reporter + Send + 'static,
+    PmReporter: Reporter + Send + 'static,
+    VmReporter: Reporter + Send + 'static,
 {
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let server = routes(reporter, resolver, pid.clone());
+    let server = routes(reporter, vm_reporter, resolver, pid.clone());
     let handler = runtime.spawn(warp::serve(server).run(([0, 0, 0, 0], 17832)));
     (handler, runtime)
 }
 
-fn routes<T>(
-    reporter: Arc<Mutex<T>>,
+fn routes<PmReporter, VmReporter>(
+    reporter: Arc<Mutex<PmReporter>>,
+    vm_reporter: Arc<Mutex<VmReporter>>,
     resolver: Arc<RwLock<StackResolver>>,
     pid: Arc<AtomicU32>,
 ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static
 where
-    T: Reporter + Send + 'static,
+    PmReporter: Reporter + Send + 'static,
+    VmReporter: Reporter + Send + 'static,
 {
     use warp::reply::with;
 
     warp::get()
-        .and(tree(reporter, resolver, pid.clone()).or(get_pid(pid)).or(openapi()))
+        .and(tree(reporter, resolver.clone(), pid.clone()).or(vm_tree(vm_reporter, resolver)).or(get_pid(pid)).or(openapi()))
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
 }
@@ -68,6 +72,33 @@ fn rss_anon(p: Arc<AtomicU32>) -> Result<u64, Error> {
     }
 
     Ok(v)
+}
+
+fn vm_tree<T>(
+    history: Arc<Mutex<T>>,
+    resolver: Arc<RwLock<StackResolver>>,
+) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static
+where
+    T: Reporter + Send + 'static,
+{
+    #[derive(Deserialize)]
+    struct Params {
+        threshold: Option<u64>,
+        reverse: Option<bool>,
+    }
+
+    warp::path!("v1" / "vm_tree")
+        .and(warp::query::query())
+        .map(move |params: Params| -> WithStatus<Json> {
+            let resolver = resolver.read().unwrap();
+            let history = history.lock().unwrap();
+            let report = history.tree_report(
+                resolver,
+                params.threshold.unwrap_or(512),
+                params.reverse.unwrap_or(false),
+            );
+            reply::with_status(reply::json(&report), StatusCode::OK)
+        })
 }
 
 fn tree<T>(
