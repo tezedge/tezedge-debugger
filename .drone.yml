@@ -28,7 +28,7 @@ steps:
       # run tezedge-node in docker
       - docker stop tezedge_node || true
       - TEZEDGE_NODE_NAME=tezedge_node ./target/none/release/bpf-memprof-user &
-      - docker run --rm -d --name tezedge_node tezedge/tezedge:latest-frame-pointers-enabled --network florencenet
+      - docker run --rm -d -e MEMPROF_LIMIT=200000 --name tezedge_node tezedge/tezedge:latest-frame-pointers-enabled --network florencenet
       # do tests
       - URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof --release -- positive compare --nocapture
       # stop the node

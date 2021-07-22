@@ -25,4 +25,6 @@ tracing = "0.1"
 warp = "0.3"
 tokio = { version = "1.8", features = ["rt-multi-thread", "macros"] }
 
+nix = "0.22"
+
 bpf-memprof-common = { path = "../bpf-memprof-common", features = ["client"] }

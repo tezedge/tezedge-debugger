@@ -14,8 +14,11 @@ ebpf::license!("Dual MIT/GPL");
 #[cfg(any(feature = "kern", feature = "user"))]
 #[derive(ebpf::BpfApp)]
 pub struct App {
+    // TODO: make single hash map: pid -> limit
     #[hashmap(size = 1)]
     pub pid: ebpf::HashMapRef<4, 4>,
+    #[hashmap(size = 1)]
+    pub limit: ebpf::HashMapRef<4, 4>,
     #[hashmap(size = 1)]
     pub lost_events: ebpf::HashMapRef<4, 4>,
     #[array_percpu(size = 1)]
@@ -81,6 +84,84 @@ impl App {
     }
 
     #[inline(always)]
+    // search for MEMPROF_LIMIT=1000000000
+    fn check_env(&mut self, env: *const *const u8) -> Result<(), i32> {
+        use core::{ptr, mem};
+
+        if env.is_null() {
+            return Err(0);
+        }
+
+        let mut buffer = [0u8; 24];
+
+        let mut env = env;
+        let mut env_str = ptr::null::<u8>();
+        for _ in 0..256 {
+            let c = unsafe {
+                helpers::probe_read_user(
+                    &mut env_str as *mut _ as _,
+                    mem::size_of::<*const u8>() as _,
+                    env as _,
+                )
+            };
+
+            if c != 0 {
+                return Err(c as _);
+            }
+
+            if env_str.is_null() {
+                return Err(0);
+            }
+
+            let c = unsafe {
+                helpers::probe_read_user_str(buffer.as_mut_ptr() as _, 24, env_str as _)
+            };
+
+            if c < 0 {
+                return Err(c as _);
+            } else if c < 25 {
+                // buffer is aligned by 8, so it is safe
+                let prefix = unsafe { *(buffer.as_ptr() as *const u64) };
+                // hex representation of 'MEMPROF_' is '4d454d50524f465f'
+                // if we on little endian platform, it should be 0x5f464f52504d454d
+                // otherwise it should be 0x4d454d50524f465f
+                if prefix == 0x5f464f52504d454d || prefix == 0x4d454d50524f465f {
+                    let pass = true
+                        && buffer[0x8] == 'L' as u8
+                        && buffer[0x9] == 'I' as u8
+                        && buffer[0xa] == 'M' as u8
+                        && buffer[0xb] == 'I' as u8
+                        && buffer[0xc] == 'T' as u8
+                        && buffer[0xd] == '=' as u8;
+                    if pass {
+                        let mut limit = 0;
+                        for i in 14..23 {
+                            let b = buffer[i];
+                            if '0' as u8 <= b && b <= '9' as u8 {
+                                limit *= 10;
+                                limit += (b - ('0' as u8)) as u32;
+                            } else {
+                                break;
+                            }
+                        }
+                        self.limit.insert(0u32.to_ne_bytes(), limit.to_ne_bytes())?;
+
+                        let x = unsafe { helpers::get_current_pid_tgid() };
+                        let pid = (x >> 32) as u32;
+                        self.pid.insert(0u32.to_ne_bytes(), pid.to_ne_bytes())?;
+
+                        return Ok(());
+                    }
+                }
+            }
+
+            env = unsafe { env.offset(1) };
+        }
+
+        Err(0)
+    }
+
+    #[inline(always)]
     fn check_filename(&mut self, filename_ptr: *const u8) -> Result<(), i32> {
         if filename_ptr.is_null() {
             return Err(0);
@@ -128,14 +209,14 @@ impl App {
     pub fn execve(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.check_no_pid()?;
 
-        self.check_filename(ctx.read_here::<*const u8>(0x10))
+        self.check_env(ctx.read_here::<*const *const u8>(0x20))
     }
 
     #[inline(always)]
     pub fn execveat(&mut self, ctx: ebpf::Context) -> Result<(), i32> {
         self.check_no_pid()?;
 
-        self.check_filename(ctx.read_here::<*const u8>(0x18))
+        self.check_env(ctx.read_here::<*const *const u8>(0x28))
     }
 
     #[inline(always)]
@@ -201,7 +282,6 @@ impl App {
         } else {
             0
         };
-        
 
         let stack_len = if stack_len > 64 {
             STACK_MAX_DEPTH
@@ -399,7 +479,7 @@ fn run_bpf() -> (ebpf::Skeleton<App>, i32) {
 
 #[cfg(feature = "user")]
 fn main() {
-    use std::{time::Duration, io, sync::{Arc, atomic::{Ordering, AtomicBool}}};
+    use std::{time::Duration, io, sync::{Arc, atomic::{Ordering, AtomicBool, AtomicU32}}};
     use tracing::Level;
     use ebpf::RingBufferRegistry;
     use tezedge_memprof::{Consumer, StackResolver, server};
@@ -424,7 +504,8 @@ fn main() {
         .send_fd(fd)
         .expect("failed to send ring buffer access");*/
 
-    let cli = Consumer::default();
+    let limit = Arc::new(AtomicU32::new(0));
+    let cli = Consumer::new(limit.clone());
     let aggregator = cli.reporter();
 
     if std::env::args().find(|s| s == "--dump").is_some() {
@@ -445,9 +526,19 @@ fn main() {
 
     let mut overall_cnt = 0;
     let mut old_cnt = 0;
+    let mut has_limit = false;
     while running.load(Ordering::Relaxed) {
         match rb.poll(Duration::from_secs(1)) {
             Ok(_) => {
+                if !has_limit {
+                    let l = skeleton.app.limit.get(&0u32.to_ne_bytes())
+                        .map(u32::from_le_bytes)
+                        .unwrap_or(0);
+                    if l != 0 {
+                        limit.store(l, Ordering::Relaxed);
+                        has_limit = true;
+                    }
+                }
                 overall_cnt += 1;
                 if overall_cnt & 0xffff == 0 {
                     let cnt = skeleton.app.lost_events.get(&0u32.to_ne_bytes())

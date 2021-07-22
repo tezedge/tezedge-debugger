@@ -36,12 +36,13 @@ impl Reporter for Aggregator {
     }
 }
 
-#[derive(Default)]
 pub struct Consumer {
     has_pid: bool,
     pid: Arc<AtomicU32>,
     aggregator: Arc<Mutex<Aggregator>>,
     last: Option<EventKind>,
+    limit: Arc<AtomicU32>,
+    killed: bool,
 }
 
 impl Consumer {
@@ -55,7 +56,22 @@ impl Consumer {
 }
 
 impl Consumer {
+    pub fn new(limit: Arc<AtomicU32>) -> Self {
+        Consumer {
+            has_pid: false,
+            pid: Arc::new(AtomicU32::new(0)),
+            aggregator: Arc::new(Mutex::new(Aggregator::default())),
+            last: None,
+            limit,
+            killed: false,
+        }
+    }
+
     pub fn arrive(&mut self, data: &[u8]) {
+        if self.killed {
+            return;
+        }
+
         let event = match Event::from_slice(data) {
             Ok(v) => v,
             Err(error) => {
@@ -86,6 +102,17 @@ impl Consumer {
                 self.aggregator.lock().unwrap().mark_cache(v.pfn.0 as u32, false);
             },
             &EventKind::RssStat(ref v) if v.member == 1 && self.has_pid => {
+                use nix::{unistd::Pid, sys::signal};
+
+                let limit = self.limit.load(Ordering::Relaxed);
+                if limit != 0 && (v.size / 1000) as u32 > limit {
+                    let pid = Pid::from_raw(self.pid.load(Ordering::Relaxed) as _);
+                    match signal::kill(pid, signal::SIGKILL) {
+                        Ok(()) => (),
+                        Err(e) => log::error!("cannot kill pid: {}, errno: {}", pid, e),
+                    }
+                    self.killed = true;
+                }
                 self.aggregator.lock().unwrap().track_rss_anon(v.size as _);
             }
             _ => (),
