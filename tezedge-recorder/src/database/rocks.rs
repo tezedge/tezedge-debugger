@@ -287,6 +287,9 @@ impl DatabaseFetch for Db {
     ) -> Result<Vec<message::MessageFrontend>, Self::Error> {
         let limit = filter.limit.unwrap_or(100) as usize;
 
+        let forward = filter.direction == Some("forward".to_string());
+        let direction = || if forward { Direction::Forward } else { Direction::Reverse };
+
         if filter.remote_addr.is_none()
             && filter.source_type.is_none()
             && filter.incoming.is_none()
@@ -295,9 +298,13 @@ impl DatabaseFetch for Db {
             && filter.to.is_none()
         {
             let mode = if let Some(cursor) = &filter.cursor {
-                IteratorMode::From(cursor, Direction::Reverse)
+                IteratorMode::From(cursor, direction())
             } else {
-                IteratorMode::End
+                if forward {
+                    IteratorMode::Start
+                } else {
+                    IteratorMode::End
+                }
             };
             let v = self
                 .as_kv::<message::Schema>()
@@ -354,7 +361,7 @@ impl DatabaseFetch for Db {
                     let key = key
                         .encode()
                         .map_err(|error| DBError::SchemaError { error })?;
-                    let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                    let mode = rocksdb::IteratorMode::From(&key, direction().into());
                     let cf = self
                         .inner
                         .cf_handle(message_ty::Schema::name())
@@ -380,7 +387,7 @@ impl DatabaseFetch for Db {
                 let key = key
                     .encode()
                     .map_err(|error| DBError::SchemaError { error })?;
-                let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                let mode = rocksdb::IteratorMode::From(&key, direction().into());
                 let cf = self
                     .inner
                     .cf_handle(message_sender::Schema::name())
@@ -403,7 +410,7 @@ impl DatabaseFetch for Db {
                 let key = key
                     .encode()
                     .map_err(|error| DBError::SchemaError { error })?;
-                let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                let mode = rocksdb::IteratorMode::From(&key, direction().into());
                 let cf = self
                     .inner
                     .cf_handle(message_initiator::Schema::name())
@@ -431,7 +438,7 @@ impl DatabaseFetch for Db {
                 let key = key
                     .encode()
                     .map_err(|error| DBError::SchemaError { error })?;
-                let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                let mode = rocksdb::IteratorMode::From(&key, direction().into());
                 let cf = self
                     .inner
                     .cf_handle(message_addr::Schema::name())
@@ -453,9 +460,13 @@ impl DatabaseFetch for Db {
                 };
                 let mode = if let Some(end) = filter.to {
                     timestamp.timestamp = end;
-                    IteratorMode::From(&timestamp, Direction::Reverse)
+                    IteratorMode::From(&timestamp, direction())
                 } else {
-                    IteratorMode::End
+                    if forward {
+                        IteratorMode::Start
+                    } else {
+                        IteratorMode::End
+                    }
                 };
                 let it = self
                     .as_kv::<timestamp::MessageSchema>()
@@ -463,12 +474,25 @@ impl DatabaseFetch for Db {
                     .filter_map(|(k, _)| k.ok());
                 if let Some(begin) = filter.from {
                     let it = it
-                        .take_while(move |k| k.timestamp >= begin)
+                        .take_while(move |k| (k.timestamp >= begin) ^ forward)
                         .map(|k| k.index);
                     iters.push(Box::new(it));
                 } else {
                     iters.push(Box::new(it.map(|k| k.index)));
                 }
+            }
+            if let Some(middle) = filter.timestamp {
+                let middle = timestamp::Item {
+                    timestamp: middle,
+                    index: u64::MAX,
+                };
+
+                let it = self
+                    .as_kv::<timestamp::MessageSchema>()
+                    .iterator(IteratorMode::From(&middle, direction()))?
+                    .filter_map(|(k, _)| k.ok())
+                    .map(|k| k.index);
+                iters.push(Box::new(it));
             }
 
             let v = sorted_intersect(iters.as_mut_slice(), limit)

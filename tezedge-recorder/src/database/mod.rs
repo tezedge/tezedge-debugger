@@ -31,6 +31,7 @@ pub struct ChunksFilter {
 
 #[derive(Deserialize)]
 pub struct MessagesFilter {
+    pub direction: Option<String>,
     pub limit: Option<u64>,
     pub cursor: Option<u64>,
     pub remote_addr: Option<String>,
@@ -39,6 +40,7 @@ pub struct MessagesFilter {
     pub types: Option<String>,
     pub from: Option<u64>,
     pub to: Option<u64>,
+    pub timestamp: Option<u64>,
     // compatibility
     pub node_name: Option<String>,
 }
