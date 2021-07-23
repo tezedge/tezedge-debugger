@@ -21,15 +21,48 @@ pub struct LogIndexer {
     index: Index,
     id_field: schema::Field,
     message_field: schema::Field,
-    writer: Arc<Mutex<IndexWriter>>,
-    queue: Arc<Mutex<(u64, Vec<String>)>>,
     writer_thread: Option<thread::JoinHandle<()>>,
-    dirty: Arc<AtomicBool>,
+    queue: Arc<Mutex<(u64, Vec<String>)>>,
+    commit_state: Arc<State>,
+}
+
+struct State {
+    dirty: AtomicBool,
+    running: AtomicBool,
+    writer: Mutex<IndexWriter>,
+}
+
+impl State {
+    fn run(&self) {
+        use std::time::{Instant, Duration};
+
+        const TICK: Duration = Duration::from_millis(1000);
+
+        fn align(duration: Duration, tick: Duration) -> Duration {
+            let duration = duration.as_micros() as u64;
+            let tick = tick.as_micros() as u64;
+            Duration::from_micros(tick - (duration % tick))
+        }
+
+        while self.running.load(Ordering::Relaxed) {
+            let commit_begin = Instant::now();
+            if self.dirty.fetch_and(false, Ordering::SeqCst) {
+                match self.writer.lock().unwrap().commit() {
+                    Ok(_) => (),
+                    Err(error) => log::error!("cannot commit log index: {:?}", error),
+                }
+            }
+            let commit_end = Instant::now();
+            let elapsed = commit_end.duration_since(commit_begin);
+            thread::sleep(align(elapsed, TICK));
+        }
+    }
 }
 
 impl Drop for LogIndexer {
     fn drop(&mut self) {
         if let Some(log_writer) = self.writer_thread.take() {
+            self.commit_state.running.store(false, Ordering::Relaxed);
             match log_writer.join() {
                 Ok(()) => (),
                 Err(error) => log::error!("error joining log indexer thread: {:?}", error),
@@ -54,55 +87,35 @@ impl LogIndexer {
         let index = Index::open_or_create(MmapDirectory::open(path)?, schema.clone())?;
         let message_field = schema.get_field("message").unwrap();
         let id_field = schema.get_field("id").unwrap();
-        let writer = Arc::new(Mutex::new(index.writer(Self::HEAP_BYTES)?));
         let queue = Default::default();
-        let dirty = Arc::new(AtomicBool::new(false));
+        let commit_state = Arc::new(State {
+            dirty: AtomicBool::new(false),
+            running: AtomicBool::new(true),
+            writer: Mutex::new(index.writer(Self::HEAP_BYTES)?),
+        });
 
         let writer_thread = {
-            let dirty = dirty.clone();
-            let writer = writer.clone();
-            Some(thread::spawn(move || {
-                use std::time::{Instant, Duration};
-
-                const TICK: Duration = Duration::from_millis(1000);
-
-                fn align(duration: Duration, tick: Duration) -> Duration {
-                    let duration = duration.as_micros() as u64;
-                    let tick = tick.as_micros() as u64;
-                    Duration::from_micros(tick - (duration % tick))
-                }
-
-                loop {
-                    let commit_begin = Instant::now();
-                    if dirty.fetch_and(false, Ordering::SeqCst) {
-                        match writer.lock().unwrap().commit() {
-                            Ok(_) => (),
-                            Err(error) => log::error!("cannot commit log index: {:?}", error),
-                        }
-                    }
-                    let commit_end = Instant::now();
-                    let elapsed = commit_end.duration_since(commit_begin);
-                    thread::sleep(align(elapsed, TICK));
-                }
-            }))
+            let commit_state = commit_state.clone();
+            Some(thread::spawn(move || commit_state.run()))
         };
 
-        Ok(LogIndexer { index, message_field, id_field, writer, queue, writer_thread, dirty })
+        Ok(LogIndexer { index, message_field, id_field, queue, writer_thread, commit_state })
     }
 
     pub fn write(&self, message: &str, id: u64) {
         use std::mem;
 
-        match self.writer.try_lock() {
+        match self.commit_state.writer.try_lock() {
             Ok(writer) => {
-                let (base, queue) = mem::replace(self.queue.lock().unwrap().deref_mut(), (0, Vec::new()));
+                let (base, mut queue) = mem::replace(self.queue.lock().unwrap().deref_mut(), (0, Vec::new()));
+                queue.push(message.to_string());
                 for (i, message) in queue.into_iter().enumerate() {
                     let mut doc = Document::default();
                     doc.add_text(self.message_field, message);
                     doc.add_u64(self.id_field, base + (i as u64));
                     writer.add_document(doc);
                 }
-                self.dirty.fetch_or(true, Ordering::SeqCst);
+                self.commit_state.dirty.fetch_or(true, Ordering::SeqCst);
             },
             Err(TryLockError::Poisoned(e)) => Err::<(), _>(e).unwrap(),
             Err(TryLockError::WouldBlock) => {
