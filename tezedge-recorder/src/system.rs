@@ -25,6 +25,7 @@ pub struct P2pConfig {
 #[derive(Clone, Deserialize)]
 struct LogConfig {
     port: u16,
+    disable_search: Option<bool>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -84,22 +85,23 @@ impl NodeServer {
     pub fn open_spawn<Db>(
         db_path: &str,
         rpc_port: Option<u16>,
-        syslog_port: Option<u16>,
+        log_config: &Option<LogConfig>,
         rt: &Runtime,
         running: Arc<AtomicBool>,
     ) -> Result<(Self, Arc<Db>)>
     where
         Db: DatabaseNew + Database + DatabaseFetch + Sync + Send + 'static,
     {
-        let db = Arc::new(Db::open(db_path, syslog_port.is_some())?);
+        let log_search = !log_config.as_ref().and_then(|c| c.disable_search).unwrap_or(false);
+        let db = Arc::new(Db::open(db_path, log_search)?);
         let server = if let Some(port) = rpc_port {
             let addr = ([0, 0, 0, 0], port);
             Some(rt.spawn(warp::serve(server::routes(db.clone())).run(addr)))
         } else {
             None
         };
-        let log_client = if let Some(port) = syslog_port {
-            Some(log_client::spawn(port, db.clone(), running)?)
+        let log_client = if let Some(log_config) = log_config {
+            Some(log_client::spawn(log_config.port, db.clone(), running)?)
         } else {
             None
         };
@@ -248,7 +250,7 @@ where
         for c in &self.config.nodes {
             let r = running.clone();
             let rt = &self.tokio_rt;
-            match NodeServer::open_spawn(&c.db, c.http_v3, c.log.as_ref().map(|c| c.port), rt, r) {
+            match NodeServer::open_spawn(&c.db, c.http_v3, &c.log, rt, r) {
                 Ok((server, db)) => {
                     self.node_servers.insert(c.name.clone(), server);
                     self.node_dbs.insert(c.name.clone(), db);

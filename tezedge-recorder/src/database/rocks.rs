@@ -11,6 +11,7 @@ use storage::{
         database::RocksDbKeyValueSchema,
     },
 };
+use tantivy::TantivyError;
 use anyhow::Result;
 use thiserror::Error;
 use itertools::Itertools;
@@ -33,11 +34,19 @@ pub enum DbError {
     Rocksdb(DBError),
     #[error("there is no log indexer")]
     NoLogIndexer,
+    #[error("log indexer: {}", _0)]
+    LogIndexer(TantivyError),
 }
 
 impl From<DBError> for DbError {
     fn from(v: DBError) -> Self {
         DbError::Rocksdb(v)
+    }
+}
+
+impl From<TantivyError> for DbError {
+    fn from(v: TantivyError) -> Self {
+        DbError::LogIndexer(v)
     }
 }
 
@@ -105,7 +114,7 @@ impl DatabaseNew for Db {
         }
 
         let log_indexer = if log {
-            Some(search::LogIndexer::new(path.join("tantivy")))
+            Some(search::LogIndexer::try_new(path.join("tantivy"))?)
         } else {
             None
         };
@@ -576,7 +585,7 @@ impl DatabaseFetch for Db {
             let result = self.log_indexer
                 .as_ref()
                 .ok_or(DbError::NoLogIndexer)?
-                .read(query, limit)
+                .read(query, limit)?
                 .filter_map(|(_score, id)| {
                     match self.as_kv::<node_log::Schema>().get(&id) {
                         Ok(Some(value)) => Some(node_log::ItemWithId::new(value, id)),

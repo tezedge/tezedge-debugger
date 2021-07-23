@@ -14,6 +14,7 @@ use tantivy::{
     ReloadPolicy,
     query::QueryParser,
     collector::TopDocs,
+    TantivyError,
 };
 
 pub struct LogIndexer {
@@ -29,7 +30,10 @@ pub struct LogIndexer {
 impl Drop for LogIndexer {
     fn drop(&mut self) {
         if let Some(log_writer) = self.writer_thread.take() {
-            log_writer.join().unwrap();
+            match log_writer.join() {
+                Ok(()) => (),
+                Err(error) => log::error!("error joining log indexer thread: {:?}", error),
+            }
         }
     }
 }
@@ -37,7 +41,7 @@ impl Drop for LogIndexer {
 impl LogIndexer {
     const HEAP_BYTES: usize = 32 * 1024 * 1024; // 32Mb
 
-    pub fn new<P>(path: P) -> Self
+    pub fn try_new<P>(path: P) -> Result<Self, TantivyError>
     where
         P: AsRef<Path>,
     {
@@ -47,10 +51,10 @@ impl LogIndexer {
         let schema = schema_builder.build();
 
         let _ = fs::create_dir_all(&path);
-        let index = Index::open_or_create(MmapDirectory::open(path).unwrap(), schema.clone()).unwrap();
+        let index = Index::open_or_create(MmapDirectory::open(path)?, schema.clone())?;
         let message_field = schema.get_field("message").unwrap();
         let id_field = schema.get_field("id").unwrap();
-        let writer = Arc::new(Mutex::new(index.writer(Self::HEAP_BYTES).unwrap()));
+        let writer = Arc::new(Mutex::new(index.writer(Self::HEAP_BYTES)?));
         let queue = Default::default();
         let dirty = Arc::new(AtomicBool::new(false));
 
@@ -71,7 +75,10 @@ impl LogIndexer {
                 loop {
                     let commit_begin = Instant::now();
                     if dirty.fetch_and(false, Ordering::SeqCst) {
-                        writer.lock().unwrap().commit().unwrap();
+                        match writer.lock().unwrap().commit() {
+                            Ok(_) => (),
+                            Err(error) => log::error!("cannot commit log index: {:?}", error),
+                        }
                     }
                     let commit_end = Instant::now();
                     let elapsed = commit_end.duration_since(commit_begin);
@@ -80,7 +87,7 @@ impl LogIndexer {
             }))
         };
 
-        LogIndexer { index, message_field, id_field, writer, queue, writer_thread, dirty }
+        Ok(LogIndexer { index, message_field, id_field, writer, queue, writer_thread, dirty })
     }
 
     pub fn write(&self, message: &str, id: u64) {
@@ -108,29 +115,31 @@ impl LogIndexer {
         }
     }
 
-    pub fn read(&self, query: &str, limit: usize) -> impl Iterator<Item = (f32, u64)> {
+    pub fn read(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<impl Iterator<Item = (f32, u64)>, TantivyError> {
         let reader = self.index
             .reader_builder()
             .reload_policy(ReloadPolicy::OnCommit)
-            .try_into()
-            .unwrap();
+            .try_into()?;
         let searcher = reader.searcher();
         let query_parser = QueryParser::for_index(&self.index, vec![self.message_field]);
-        let query = query_parser.parse_query(query).unwrap();
+        let query = query_parser.parse_query(query)?;
         let id_field = self.id_field;
-        searcher
-            .search(&query, &TopDocs::with_limit(limit))
-            .unwrap()
+        let it = searcher
+            .search(&query, &TopDocs::with_limit(limit))?
             .into_iter()
             .filter_map(move |(score, doc_address)| {
-                let retrieved_doc = searcher.doc(doc_address).unwrap();
+                let retrieved_doc = searcher.doc(doc_address).ok()?;
                 let f = retrieved_doc.field_values().iter()
-                    .find(|x| x.field() == id_field)
-                    .unwrap();
+                    .find(|x| x.field() == id_field)?;
                 match f.value() {
                     &schema::Value::U64(ref id) => Some((score, *id)),
                     _ => None,
                 }
-            })
+            });
+        Ok(it)
     }
 }
