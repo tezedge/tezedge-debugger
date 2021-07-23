@@ -3,6 +3,7 @@
 
 pub mod rocks;
 pub mod mock;
+pub mod search;
 
 mod sorted_intersect;
 
@@ -54,6 +55,7 @@ pub struct LogsFilter {
     pub from: Option<u64>,
     pub to: Option<u64>,
     pub timestamp: Option<u64>,
+    pub query: Option<String>,
     // compatibility
     pub node_name: Option<String>,
 }
@@ -90,7 +92,7 @@ where
 {
     type Error: 'static + Send + Sync + Error;
 
-    fn open<P>(path: P) -> Result<Self, Self::Error>
+    fn open<P>(path: P, log: bool) -> Result<Self, Self::Error>
     where
         P: AsRef<Path>;
 }

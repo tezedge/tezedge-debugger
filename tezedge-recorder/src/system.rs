@@ -91,7 +91,7 @@ impl NodeServer {
     where
         Db: DatabaseNew + Database + DatabaseFetch + Sync + Send + 'static,
     {
-        let db = Arc::new(Db::open(db_path)?);
+        let db = Arc::new(Db::open(db_path, syslog_port.is_some())?);
         let server = if let Some(port) = rpc_port {
             let addr = ([0, 0, 0, 0], port);
             Some(rt.spawn(warp::serve(server::routes(db.clone())).run(addr)))

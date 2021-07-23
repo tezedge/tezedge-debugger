@@ -25,10 +25,12 @@ pub struct Db {
 impl DatabaseNew for Db {
     type Error = io::Error;
 
-    fn open<P>(path: P) -> Result<Self, Self::Error>
+    fn open<P>(path: P, log: bool) -> Result<Self, Self::Error>
     where
         P: AsRef<Path>,
     {
+        let _ = log;
+
         Ok(Db {
             file: Mutex::new(File::create(path)?),
         })

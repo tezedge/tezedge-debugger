@@ -106,11 +106,18 @@ fn prepare_db_range(range: Range<i64>) {
 
         let local = Local.timestamp(timestamp, 0).to_rfc3339();
         let fake = "Jul 14 12:00:00.000";
+        // 16 words
+        let text = (0..16)
+            .fold(String::new(), |acc, _| {
+                // 8 * 2 = 16 symbols each
+                format!("{} {}", acc, hex::encode((0..8).map(|_| rand::random()).collect::<Vec<u8>>()))
+            });
         let msg = format!(
-            "<27>1 {} wsvl eb3fdbc716e5 665 eb3fdbc716e5 - {} {} some message",
+            "<27>1 {} wsvl eb3fdbc716e5 665 eb3fdbc716e5 - {} {} some message {}",
             local,
             fake,
             level,
+            text,
         );
 
         let _ = socket.send_to(msg.as_bytes(), "127.0.0.1:10000").unwrap();

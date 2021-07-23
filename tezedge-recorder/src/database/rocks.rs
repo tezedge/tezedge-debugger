@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, ops::Add, path::Path, sync::atomic::{Ordering, AtomicU64}};
+use std::{net::SocketAddr, ops::Add, path::{Path, PathBuf}, sync::atomic::{Ordering, AtomicU64}};
 use rocksdb::{Cache, DB, ReadOptions};
 use storage::{
     Direction, IteratorMode,
@@ -18,7 +18,7 @@ use super::sorted_intersect::sorted_intersect;
 #[rustfmt::skip]
 use super::{
     // core traits
-    Database, DatabaseNew, DatabaseFetch,
+    Database, DatabaseNew, DatabaseFetch, search,
     // filters
     ConnectionsFilter, ChunksFilter, MessagesFilter, LogsFilter,
     // tables
@@ -28,12 +28,16 @@ use super::{
 };
 
 #[derive(Error, Debug)]
-#[error("{}", _0)]
-pub struct DbError(DBError);
+pub enum DbError {
+    #[error("rocksdb error: {}", _0)]
+    Rocksdb(DBError),
+    #[error("there is no log indexer")]
+    NoLogIndexer,
+}
 
 impl From<DBError> for DbError {
     fn from(v: DBError) -> Self {
-        DbError(v)
+        DbError::Rocksdb(v)
     }
 }
 
@@ -41,6 +45,7 @@ pub struct Db {
     //_cache: Cache,
     message_counter: AtomicU64,
     log_counter: AtomicU64,
+    log_indexer: Option<search::LogIndexer>,
     inner: DB,
 }
 
@@ -64,7 +69,7 @@ impl Db {
 impl DatabaseNew for Db {
     type Error = DbError;
 
-    fn open<P>(path: P) -> Result<Self, Self::Error>
+    fn open<P>(path: P, log: bool) -> Result<Self, Self::Error>
     where
         P: AsRef<Path>,
     {
@@ -83,7 +88,8 @@ impl DatabaseNew for Db {
             log_level::Schema::descriptor(&cache),
             timestamp::LogSchema::descriptor(&cache),
         ];
-        let inner = persistent::database::open_kv(path, cfs, &DbConfiguration::default())?;
+        let path = PathBuf::from(path.as_ref());
+        let inner = persistent::database::open_kv(path.join("rocksdb"), cfs, &DbConfiguration::default())?;
 
         fn counter<S>(db: &DB) -> Option<S::Key>
         where
@@ -98,10 +104,17 @@ impl DatabaseNew for Db {
                 .map(|c| c + 1)
         }
 
+        let log_indexer = if log {
+            Some(search::LogIndexer::new(path.join("tantivy")))
+        } else {
+            None
+        };
+
         Ok(Db {
             //_cache: cache,
             message_counter: AtomicU64::new(counter::<message::Schema>(&inner).unwrap_or(0)),
             log_counter: AtomicU64::new(counter::<node_log::Schema>(&inner).unwrap_or(0)),
+            log_indexer,
             inner,
         })
     }
@@ -186,6 +199,9 @@ impl Database for Db {
             self.as_kv::<node_log::Schema>().put(&index, &item)?;
             Ok(())
         };
+        if let Some(log_indexer) = &self.log_indexer {
+            log_indexer.write(&item.message, index);
+        }
         if let Err(error) = inner() {
             log::error!("database error: {}", error);
         }
@@ -555,6 +571,28 @@ impl DatabaseFetch for Db {
 
         let forward = filter.direction == Some("forward".to_string());
         let direction = || if forward { Direction::Forward } else { Direction::Reverse };
+
+        if let Some(query) = &filter.query {
+            let result = self.log_indexer
+                .as_ref()
+                .ok_or(DbError::NoLogIndexer)?
+                .read(query, limit)
+                .filter_map(|(_score, id)| {
+                    match self.as_kv::<node_log::Schema>().get(&id) {
+                        Ok(Some(value)) => Some(node_log::ItemWithId::new(value, id)),
+                        Ok(None) => {
+                            log::info!("No value at index: {}", id);
+                            None
+                        },
+                        Err(err) => {
+                            log::warn!("Failed to load value at index {}: {}", id, err);
+                            None
+                        },
+                    }
+                })
+                .collect();
+            return Ok(result);
+        }
 
         if filter.log_level.is_none() && filter.from.is_none() && filter.to.is_none() && filter.timestamp.is_none() {
             let mode = if let Some(cursor) = &filter.cursor {
