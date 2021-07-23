@@ -296,6 +296,7 @@ impl DatabaseFetch for Db {
             && filter.types.is_none()
             && filter.from.is_none()
             && filter.to.is_none()
+            && filter.timestamp.is_none()
         {
             let mode = if let Some(cursor) = &filter.cursor {
                 IteratorMode::From(cursor, direction())
@@ -569,15 +570,7 @@ impl DatabaseFetch for Db {
                 .as_kv::<node_log::Schema>()
                 .iterator(mode)?
                 .filter_map(|(k, v)| match (k, v) {
-                    (Ok(id), Ok(value)) => {
-                        Some(node_log::ItemWithId {
-                            id,
-                            level: value.level,
-                            timestamp: value.timestamp,
-                            section: value.section,
-                            message: value.message,
-                        })
-                    },
+                    (Ok(id), Ok(item)) => Some(node_log::ItemWithId::new(item, id)),
                     (Ok(index), Err(err)) => {
                         log::warn!("Failed to load value at {:?}: {}", index, err);
                         None
@@ -668,22 +661,14 @@ impl DatabaseFetch for Db {
             let v = sorted_intersect(iters.as_mut_slice(), limit, forward)
                 .into_iter()
                 .filter_map(
-                    move |index| match self.as_kv::<node_log::Schema>().get(&index) {
-                        Ok(Some(value)) => {
-                            Some(node_log::ItemWithId {
-                                id: index,
-                                level: value.level,
-                                timestamp: value.timestamp,
-                                section: value.section,
-                                message: value.message,
-                            })
-                        },
+                    move |id| match self.as_kv::<node_log::Schema>().get(&id) {
+                        Ok(Some(item)) => Some(node_log::ItemWithId::new(item, id)),
                         Ok(None) => {
-                            log::info!("No value at index: {}", index);
+                            log::info!("No value at index: {}", id);
                             None
                         },
                         Err(err) => {
-                            log::warn!("Failed to load value at index {}: {}", index, err);
+                            log::warn!("Failed to load value at index {}: {}", id, err);
                             None
                         },
                     },

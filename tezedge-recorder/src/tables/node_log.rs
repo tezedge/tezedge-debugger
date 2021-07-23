@@ -18,6 +18,18 @@ pub struct ItemWithId {
     pub message: String,
 }
 
+impl ItemWithId {
+    pub fn new(item: Item, id: u64) -> Self {
+        ItemWithId {
+            id,
+            level: item.level,
+            timestamp: item.timestamp,
+            section: item.section,
+            message: item.message,
+        }
+    }
+}
+
 /// Received logs saved in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {

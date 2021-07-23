@@ -229,6 +229,15 @@
                         "schema": {
                             "type": "integer"
                         }
+                    },
+                    {
+                        "name": "timestamp",
+                        "in": "query",
+                        "description": "The timestamp from which the p2p messages are shown",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
                     }
                 ],
                 "responses": {
