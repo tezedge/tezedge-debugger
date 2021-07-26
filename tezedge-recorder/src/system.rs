@@ -92,7 +92,10 @@ impl NodeServer {
     where
         Db: DatabaseNew + Database + DatabaseFetch + Sync + Send + 'static,
     {
-        let log_search = !log_config.as_ref().and_then(|c| c.disable_search).unwrap_or(false);
+        let log_search = !log_config
+            .as_ref()
+            .and_then(|c| c.disable_search)
+            .unwrap_or(false);
         let db = Arc::new(Db::open(db_path, log_search)?);
         let server = if let Some(port) = rpc_port {
             let addr = ([0, 0, 0, 0], port);

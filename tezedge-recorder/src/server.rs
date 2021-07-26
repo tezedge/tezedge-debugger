@@ -131,24 +131,23 @@ where
     )
 }
 
-pub fn version() -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
-    warp::path!("v2" / "version")
-        .and(warp::query::query())
-        .map(move |()| -> reply::WithStatus<Json> {
+pub fn version(
+) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
+    warp::path!("v2" / "version").and(warp::query::query()).map(
+        move |()| -> reply::WithStatus<Json> {
             reply::with_status(reply::json(&env!("GIT_HASH")), StatusCode::OK)
-        })
+        },
+    )
 }
 
-pub fn openapi() -> impl Filter<Extract=(WithStatus<Json>, ), Error=Rejection> + Clone + Sync + Send + 'static {
+pub fn openapi(
+) -> impl Filter<Extract = (WithStatus<Json>,), Error = Rejection> + Clone + Sync + Send + 'static {
     warp::path!("openapi" / "network-recorder-openapi.json")
         .and(warp::query::query())
         .map(move |()| -> reply::WithStatus<Json> {
             let s = include_str!("../openapi.json");
             let d = serde_json::from_str::<serde_json::Value>(s).unwrap();
-            reply::with_status(
-                reply::json(&d),
-                StatusCode::OK,
-            )
+            reply::with_status(reply::json(&d), StatusCode::OK)
         })
 }
 
@@ -168,8 +167,7 @@ where
                 .or(messages(db.clone()))
                 .or(message(db.clone()))
                 .or(logs(db))
-                .or(version()
-                .or(openapi())),
+                .or(version().or(openapi())),
         )
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
@@ -209,22 +207,24 @@ where
 {
     warp::path!("v2" / "p2p" / u64)
         .and(warp::query::query())
-        .map(move |id: u64, filter: MessagesFilter| -> reply::WithStatus<Json> {
-            let node_name = filter.node_name.clone().unwrap_or("tezedge".to_string());
-            match dbs.get(&node_name) {
-                Some(db) => match db.fetch_message(id) {
-                    Ok(message) => reply::with_status(reply::json(&message), StatusCode::OK),
-                    Err(err) => {
-                        let r = &format!("database error: {}", err);
-                        reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+        .map(
+            move |id: u64, filter: MessagesFilter| -> reply::WithStatus<Json> {
+                let node_name = filter.node_name.clone().unwrap_or("tezedge".to_string());
+                match dbs.get(&node_name) {
+                    Some(db) => match db.fetch_message(id) {
+                        Ok(message) => reply::with_status(reply::json(&message), StatusCode::OK),
+                        Err(err) => {
+                            let r = &format!("database error: {}", err);
+                            reply::with_status(reply::json(&r), StatusCode::INTERNAL_SERVER_ERROR)
+                        },
                     },
-                },
-                None => {
-                    let r = &format!("no such node: {:?}", node_name);
-                    reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
-                },
-            }
-        })
+                    None => {
+                        let r = &format!("no such node: {:?}", node_name);
+                        reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
+                    },
+                }
+            },
+        )
 }
 
 fn log_old<Db>(

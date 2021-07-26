@@ -151,7 +151,8 @@ fn fill_heap<
 /// resulting set
 fn is_hit<Item: Ord>(heap: &[(Item, usize)]) -> bool {
     let value = heap.iter().next().map(|(value, _)| {
-        heap.iter().fold((value, true), |(a, eq), (b, _)| (b, eq & a.eq(b)))
+        heap.iter()
+            .fold((value, true), |(a, eq), (b, _)| (b, eq & a.eq(b)))
     });
 
     matches!(value, Some((_, true)))

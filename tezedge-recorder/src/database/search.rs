@@ -1,14 +1,16 @@
-use std::{fs, ops::DerefMut, path::Path, sync::{Arc, Mutex, MutexGuard, TryLockError, atomic::{Ordering, AtomicBool}}, thread};
+use std::{
+    fs,
+    ops::DerefMut,
+    path::Path,
+    sync::{
+        Arc, Mutex, MutexGuard, TryLockError,
+        atomic::{Ordering, AtomicBool},
+    },
+    thread,
+};
 use tantivy::{
-    directory::MmapDirectory,
-    schema,
-    Index,
-    IndexWriter,
-    Document, 
-    ReloadPolicy,
-    query::QueryParser,
-    collector::TopDocs,
-    TantivyError,
+    directory::MmapDirectory, schema, Index, IndexWriter, Document, ReloadPolicy,
+    query::QueryParser, collector::TopDocs, TantivyError,
 };
 
 pub struct LogIndexer {
@@ -150,7 +152,11 @@ impl LogIndexer {
             Some(thread::spawn(move || commit_state.run()))
         };
 
-        Ok(LogIndexer { index, writer_thread, commit_state })
+        Ok(LogIndexer {
+            index,
+            writer_thread,
+            commit_state,
+        })
     }
 
     pub fn write(&self, message: &str, id: u64) {
@@ -168,7 +174,9 @@ impl LogIndexer {
                 self.commit_state.dirty.fetch_or(true, Ordering::SeqCst);
             },
             Err(TryLockError::Poisoned(e)) => Err::<(), _>(e).unwrap(),
-            Err(TryLockError::WouldBlock) => self.commit_state.queue.lock().unwrap().enqueue(id, message),
+            Err(TryLockError::WouldBlock) => {
+                self.commit_state.queue.lock().unwrap().enqueue(id, message)
+            },
         }
     }
 
@@ -177,12 +185,14 @@ impl LogIndexer {
         query: &str,
         limit: usize,
     ) -> Result<impl Iterator<Item = (f32, u64)>, TantivyError> {
-        let reader = self.index
+        let reader = self
+            .index
             .reader_builder()
             .reload_policy(ReloadPolicy::OnCommit)
             .try_into()?;
         let searcher = reader.searcher();
-        let query_parser = QueryParser::for_index(&self.index, vec![self.commit_state.message_field]);
+        let query_parser =
+            QueryParser::for_index(&self.index, vec![self.commit_state.message_field]);
         let query = query_parser.parse_query(query)?;
         let id_field = self.commit_state.id_field;
         let it = searcher
@@ -190,7 +200,9 @@ impl LogIndexer {
             .into_iter()
             .filter_map(move |(score, doc_address)| {
                 let retrieved_doc = searcher.doc(doc_address).ok()?;
-                let f = retrieved_doc.field_values().iter()
+                let f = retrieved_doc
+                    .field_values()
+                    .iter()
                     .find(|x| x.field() == id_field)?;
                 match f.value() {
                     &schema::Value::U64(ref id) => Some((score, *id)),

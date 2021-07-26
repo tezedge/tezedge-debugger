@@ -24,7 +24,7 @@ pub struct App {
     #[hashmap(size = 64)]
     pub processes: ebpf::HashMapRef<4, 2>,
     #[hashmap(size = 0x2000)]
-    pub connections: ebpf::HashMapRef<{mem::size_of::<SocketId>()}, 4>,
+    pub connections: ebpf::HashMapRef<{ mem::size_of::<SocketId>() }, 4>,
     #[hashmap(size = 0x100)]
     pub syscall_contexts: ebpf::HashMapRef<4, 0x20>,
     #[prog("tracepoint/syscalls/sys_enter_bind")]
@@ -92,7 +92,8 @@ impl App {
         unsafe { ptr::write_volatile(&mut context.data, mem::zeroed()) };
         context.data = data;
 
-        self.syscall_contexts.insert_unsafe(thread_id.to_ne_bytes(), context)
+        self.syscall_contexts
+            .insert_unsafe(thread_id.to_ne_bytes(), context)
     }
 
     #[inline(always)]
@@ -103,7 +104,10 @@ impl App {
         };
         let ts1 = unsafe { helpers::ktime_get_ns() };
 
-        match self.syscall_contexts.remove_unsafe::<SyscallContext>(&thread_id.to_ne_bytes())? {
+        match self
+            .syscall_contexts
+            .remove_unsafe::<SyscallContext>(&thread_id.to_ne_bytes())?
+        {
             Some(context) => {
                 let SyscallContext { data, ts: ts0 } = context;
                 let ret = ctx.read_here(0x10);
@@ -139,7 +143,8 @@ impl App {
     fn reg_connection(&mut self, socket_id: SocketId, incoming: bool) -> Result<(), i32> {
         let _ = self.forget_connection(socket_id);
         let v = if incoming { 2u32 } else { 1u32 };
-        self.connections.insert(socket_id.to_ne_bytes(), v.to_ne_bytes())
+        self.connections
+            .insert(socket_id.to_ne_bytes(), v.to_ne_bytes())
     }
 
     fn forget_connection(&mut self, socket_id: SocketId) -> Result<(), i32> {
@@ -186,9 +191,17 @@ impl App {
         }
 
         let data = if incoming {
-            SyscallContextData::Accept { listen_on_fd: fd, addr_ptr, addr_len }
+            SyscallContextData::Accept {
+                listen_on_fd: fd,
+                addr_ptr,
+                addr_len,
+            }
         } else {
-            SyscallContextData::Connect { fd, addr_ptr, addr_len }
+            SyscallContextData::Connect {
+                fd,
+                addr_ptr,
+                addr_len,
+            }
         };
 
         self.push(thread_id, ts, data)
@@ -224,7 +237,11 @@ impl App {
 
         match data {
             SyscallContextData::Empty => Ok(()),
-            SyscallContextData::Bind { fd, addr_ptr, addr_len } => {
+            SyscallContextData::Bind {
+                fd,
+                addr_ptr,
+                addr_len,
+            } => {
                 let address = Address::read(addr_ptr, addr_len)?.ok_or(-1)?;
                 let port = address.port();
                 if !self.is_interesting_port(port) {
@@ -242,7 +259,11 @@ impl App {
                 );
                 Ok(())
             },
-            SyscallContextData::Connect { fd, addr_ptr, addr_len } => {
+            SyscallContextData::Connect {
+                fd,
+                addr_ptr,
+                addr_len,
+            } => {
                 let socket_id = SocketId { pid, fd };
                 if Address::read(addr_ptr, addr_len)?.is_none() {
                     return self.forget_connection(socket_id);
@@ -258,7 +279,11 @@ impl App {
                 );
                 Ok(())
             },
-            SyscallContextData::Accept { listen_on_fd, addr_ptr, addr_len } => {
+            SyscallContextData::Accept {
+                listen_on_fd,
+                addr_ptr,
+                addr_len,
+            } => {
                 let _ = listen_on_fd;
                 let fd = ret as u32;
                 let socket_id = SocketId { pid, fd };
@@ -304,7 +329,11 @@ impl App {
         };
         let ts = unsafe { helpers::ktime_get_ns() };
 
-        let data = SyscallContextData::Bind { fd, addr_ptr, addr_len };
+        let data = SyscallContextData::Bind {
+            fd,
+            addr_ptr,
+            addr_len,
+        };
 
         self.push(thread_id, ts, data)
     }
@@ -353,7 +382,13 @@ impl App {
 
         self.connections.remove(&socket_id.to_ne_bytes())?;
         let id = EventId::new(SocketId { pid, fd }, ts, ts);
-        send::sized::<typenum::U0, typenum::B0>(id, DataTag::Close, ptr::null(), 0, &mut self.event_queue);
+        send::sized::<typenum::U0, typenum::B0>(
+            id,
+            DataTag::Close,
+            ptr::null(),
+            0,
+            &mut self.event_queue,
+        );
 
         Ok(())
     }
@@ -407,7 +442,10 @@ impl App {
 
 #[cfg(feature = "user")]
 fn main() {
-    use ebpf::{Skeleton, kind::{AppItemKindMut, AppItem}};
+    use ebpf::{
+        Skeleton,
+        kind::{AppItemKindMut, AppItem},
+    };
     use std::{
         fs,
         io::{Error, BufReader, BufRead},
@@ -438,9 +476,11 @@ fn main() {
 
     let mut skeleton = Skeleton::<App>::open("bpf-recorder\0", CODE)
         .unwrap_or_else(|code| panic!("failed to open bpf: {}", code));
-    skeleton.load()
+    skeleton
+        .load()
         .unwrap_or_else(|code| panic!("failed to load bpf: {}", code));
-    skeleton.attach()
+    skeleton
+        .attach()
         .unwrap_or_else(|code| panic!("failed to attach bpf: {}", code));
     log::info!("attached bpf module");
 
@@ -460,10 +500,17 @@ fn main() {
     for line in stream.lines() {
         // handle line
         match line {
-            Ok(line) => match { log::info!("command: {}", line); Command::from_str(&line) } {
+            Ok(line) => match {
+                log::info!("command: {}", line);
+                Command::from_str(&line)
+            } {
                 Ok(Command::FetchCounter) => (),
                 Ok(Command::WatchPort { port }) => {
-                    match skeleton.app.ports.insert(port.to_ne_bytes(), 1u32.to_ne_bytes()) {
+                    match skeleton
+                        .app
+                        .ports
+                        .insert(port.to_ne_bytes(), 1u32.to_ne_bytes())
+                    {
                         Ok(()) => (),
                         Err(code) => {
                             tracing::error!(

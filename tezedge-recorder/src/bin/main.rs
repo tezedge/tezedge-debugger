@@ -34,14 +34,13 @@ fn main() -> anyhow::Result<()> {
 
     if system.need_bpf() {
         let bpf = if env::args().find(|a| a == "--run-bpf").is_some() {
-            let h = Command::new("bpf-recorder").spawn()
-                .or_else(|e| {
-                    if e.kind() == ErrorKind::NotFound {
-                        Command::new("./target/none/release/bpf-recorder").spawn()
-                    } else {
-                        Err(e)
-                    }
-                });
+            let h = Command::new("bpf-recorder").spawn().or_else(|e| {
+                if e.kind() == ErrorKind::NotFound {
+                    Command::new("./target/none/release/bpf-recorder").spawn()
+                } else {
+                    Err(e)
+                }
+            });
             match h {
                 Ok(h) => {
                     thread::sleep(Duration::from_millis(500));

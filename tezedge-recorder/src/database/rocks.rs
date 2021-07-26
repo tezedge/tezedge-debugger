@@ -1,7 +1,12 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, ops::Add, path::{Path, PathBuf}, sync::atomic::{Ordering, AtomicU64}};
+use std::{
+    net::SocketAddr,
+    ops::Add,
+    path::{Path, PathBuf},
+    sync::atomic::{Ordering, AtomicU64},
+};
 use rocksdb::{Cache, DB, ReadOptions};
 use storage::{
     Direction, IteratorMode,
@@ -98,7 +103,8 @@ impl DatabaseNew for Db {
             timestamp::LogSchema::descriptor(&cache),
         ];
         let path = PathBuf::from(path.as_ref());
-        let inner = persistent::database::open_kv(path.join("rocksdb"), cfs, &DbConfiguration::default())?;
+        let inner =
+            persistent::database::open_kv(path.join("rocksdb"), cfs, &DbConfiguration::default())?;
 
         fn counter<S>(db: &DB) -> Option<S::Key>
         where
@@ -313,7 +319,13 @@ impl DatabaseFetch for Db {
         let limit = filter.limit.unwrap_or(100) as usize;
 
         let forward = filter.direction == Some("forward".to_string());
-        let direction = || if forward { Direction::Forward } else { Direction::Reverse };
+        let direction = || {
+            if forward {
+                Direction::Forward
+            } else {
+                Direction::Reverse
+            }
+        };
 
         if filter.remote_addr.is_none()
             && filter.source_type.is_none()
@@ -373,7 +385,10 @@ impl DatabaseFetch for Db {
 
             Ok(v)
         } else {
-            let cursor = filter.cursor.clone().unwrap_or(if forward { 0 } else { u64::MAX });
+            let cursor = filter
+                .cursor
+                .clone()
+                .unwrap_or(if forward { 0 } else { u64::MAX });
             let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(5);
             if let Some(ty) = &filter.types {
                 let mut tys = Vec::new();
@@ -579,15 +594,22 @@ impl DatabaseFetch for Db {
         let limit = filter.limit.unwrap_or(100) as usize;
 
         let forward = filter.direction == Some("forward".to_string());
-        let direction = || if forward { Direction::Forward } else { Direction::Reverse };
+        let direction = || {
+            if forward {
+                Direction::Forward
+            } else {
+                Direction::Reverse
+            }
+        };
 
         if let Some(query) = &filter.query {
-            let result = self.log_indexer
+            let result = self
+                .log_indexer
                 .as_ref()
                 .ok_or(DbError::NoLogIndexer)?
                 .read(query, limit)?
-                .filter_map(|(_score, id)| {
-                    match self.as_kv::<node_log::Schema>().get(&id) {
+                .filter_map(
+                    |(_score, id)| match self.as_kv::<node_log::Schema>().get(&id) {
                         Ok(Some(value)) => Some(node_log::ItemWithId::new(value, id)),
                         Ok(None) => {
                             log::info!("No value at index: {}", id);
@@ -597,13 +619,17 @@ impl DatabaseFetch for Db {
                             log::warn!("Failed to load value at index {}: {}", id, err);
                             None
                         },
-                    }
-                })
+                    },
+                )
                 .collect();
             return Ok(result);
         }
 
-        if filter.log_level.is_none() && filter.from.is_none() && filter.to.is_none() && filter.timestamp.is_none() {
+        if filter.log_level.is_none()
+            && filter.from.is_none()
+            && filter.to.is_none()
+            && filter.timestamp.is_none()
+        {
             let mode = if let Some(cursor) = &filter.cursor {
                 IteratorMode::From(cursor, direction())
             } else {
@@ -634,7 +660,10 @@ impl DatabaseFetch for Db {
             let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(5);
 
             if let Some(lv) = &filter.log_level {
-                let cursor = filter.cursor.clone().unwrap_or(if forward { 0 } else { u64::MAX });
+                let cursor = filter
+                    .cursor
+                    .clone()
+                    .unwrap_or(if forward { 0 } else { u64::MAX });
                 let mut lvs = Vec::new();
                 for lv in lv.split(',') {
                     let lv =
@@ -707,19 +736,17 @@ impl DatabaseFetch for Db {
 
             let v = sorted_intersect(iters.as_mut_slice(), limit, forward)
                 .into_iter()
-                .filter_map(
-                    move |id| match self.as_kv::<node_log::Schema>().get(&id) {
-                        Ok(Some(item)) => Some(node_log::ItemWithId::new(item, id)),
-                        Ok(None) => {
-                            log::info!("No value at index: {}", id);
-                            None
-                        },
-                        Err(err) => {
-                            log::warn!("Failed to load value at index {}: {}", id, err);
-                            None
-                        },
+                .filter_map(move |id| match self.as_kv::<node_log::Schema>().get(&id) {
+                    Ok(Some(item)) => Some(node_log::ItemWithId::new(item, id)),
+                    Ok(None) => {
+                        log::info!("No value at index: {}", id);
+                        None
                     },
-                )
+                    Err(err) => {
+                        log::warn!("Failed to load value at index {}: {}", id, err);
+                        None
+                    },
+                })
                 .collect();
             Ok(v)
         }

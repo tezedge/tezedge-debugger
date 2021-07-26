@@ -45,7 +45,10 @@ fn build_bpf() {
         .output()
         .expect("failed to patch bpf object");
 
-    println!("cargo:rustc-env=BPF_CODE_RECORDER={}/debug/bpf-recorder-kern", target_dir);
+    println!(
+        "cargo:rustc-env=BPF_CODE_RECORDER={}/debug/bpf-recorder-kern",
+        target_dir
+    );
     println!("cargo:rerun-if-changed=src/main.rs");
     println!("cargo:rerun-if-changed=src/event.rs");
 }

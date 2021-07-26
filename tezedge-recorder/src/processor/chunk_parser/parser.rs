@@ -217,7 +217,7 @@ where
                         handler.update_cn(cn);
                         for mut chunk in &mut state {
                             chunk.net(net);
-                            handler.handle_chunk(chunk, cn);        
+                            handler.handle_chunk(chunk, cn);
                         }
                         HandshakeDone::CannotDecrypt(state)
                     },
@@ -233,9 +233,9 @@ where
                 state.handle_data(payload);
                 for mut chunk in &mut state {
                     chunk.net(net);
-                    handler.handle_chunk(chunk, cn);        
+                    handler.handle_chunk(chunk, cn);
                 }
-                HandshakeDone::CannotDecrypt(state)    
+                HandshakeDone::CannotDecrypt(state)
             },
         }
     }

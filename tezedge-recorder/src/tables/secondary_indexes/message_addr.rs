@@ -5,7 +5,9 @@ use std::{
     convert::TryFrom,
     net::{SocketAddr, IpAddr},
 };
-use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema};
+use storage::persistent::{
+    KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema,
+};
 use rocksdb::{ColumnFamilyDescriptor, Cache};
 
 /// WARNING: this index work only with 48 bit index, should be enough
