@@ -23,9 +23,18 @@ enum Args {
 
 fn main() {
     match Args::from_args() {
-        Args::Log { range } => {
-            prepare_db_range(if range == 0 { 0..5_000 } else { 5_000..10_000 });
+        Args::Log { range: 0 } => {
+            prepare_db_range(0..5_000);
         },
+        Args::Log { range: 1 } => {
+            prepare_db_range(5_000..10_000);
+        },
+        Args::Log { range: 2 } => {
+            prepare_db_log_words();
+        },
+        Args::Log { range: _ } => {
+            panic!();
+        }
         Args::P2pInitiator { this, peer } => {
             generate_p2p(this, peer, true);
         },
@@ -89,38 +98,73 @@ fn generate_p2p(this: u16, peer: u16, initiator: bool) {
     let _ = listener;
 }
 
-fn prepare_db_range(range: Range<i64>) {
-    use std::{time::Duration, thread, net::UdpSocket};
+fn prepare_message(timestamp: i64, level: &str, text: &str) -> String {
     use chrono::prelude::*;
 
+    let local = Local.timestamp(timestamp, 0).to_rfc3339();
+    let fake = "Jul 14 12:00:00.000";
+    format!(
+        "<27>1 {} wsvl eb3fdbc716e5 665 eb3fdbc716e5 - {} {} some {}",
+        local,
+        fake,
+        level,
+        text,
+    )
+}
+
+fn send_stream(msgs: impl Iterator<Item = String>) {
+    use std::{time::Duration, thread, net::UdpSocket};
+
     let socket = UdpSocket::bind("127.0.0.1:54254").unwrap();
-
-    for i in range {
-        let timestamp = tester::START_TIME + i;
-
-        let level = match timestamp % 19 {
-            1 | 4 | 5 | 8 => "WARN",
-            7 | 10 => "ERROR",
-            _ => "INFO",
-        };
-
-        let local = Local.timestamp(timestamp, 0).to_rfc3339();
-        let fake = "Jul 14 12:00:00.000";
-        // 16 words
-        let text = (0..16)
-            .fold(String::new(), |acc, _| {
-                // 8 * 2 = 16 symbols each
-                format!("{} {}", acc, hex::encode((0..8).map(|_| rand::random()).collect::<Vec<u8>>()))
-            });
-        let msg = format!(
-            "<27>1 {} wsvl eb3fdbc716e5 665 eb3fdbc716e5 - {} {} some message {}",
-            local,
-            fake,
-            level,
-            text,
-        );
-
+    for msg in msgs {
         let _ = socket.send_to(msg.as_bytes(), "127.0.0.1:10000").unwrap();
         thread::sleep(Duration::from_millis(1));
     }
+}
+
+fn prepare_db_range(range: Range<i64>) {
+    let it = range
+        .map(|i| {
+            let timestamp = tester::START_TIME + i;
+
+            let level = match timestamp % 19 {
+                1 | 4 | 5 | 8 => "WARN",
+                7 | 10 => "ERROR",
+                _ => "INFO",
+            };
+
+            // 16 words
+            let text = (0..16)
+                .fold(String::new(), |acc, _| {
+                    // 8 * 2 = 16 symbols each
+                    format!("{} {}", acc, hex::encode((0..8).map(|_| rand::random()).collect::<Vec<u8>>()))
+                });
+            prepare_message(timestamp, level, &text)
+        });
+    send_stream(it);
+}
+
+fn prepare_db_log_words() {
+    use rand::seq::SliceRandom;
+
+    let words = [
+        "peer", "branch", "head", "chain",
+        "address", "ip", "message", "connection",
+    ];
+    let it = (1..256)
+        .map(|i| {
+            let mut bits = [0, 1, 2, 3, 4, 5, 6, 7];
+            bits.shuffle(&mut rand::thread_rng());
+            let text = bits
+                .iter()
+                .fold(String::new(), |acc, j| {
+                    if i & (1 << j) != 0 {
+                        format!("{} {}", acc, words[*j as usize])
+                    } else {
+                        acc
+                    }
+                });
+            prepare_message(tester::START_TIME, "INFO", &text)
+        });
+    send_stream(it);
 }

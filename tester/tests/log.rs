@@ -133,3 +133,38 @@ async fn timestamp_and_level() {
     let items = get_log(&params).await.unwrap();
     assert!(!items.is_empty());
 }
+
+#[tokio::test]
+async fn full_text_search() {
+    #[derive(Debug)]
+    struct TestCase {
+        query: &'static str,
+        has: &'static [&'static str],
+        not: &'static [&'static str],
+    }
+
+    impl TestCase {
+        async fn run(&self) {
+            let items = get_log(&format!("limit=500&query={}", self.query)).await.unwrap();
+            assert!(!items.is_empty(), "{:?}", self);
+            for item in items {
+                assert!(self.has.iter().any(|&has| item.message.contains(has)), "{:?}", self);
+                for &not in self.not {
+                    assert!(!item.message.contains(not), "{:?}", self);
+                }
+            }
+        }
+    }
+
+    let cases = [
+        TestCase { query: "peer", has: &["peer"], not: &[] },
+        TestCase { query: "peer%20-branch", has: &["peer"], not: &["branch"] },
+        TestCase { query: "peer%20chain%20-branch", has: &["peer", "chain"], not: &["branch"] },
+        TestCase { query: "peer%20-branch%20-head", has: &["peer"], not: &["branch", "head"] },
+        TestCase { query: "ip%20address%20-peer", has: &["ip", "address"], not: &["peer"] },
+    ];
+
+    for case in &cases {
+        case.run().await;
+    }
+}
