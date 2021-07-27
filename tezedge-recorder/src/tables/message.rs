@@ -95,9 +95,9 @@ impl TezosMessage {
 #[derive(Debug)]
 pub struct MessageDetails {
     id: u64,
-    message: Option<TezosMessage>,
+    pub message: Option<TezosMessage>,
     original_bytes: Vec<Vec<u8>>,
-    decrypted_bytes: Vec<Vec<u8>>,
+    pub decrypted_bytes: Vec<Vec<u8>>,
     error: Option<String>,
 }
 

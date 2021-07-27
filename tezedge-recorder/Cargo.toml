@@ -11,6 +11,10 @@ doctest = false
 name = "tezedge-recorder"
 path = "src/bin/main.rs"
 
+[[bin]]
+name = "replayer"
+path = "src/bin/replayer.rs"
+
 [dependencies]
 toml = "0.5"
 serde = "1.0"
@@ -45,3 +49,5 @@ storage = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
 #crypto = { path = "../../tezedge/crypto" }
 #tezos_messages = { path = "../../tezedge/tezos/messages" }
 #storage = { path = "../../tezedge/storage" }
+
+tester = { path = "../tester" }

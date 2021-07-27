@@ -2597,6 +2597,7 @@ dependencies = [
  "storage",
  "syslog_loose",
  "tantivy",
+ "tester",
  "tezos_messages",
  "thiserror",
  "tokio",
