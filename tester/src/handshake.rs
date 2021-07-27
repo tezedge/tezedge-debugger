@@ -16,11 +16,10 @@ use tezos_messages::p2p::{
 };
 use super::buffer::ChunkBuffer;
 
-fn identity(json: &str, port: u16) -> (ConnectionMessage, SecretKey) {
+fn identity(json: &str, port: u16, version: NetworkVersion) -> (ConnectionMessage, SecretKey) {
     use tezos_identity::Identity;
 
     let identity = Identity::from_json(&json).unwrap();
-    let version = NetworkVersion::new("TEZOS_MAINNET".to_string(), 0, 1);
     let connection_message = ConnectionMessage::try_new(
         port,
         &identity.public_key,
@@ -32,10 +31,10 @@ fn identity(json: &str, port: u16) -> (ConnectionMessage, SecretKey) {
     (connection_message, identity.secret_key)
 }
 
-pub fn initiator(this: u16, stream: &mut TcpStream) -> (PrecomputedKey, NoncePair) {
+pub fn initiator(this: u16, stream: &mut TcpStream, identity_json: &str, version: NetworkVersion) -> (PrecomputedKey, NoncePair) {
     use std::io::Write;
     
-    let (connection_message, sk) = identity(include_str!("../identity_i.json"), this);
+    let (connection_message, sk) = identity(identity_json, this, version);
 
     let temp = connection_message.as_bytes().unwrap();
     let initiator_chunk = BinaryChunk::from_content(&temp).unwrap();
@@ -50,13 +49,13 @@ pub fn initiator(this: u16, stream: &mut TcpStream) -> (PrecomputedKey, NoncePai
     (key, pair)
 }
 
-pub fn responder(this: u16, stream: &mut TcpStream) -> (PrecomputedKey, NoncePair) {
+pub fn responder(this: u16, stream: &mut TcpStream, identity_json: &str, version: NetworkVersion) -> (PrecomputedKey, NoncePair) {
     use std::io::Write;
 
     let initiator_chunk = ChunkBuffer::default().read_chunk(stream).unwrap();
     let connection_message = ConnectionMessage::from_bytes(initiator_chunk.content()).unwrap();
     let pk = PublicKey::from_bytes(connection_message.public_key()).unwrap();
-    let (connection_message, sk) = identity(include_str!("../identity_r.json"), this);
+    let (connection_message, sk) = identity(identity_json, this, version);
     let temp = connection_message.as_bytes().unwrap();
     let responder_chunk = BinaryChunk::from_content(&temp).unwrap();
     stream.write_all(responder_chunk.raw()).unwrap();

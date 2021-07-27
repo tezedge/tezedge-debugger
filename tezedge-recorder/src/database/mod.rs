@@ -30,7 +30,7 @@ pub struct ChunksFilter {
     pub cn: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 pub struct MessagesFilter {
     pub direction: Option<String>,
     pub limit: Option<u64>,

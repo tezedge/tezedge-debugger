@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{convert::{TryInto, TryFrom}, io::{Read, Write, ErrorKind}};
+use std::{convert::{TryInto, TryFrom}, io::{self, Read, Write}};
 
 use tezos_messages::p2p::binary_message::{BinaryRead, BinaryMessage, BinaryChunk};
 use crypto::{crypto_box::PrecomputedKey, nonce::Nonce};
@@ -17,7 +17,7 @@ where
         nonce: Nonce,
         // whether peer message, or meta/ack
         peer_message: bool,
-    ) -> Option<(Nonce, Self)>;
+    ) -> io::Result<(Nonce, Self)>;
 
     fn write_msg(
         &self,
@@ -55,7 +55,7 @@ where
         key: &PrecomputedKey,
         nonce: Nonce,
         peer_message: bool,
-    ) -> Option<(Nonce, Self)>
+    ) -> io::Result<(Nonce, Self)>
     where
         M: BinaryRead,
     {
@@ -65,29 +65,17 @@ where
         let mut bytes = Vec::new();
         let mut length = 0;
         loop {
-            match buffer.read_chunk(stream) {
-                None => {
-                    return None;
-                },
-                Some(chunk) => {
-                    bytes.extend_from_slice(&key.decrypt(chunk.content(), &nonce).unwrap());
-                    if length == 0 && peer_message {
-                        let b = TryFrom::try_from(&bytes[..HEADER_LENGTH]).unwrap();
-                        length = u32::from_be_bytes(b) as usize + HEADER_LENGTH;
-                    }
-                    nonce = nonce.increment();
-
-                    if bytes.len() == length || !peer_message {
-                        break;
-                    }
-                }
+            let chunk = buffer.read_chunk(stream)?;
+            bytes.extend_from_slice(&key.decrypt(chunk.content(), &nonce).unwrap());
+            if length == 0 && peer_message {
+                let b = TryFrom::try_from(&bytes[..HEADER_LENGTH]).unwrap();
+                length = u32::from_be_bytes(b) as usize + HEADER_LENGTH;
             }
-        }
+            nonce = nonce.increment();
 
-        if bytes.is_empty() {
-            None
-        } else {
-            Some((nonce, M::from_bytes(bytes).unwrap()))
+            if bytes.len() == length || !peer_message {
+                break Ok((nonce, M::from_bytes(bytes).unwrap()));
+            }
         }
     }
 }
@@ -107,21 +95,9 @@ impl Default for ChunkBuffer {
 }
 
 impl ChunkBuffer {
-    pub fn read_chunk(&mut self, stream: &mut impl Read) -> Option<BinaryChunk> {
+    pub fn read_chunk(&mut self, stream: &mut impl Read) -> io::Result<BinaryChunk> {
         const HEADER_LENGTH: usize = 2;
         loop {
-            let read = match stream.read(&mut self.data[self.len..]) {
-                Ok(v) => v,
-                Err(e) => {
-                    if e.kind() == ErrorKind::UnexpectedEof {
-                        return None;
-                    } else {
-                        Err::<(), _>(e).unwrap();
-                        0
-                    }
-                },
-            };
-            self.len += read;
             if self.len >= HEADER_LENGTH {
                 let chunk_len = (self.data[0] as usize) * 256 + (self.data[1] as usize);
                 let raw_len = chunk_len + HEADER_LENGTH;
@@ -131,9 +107,11 @@ impl ChunkBuffer {
                         self.data[(i - raw_len)] = self.data[i];
                     }
                     self.len -= raw_len;
-                    return Some(chunk.try_into().unwrap());
+                    return Ok(chunk.try_into().unwrap());
                 }
             }
+            let read = stream.read(&mut self.data[self.len..])?;
+            self.len += read;
         }
     }
 
