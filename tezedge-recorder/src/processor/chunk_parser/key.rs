@@ -29,6 +29,20 @@ impl Keys {
     ) -> Result<Self, CryptoError> {
         use crypto::crypto_box::CryptoKey;
 
+        if local.len() < 36 {
+            return Err(CryptoError::InvalidKeySize {
+                expected: 32,
+                actual: local.len().max(4) - 4,
+            });
+        }
+
+        if remote.len() < 36 {
+            return Err(CryptoError::InvalidKeySize {
+                expected: 32,
+                actual: remote.len().max(4) - 4,
+            });
+        }
+
         // check if the identity belong to one of the parties
         if identity.public_key.as_ref() != local[4..36].as_ref() {
             return Err(CryptoError::InvalidKey {
