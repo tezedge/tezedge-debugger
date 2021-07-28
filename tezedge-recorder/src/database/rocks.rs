@@ -143,6 +143,67 @@ impl DatabaseNew for Db {
     }
 }
 
+impl Db {
+    pub fn remove_message(&self, index: u64) -> Result<(), DbError> {
+        if let Some(item) = self.as_kv::<message::Schema>().get(&index)? {
+            let ty_index = message_ty::Item {
+                ty: item.ty.clone(),
+                index,
+            };
+            let sender_index = message_sender::Item {
+                sender: item.sender.clone(),
+                index,
+            };
+            let initiator_index = message_initiator::Item {
+                initiator: item.initiator.clone(),
+                index,
+            };
+            let addr_index = message_addr::Item {
+                addr: item.remote_addr,
+                index,
+            };
+            let timestamp_index = timestamp::Item {
+                timestamp: item.timestamp,
+                index,
+            };
+
+            for chunk_key in item.chunks() {
+                self.as_kv::<chunk::Schema>().delete(&chunk_key)?;
+            }
+
+            self.as_kv::<message_ty::Schema>().delete(&ty_index)?;
+            self.as_kv::<message_sender::Schema>()
+                .delete(&sender_index)?;
+            self.as_kv::<message_initiator::Schema>()
+                .delete(&initiator_index)?;
+            self.as_kv::<message_addr::Schema>().delete(&addr_index)?;
+            self.as_kv::<timestamp::MessageSchema>()
+                .delete(&timestamp_index)?;
+            self.as_kv::<message::Schema>().delete(&index)?;
+        }
+        Ok(())
+    }
+
+    pub fn remove_log(&self, index: u64) -> Result<(), DbError> {
+        if let Some(item) = self.as_kv::<node_log::Schema>().get(&index)? {
+            let lv_index = log_level::Item {
+                lv: item.level.clone(),
+                index,
+            };
+            let timestamp_index = timestamp::Item {
+                timestamp: (item.timestamp / 1_000_000) as u64,
+                index,
+            };
+
+            self.as_kv::<log_level::Schema>().delete(&lv_index)?;
+            self.as_kv::<timestamp::LogSchema>()
+                .delete(&timestamp_index)?;
+            self.as_kv::<node_log::Schema>().delete(&index)?;
+        }
+        Ok(())
+    }
+}
+
 impl Database for Db {
     fn store_connection(&self, item: connection::Item) {
         let (key, value) = item.split();
@@ -167,10 +228,15 @@ impl Database for Db {
     }
 
     fn store_message(&self, item: message::Item) {
-        // TODO:
-        let _ = self.message_store_limit;
-
         let index = self.reserve_message_counter();
+        if let Some(store_limit) = self.message_store_limit {
+            if index >= store_limit {
+                if let Err(error) = self.remove_message(index - store_limit) {
+                    log::error!("database error: {}", error);
+                }
+            }
+        }
+
         let ty_index = message_ty::Item {
             ty: item.ty.clone(),
             index,
@@ -209,10 +275,15 @@ impl Database for Db {
     }
 
     fn store_log(&self, item: node_log::Item) {
-        // TODO:
-        let _ = self.log_store_limit;
-
         let index = self.reserve_log_counter();
+        if let Some(store_limit) = self.log_store_limit {
+            if index >= store_limit {
+                if let Err(error) = self.remove_log(index - store_limit) {
+                    log::error!("database error: {}", error);
+                }
+            }
+        }
+
         let lv_index = log_level::Item {
             lv: item.level.clone(),
             index,
