@@ -34,7 +34,7 @@ run_recorder
 ./target/none/release/deps/log-???????????????? --nocapture \
     pagination level timestamp timestamp_and_level || fail
 # populate p2p messages
-./target/none/release/pseudonode p2p-responder 29733 29732 & RESPONDER_PID=$!
+./target/none/release/pseudonode p2p-responder 29733 29732 & RESPONDER_PID=$! && sleep 1
 ./target/none/release/pseudonode p2p-initiator 29732 29733 && wait $RESPONDER_PID && sleep 5
 ./target/none/release/deps/p2p-???????????????? --nocapture check_messages || fail
 ./target/none/release/pseudonode log 2 && sleep 4 # populate words log messages
