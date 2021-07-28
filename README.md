@@ -309,6 +309,7 @@ Messages are always sorted from newest to oldest.
 * `incoming : Boolean` - Filter messages by their direction
 * `types : comma separated list of types` - Filter messages by given types
 * `source_type : "local" or "remote"` - Filter messages by source of the message
+* `direction : "forward" or "backward"` - Order of messages. Forward is from older to newer, backward is from newer to older. Default id `backward`.
 ##### Example
 * `/v2/p2p` - Return last 100 P2P messages
 * `/v2/p2p?cursor=100&types=connection_message,metadata` - Return connection and metadata messages skipping first 100 messages.
@@ -323,6 +324,8 @@ Messages are always sorted from newest to oldest.
 * `limit : 64bit integer value` - Maximum number of messages returned by the RPC. Default is 100 messages.
 * `log_level : string` - Log level, should be on of `trace, debug, info, warn, error`
 * `timestamp : string` - Unix timestamp representing time from which the logs are shown.
+* `direction : "forward" or "backward"` - Order of messages. Forward is from older to newer, backward is from newer to older. Default id `backward`.
+* `query : string` - Full text search. When use `query`, only `limit` is allowed, all other params are ignored. See https://docs.rs/tantivy/0.15.3/tantivy/query/struct.QueryParser.html as query language manual.
 ##### Example
 * `/v2/log?log_level=error` - Return all errors in last one hundred logs,
 

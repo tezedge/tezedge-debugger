@@ -117,6 +117,15 @@
                         }
                     },
                     {
+                        "name": "query",
+                        "in": "query",
+                        "description": "Full text search query. See https://docs.rs/tantivy/0.15.3/tantivy/query/struct.QueryParser.html.",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
                         "name": "node_name",
                         "in": "query",
                         "description": "The name of the node from which the logs are shown",
