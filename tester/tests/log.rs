@@ -139,29 +139,39 @@ async fn full_text_search() {
     #[derive(Debug)]
     struct TestCase {
         query: &'static str,
+        limit: usize,
         has: &'static [&'static str],
         not: &'static [&'static str],
+        must: &'static [&'static str],
     }
 
     impl TestCase {
         async fn run(&self) {
-            let items = get_log(&format!("limit=500&query={}", self.query)).await.unwrap();
+            let items = get_log(&format!("limit={}&query={}", self.limit, self.query)).await.unwrap();
             assert!(!items.is_empty(), "{:?}", self);
             for item in items {
-                assert!(self.has.iter().any(|&has| item.message.contains(has)), "{:?}", self);
+                if !self.has.is_empty() {
+                    assert!(self.has.iter().any(|&has| item.message.contains(has)), "{:?}", self);
+                }
                 for &not in self.not {
                     assert!(!item.message.contains(not), "{:?}", self);
+                }
+                for &must in self.must {
+                    assert!(item.message.contains(must), "{:?} in {:?}", self, item.message);
                 }
             }
         }
     }
 
     let cases = [
-        TestCase { query: "peer", has: &["peer"], not: &[] },
-        TestCase { query: "peer%20-branch", has: &["peer"], not: &["branch"] },
-        TestCase { query: "peer%20chain%20-branch", has: &["peer", "chain"], not: &["branch"] },
-        TestCase { query: "peer%20-branch%20-head", has: &["peer"], not: &["branch", "head"] },
-        TestCase { query: "ip%20address%20-peer", has: &["ip", "address"], not: &["peer"] },
+        TestCase { query: "peer", limit: 500, has: &["peer"], not: &[], must: &[] },
+        TestCase { query: "peer -branch", limit: 500, has: &["peer"], not: &["branch"], must: &[] },
+        TestCase { query: "peer chain -branch", limit: 500, has: &["peer", "chain"], not: &["branch"], must: &[] },
+        TestCase { query: "peer -branch -head", limit: 500, has: &["peer"], not: &["branch", "head"], must: &[] },
+        TestCase { query: "ip address -peer", limit: 500, has: &["ip", "address"], not: &["peer"], must: &[] },
+        // limit is lower here, because no many records meet the condition
+        TestCase { query: "+ip +address", limit: 16, has: &[], not: &[], must: &["ip", "address"] },
+        TestCase { query: "+head +chain +branch -peer -connection", limit: 4, has: &[], not: &["peer", "connection"], must: &["head", "chain", "branch"] },
     ];
 
     for case in &cases {
