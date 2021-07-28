@@ -57,7 +57,9 @@ impl From<TantivyError> for DbError {
 
 pub struct Db {
     //_cache: Cache,
+    message_store_limit: Option<u64>,
     message_counter: AtomicU64,
+    log_store_limit: Option<u64>,
     log_counter: AtomicU64,
     log_indexer: Option<search::LogIndexer>,
     inner: DB,
@@ -83,7 +85,12 @@ impl Db {
 impl DatabaseNew for Db {
     type Error = DbError;
 
-    fn open<P>(path: P, log: bool) -> Result<Self, Self::Error>
+    fn open<P>(
+        path: P,
+        log_full_text_index: bool,
+        log_store_limit: Option<u64>,
+        message_store_limit: Option<u64>,
+    ) -> Result<Self, Self::Error>
     where
         P: AsRef<Path>,
     {
@@ -119,15 +126,16 @@ impl DatabaseNew for Db {
                 .map(|c| c + 1)
         }
 
-        let log_indexer = if log {
+        let log_indexer = if log_full_text_index {
             Some(search::LogIndexer::try_new(path.join("tantivy"))?)
         } else {
             None
         };
 
         Ok(Db {
-            //_cache: cache,
+            message_store_limit,
             message_counter: AtomicU64::new(counter::<message::Schema>(&inner).unwrap_or(0)),
+            log_store_limit,
             log_counter: AtomicU64::new(counter::<node_log::Schema>(&inner).unwrap_or(0)),
             log_indexer,
             inner,
@@ -159,6 +167,9 @@ impl Database for Db {
     }
 
     fn store_message(&self, item: message::Item) {
+        // TODO:
+        let _ = self.message_store_limit;
+
         let index = self.reserve_message_counter();
         let ty_index = message_ty::Item {
             ty: item.ty.clone(),
@@ -198,6 +209,9 @@ impl Database for Db {
     }
 
     fn store_log(&self, item: node_log::Item) {
+        // TODO:
+        let _ = self.log_store_limit;
+
         let index = self.reserve_log_counter();
         let lv_index = log_level::Item {
             lv: item.level.clone(),

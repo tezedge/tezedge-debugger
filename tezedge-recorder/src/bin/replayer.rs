@@ -178,7 +178,7 @@ fn main() {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    let db = Db::open("/volume/debugger_db/tezedge", false).unwrap();
+    let db = Db::open("/volume/debugger_db/tezedge", false, None, None).unwrap();
 
     let mut filter = MessagesFilter::default();
     filter.cursor = Some(0);
