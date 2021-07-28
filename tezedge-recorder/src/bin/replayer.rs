@@ -11,7 +11,7 @@ use tezedge_recorder::{
     database::{DatabaseNew, DatabaseFetch, rocks::Db, MessagesFilter},
     tables::message::{MessageFrontend, TezosMessage},
 };
-use tester::{ChunkBuffer, Message, handshake};
+use pseudonode::{ChunkBuffer, Message, handshake};
 use crypto::{
     crypto_box::PrecomputedKey,
     nonce::{Nonce, NoncePair},
@@ -214,7 +214,7 @@ fn main() {
     let (key, NoncePair { local, remote }) = handshake::responder(
         9732,
         &mut stream,
-        include_str!("../../../tester/identity_i.json"),
+        include_str!("../../identity_i.json"),
         version.unwrap(),
     );
 

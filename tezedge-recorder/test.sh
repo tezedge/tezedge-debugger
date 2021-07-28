@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+export START_TIME=1626264000
+
 function fail {
     kill -SIGTERM $RECORDER_PID
     exit 1

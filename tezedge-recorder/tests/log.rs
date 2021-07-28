@@ -3,7 +3,6 @@
 
 use std::env;
 use tezedge_recorder::tables::node_log;
-use tester::START_TIME;
 
 pub async fn get_log(params: &str) -> Result<Vec<node_log::ItemWithId>, serde_json::error::Error> {
     let debugger = env::var("DEBUGGER_URL")
@@ -13,6 +12,12 @@ pub async fn get_log(params: &str) -> Result<Vec<node_log::ItemWithId>, serde_js
         .text()
         .await.unwrap();
     serde_json::from_str(&res)
+}
+
+fn start_time() -> i64 {
+    env::var("START_TIME")
+        .map(|s| s.parse::<i64>().unwrap_or(0))
+        .unwrap_or(0)
 }
 
 #[tokio::test]
@@ -91,7 +96,7 @@ async fn timestamp() {
 
     impl TestCase {
         async fn run(self) {
-            let time = (START_TIME as u64 + self.shift) * 1000;
+            let time = (start_time() as u64 + self.shift) * 1000;
             let direction = if self.forward { "forward" } else { "backward" };
             let params = format!("timestamp={}&limit=500&direction={}", time, direction);
             let items = get_log(&params).await.unwrap();
@@ -125,7 +130,7 @@ async fn timestamp() {
 
 #[tokio::test]
 async fn timestamp_and_level() {
-    let time = (START_TIME as u64 + 3_000) * 1000;
+    let time = (start_time() as u64 + 3_000) * 1000;
     let params = format!("timestamp={}&limit=500&direction=backward&log_level=warn", time);
     let items = get_log(&params).await.unwrap();
     assert!(!items.is_empty());

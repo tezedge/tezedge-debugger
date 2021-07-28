@@ -15,6 +15,15 @@ path = "src/bin/main.rs"
 name = "replayer"
 path = "src/bin/replayer.rs"
 
+[[bin]]
+name = "pseudonode"
+path = "src/bin/pseudonode.rs"
+
+[dev-dependencies]
+reqwest = "0.11"
+tokio = { version = "1.8", features = ["full"] }
+tezedge-recorder = { path = "../tezedge-recorder" }
+
 [dependencies]
 toml = "0.5"
 serde = "1.0"
@@ -29,6 +38,10 @@ either = "1.6"
 typenum = "1.13"
 syslog_loose = "0.14"
 itertools = "0.10"
+
+structopt = { version = "0.3"}
+chrono = { version = "0.4" }
+rand = { version = "0.8.4", features = ["small_rng"] }
 
 ctrlc = "3.1"
 tracing-subscriber = "0.2"
@@ -46,8 +59,5 @@ bpf-recorder = { path = "../bpf-recorder", features = ["client"] }
 crypto = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
 tezos_messages = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
 storage = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
-#crypto = { path = "../../tezedge/crypto" }
-#tezos_messages = { path = "../../tezedge/tezos/messages" }
-#storage = { path = "../../tezedge/storage" }
 
-tester = { path = "../tester" }
+pseudonode = { path = "../pseudonode" }
