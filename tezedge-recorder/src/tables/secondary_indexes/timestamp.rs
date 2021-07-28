@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 use std::convert::TryFrom;
-use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema};
+use storage::persistent::{
+    KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema,
+};
 
 /// * bytes layout: `[timestamp(8)][index(8)]`
 pub struct Item {

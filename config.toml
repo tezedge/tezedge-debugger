@@ -29,3 +29,9 @@ name = "tezedge"
 http_v3 = 17744
 db = "./target/debugger_db/tezedge"
 p2p = { identity = "/tmp/volume/tezedge/identity.json", port = 29734 }
+
+[[nodes]]
+name = "local_node"
+http_v3 = 17745
+db = "/volume/debugger_db/tezedge"
+p2p = { identity = "../tezedge/light_node/etc/tezedge/identity.json", port = 29735 }

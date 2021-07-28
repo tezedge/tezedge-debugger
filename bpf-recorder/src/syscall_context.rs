@@ -19,17 +19,29 @@ impl SyscallContext {
         let mut b = [0; 0x20];
         let (p, q) = match data {
             SyscallContextData::Empty => (0, 0),
-            SyscallContextData::Bind { fd, addr_ptr, addr_len } => {
+            SyscallContextData::Bind {
+                fd,
+                addr_ptr,
+                addr_len,
+            } => {
                 b[..4].clone_from_slice(&0x5u32.to_ne_bytes());
                 b[4..8].clone_from_slice(&fd.to_ne_bytes());
                 (addr_ptr, addr_len)
             },
-            SyscallContextData::Connect { fd, addr_ptr, addr_len } => {
+            SyscallContextData::Connect {
+                fd,
+                addr_ptr,
+                addr_len,
+            } => {
                 b[..4].clone_from_slice(&0x6u32.to_ne_bytes());
                 b[4..8].clone_from_slice(&fd.to_ne_bytes());
                 (addr_ptr, addr_len)
             },
-            SyscallContextData::Accept { listen_on_fd, addr_ptr, addr_len } => {
+            SyscallContextData::Accept {
+                listen_on_fd,
+                addr_ptr,
+                addr_len,
+            } => {
                 b[..4].clone_from_slice(&0x7u32.to_ne_bytes());
                 b[4..8].clone_from_slice(&listen_on_fd.to_ne_bytes());
                 (addr_ptr, addr_len)
@@ -69,19 +81,31 @@ impl SyscallContext {
                 let fd = u32::from_ne_bytes(TryFrom::try_from(&bytes[0x04..0x08]).unwrap());
                 let addr_ptr = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x08..0x10]).unwrap());
                 let addr_len = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x10..0x18]).unwrap());
-                SyscallContextData::Bind { fd, addr_ptr, addr_len }
+                SyscallContextData::Bind {
+                    fd,
+                    addr_ptr,
+                    addr_len,
+                }
             },
             0x6 => {
                 let fd = u32::from_ne_bytes(TryFrom::try_from(&bytes[0x04..0x08]).unwrap());
                 let addr_ptr = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x08..0x10]).unwrap());
                 let addr_len = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x10..0x18]).unwrap());
-                SyscallContextData::Connect { fd, addr_ptr, addr_len }
+                SyscallContextData::Connect {
+                    fd,
+                    addr_ptr,
+                    addr_len,
+                }
             },
             0x7 => {
                 let fd = u32::from_ne_bytes(TryFrom::try_from(&bytes[0x04..0x08]).unwrap());
                 let addr_ptr = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x08..0x10]).unwrap());
                 let addr_len = u64::from_ne_bytes(TryFrom::try_from(&bytes[0x10..0x18]).unwrap());
-                SyscallContextData::Accept { listen_on_fd: fd, addr_ptr, addr_len }
+                SyscallContextData::Accept {
+                    listen_on_fd: fd,
+                    addr_ptr,
+                    addr_len,
+                }
             },
             0x8 => {
                 let fd = u32::from_ne_bytes(TryFrom::try_from(&bytes[0x04..0x08]).unwrap());

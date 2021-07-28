@@ -10,7 +10,6 @@
 /// Intersection of A and B is set {3,4,5}
 ///
 /// Sorted intersect works on any sorted vectors.
-use std::cmp::Ordering;
 
 // TODO: try it
 /*use generic_array::{GenericArray, ArrayLength};
@@ -56,7 +55,7 @@ where
 
 /// For given vector of *sorted* iterators, return new vector containing values
 /// present in *every* iterator
-pub fn sorted_intersect<I>(iters: &mut [I], limit: usize) -> Vec<I::Item>
+pub fn sorted_intersect<I>(iters: &mut [I], limit: usize, forward: bool) -> Vec<I::Item>
 where
     I: Iterator,
     I::Item: Ord,
@@ -71,7 +70,7 @@ where
     }
     let mut heap = Vec::with_capacity(iters.len());
     // Fill the heap with values
-    if !fill_heap(iters.iter_mut(), &mut heap) {
+    if !fill_heap(iters.iter_mut(), &mut heap, forward) {
         // Hit an exhausted iterator, finish
         return ret;
     }
@@ -85,7 +84,7 @@ where
                 // Clear the rest of the heap
                 heap.clear();
                 // Build a new heap from new values
-                if !fill_heap(iters.iter_mut(), &mut heap) {
+                if !fill_heap(iters.iter_mut(), &mut heap, forward) {
                     // Hit an exhausted iterator, finish
                     return ret;
                 }
@@ -99,7 +98,7 @@ where
                 if let Some(item) = iters[iter_num].next() {
                     // Insert replacement from the corresponding iterator to heap
                     heap.push((item, iter_num));
-                    heapify(&mut heap);
+                    heapify(&mut heap, forward);
                 } else {
                     // Hit an exhausted iterator, finish
                     return ret;
@@ -115,8 +114,14 @@ where
 }
 
 /// Create heap out of vector
-fn heapify<Item: Ord>(heap: &mut Vec<(Item, usize)>) {
-    heap.sort_by(|(a, _), (b, _)| a.cmp(b));
+fn heapify<Item: Ord>(heap: &mut Vec<(Item, usize)>, forward: bool) {
+    heap.sort_by(|(a, _), (b, _)| {
+        if forward {
+            a.cmp(b).reverse()
+        } else {
+            a.cmp(b)
+        }
+    });
 }
 
 /// Fill heap with new values
@@ -128,6 +133,7 @@ fn fill_heap<
 >(
     iters: Outer,
     heap: &mut Vec<(Inner::Item, usize)>,
+    forward: bool,
 ) -> bool {
     for (i, iter) in iters.enumerate() {
         let value = iter.next();
@@ -137,7 +143,7 @@ fn fill_heap<
             return false;
         }
     }
-    heapify(heap);
+    heapify(heap, forward);
     true
 }
 
@@ -145,9 +151,8 @@ fn fill_heap<
 /// resulting set
 fn is_hit<Item: Ord>(heap: &[(Item, usize)]) -> bool {
     let value = heap.iter().next().map(|(value, _)| {
-        heap.iter().fold((value, true), |(a, eq), (b, _)| {
-            (b, eq & (a.cmp(b) == Ordering::Equal))
-        })
+        heap.iter()
+            .fold((value, true), |(a, eq), (b, _)| (b, eq & a.eq(b)))
     });
 
     matches!(value, Some((_, true)))

@@ -8,7 +8,9 @@ use serde::{
     ser::{self, SerializeSeq, SerializeStruct},
 };
 use typenum::Bit;
-use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema};
+use storage::persistent::{
+    KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema,
+};
 use super::common::{Initiator, Sender};
 
 #[derive(Debug, Clone, Default)]
@@ -73,7 +75,7 @@ impl Comments {
                 Some(i[1] as usize)
             },
             incoming_uncertain: i[2] != 0,
-            incoming_suspicious: if i_s == 0 { None } else { Some(i_c) }, 
+            incoming_suspicious: if i_s == 0 { None } else { Some(i_c) },
             incoming_cannot_decrypt: if i_c == u64::MAX { None } else { Some(i_c) },
             outgoing_wrong_pow: if o[0] == 0 { None } else { Some(o[0] as f64) },
             outgoing_too_short: if o[1] == u8::MAX {

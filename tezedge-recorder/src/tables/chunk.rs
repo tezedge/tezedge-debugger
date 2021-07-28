@@ -8,7 +8,9 @@ use serde::{
     ser::{self, SerializeStruct},
 };
 use rocksdb::{Cache, ColumnFamilyDescriptor};
-use storage::persistent::{KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema};
+use storage::persistent::{
+    KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema,
+};
 use super::{common::Sender, connection};
 
 #[derive(Clone)]

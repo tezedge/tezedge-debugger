@@ -51,11 +51,28 @@ pub enum SnifferEvent {
 #[derive(Debug)]
 pub enum SnifferError {
     SliceTooShort(usize),
-    Data { id: EventId, code: SnifferErrorCode, net: bool, incoming: bool },
-    BindBadAddress { id: EventId, code: SnifferErrorCode },
-    ConnectBadAddress { id: EventId, code: SnifferErrorCode },
-    AcceptBadAddress { id: EventId, code: SnifferErrorCode },
-    Debug { id: EventId, code: SnifferErrorCode },
+    Data {
+        id: EventId,
+        code: SnifferErrorCode,
+        net: bool,
+        incoming: bool,
+    },
+    BindBadAddress {
+        id: EventId,
+        code: SnifferErrorCode,
+    },
+    ConnectBadAddress {
+        id: EventId,
+        code: SnifferErrorCode,
+    },
+    AcceptBadAddress {
+        id: EventId,
+        code: SnifferErrorCode,
+    },
+    Debug {
+        id: EventId,
+        code: SnifferErrorCode,
+    },
 }
 
 impl SnifferError {
@@ -74,8 +91,19 @@ impl SnifferError {
         }
     }
 
-    fn data(id: EventId, code: i32, actual_length: usize, net: bool, incoming: bool) -> Result<(EventId, usize), Self> {
-        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Data { id, code, net, incoming })
+    fn data(
+        id: EventId,
+        code: i32,
+        actual_length: usize,
+        net: bool,
+        incoming: bool,
+    ) -> Result<(EventId, usize), Self> {
+        Self::code(id.clone(), code, actual_length).map_err(|code| SnifferError::Data {
+            id,
+            code,
+            net,
+            incoming,
+        })
     }
 
     fn debug(id: EventId, code: i32, actual_length: usize) -> Result<(EventId, usize), Self> {
@@ -117,65 +145,73 @@ impl RingBufferData for SnifferEvent {
         let data = &value[mem::size_of::<DataDescriptor>()..];
         match descriptor.tag {
             DataTag::Write => {
-                SnifferError::data(descriptor.id, descriptor.size, data.len(), false, false).map(|(id, size)| {
-                    SnifferEvent::Data {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), false, false).map(
+                    |(id, size)| SnifferEvent::Data {
                         id,
                         data: data[..size].to_vec(),
                         net: false,
                         incoming: false,
-                    }
-                })
+                    },
+                )
             },
             DataTag::Read => {
-                SnifferError::data(descriptor.id, descriptor.size, data.len(), false, true).map(|(id, size)| {
-                    SnifferEvent::Data {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), false, true).map(
+                    |(id, size)| SnifferEvent::Data {
                         id,
                         data: data[..size].to_vec(),
                         net: false,
                         incoming: true,
-                    }
-                })
+                    },
+                )
             },
             DataTag::Send => {
-                SnifferError::data(descriptor.id, descriptor.size, data.len(), true, false).map(|(id, size)| {
-                    SnifferEvent::Data {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), true, false).map(
+                    |(id, size)| SnifferEvent::Data {
                         id,
                         data: data[..size].to_vec(),
                         net: true,
                         incoming: false,
-                    }
-                })
+                    },
+                )
             },
             DataTag::Recv => {
-                SnifferError::data(descriptor.id, descriptor.size, data.len(), true, true).map(|(id, size)| {
-                    SnifferEvent::Data {
+                SnifferError::data(descriptor.id, descriptor.size, data.len(), true, true).map(
+                    |(id, size)| SnifferEvent::Data {
                         id,
                         data: data[..size].to_vec(),
                         net: true,
                         incoming: true,
+                    },
+                )
+            },
+            DataTag::Connect => Ok(SnifferEvent::Connect {
+                id: descriptor.id.clone(),
+                address: parse_socket_address(data).map_err(|code| {
+                    SnifferError::ConnectBadAddress {
+                        id: descriptor.id,
+                        code,
                     }
-                })
-            },
-            DataTag::Connect => {
-                Ok(SnifferEvent::Connect {
-                    id: descriptor.id.clone(),
-                    address: parse_socket_address(data)
-                        .map_err(|code| SnifferError::ConnectBadAddress { id: descriptor.id, code })?,
-                })
-            },
-            DataTag::Bind => {
-                Ok(SnifferEvent::Bind {
-                    id: descriptor.id.clone(),
-                    address: parse_socket_address(data)
-                        .map_err(|code| SnifferError::BindBadAddress { id: descriptor.id, code })?,
-                })
-            },
+                })?,
+            }),
+            DataTag::Bind => Ok(SnifferEvent::Bind {
+                id: descriptor.id.clone(),
+                address: parse_socket_address(data).map_err(|code| {
+                    SnifferError::BindBadAddress {
+                        id: descriptor.id,
+                        code,
+                    }
+                })?,
+            }),
             DataTag::Listen => Ok(SnifferEvent::Listen { id: descriptor.id }),
             DataTag::Accept => Ok(SnifferEvent::Accept {
                 id: descriptor.id.clone(),
                 listen_on_fd: 0,
-                address: parse_socket_address(data)
-                    .map_err(|code| SnifferError::AcceptBadAddress { id: descriptor.id, code })?,
+                address: parse_socket_address(data).map_err(|code| {
+                    SnifferError::AcceptBadAddress {
+                        id: descriptor.id,
+                        code,
+                    }
+                })?,
             }),
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
             DataTag::GetFd => Ok(SnifferEvent::GetFd { id: descriptor.id }),

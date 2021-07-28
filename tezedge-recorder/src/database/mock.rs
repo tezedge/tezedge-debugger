@@ -25,10 +25,12 @@ pub struct Db {
 impl DatabaseNew for Db {
     type Error = io::Error;
 
-    fn open<P>(path: P) -> Result<Self, Self::Error>
+    fn open<P>(path: P, log: bool) -> Result<Self, Self::Error>
     where
         P: AsRef<Path>,
     {
+        let _ = log;
+
         Ok(Db {
             file: Mutex::new(File::create(path)?),
         })
@@ -37,35 +39,48 @@ impl DatabaseNew for Db {
 
 impl Database for Db {
     fn store_connection(&self, item: connection::Item) {
-        self.file.lock().unwrap()
+        self.file
+            .lock()
+            .unwrap()
             .write_fmt(format_args!("cn: {:?}", item))
             .unwrap();
     }
 
     fn update_connection(&self, item: connection::Item) {
-        self.file.lock().unwrap()
+        self.file
+            .lock()
+            .unwrap()
             .write_fmt(format_args!("cn_: {:?}", item))
             .unwrap();
     }
 
     fn store_chunk(&self, item: chunk::Item) {
         let (key, value) = item.split();
-        self.file.lock().unwrap()
-            .write_fmt(format_args!("chunk: {}, length: {}", key, value.plain.len()))
+        self.file
+            .lock()
+            .unwrap()
+            .write_fmt(format_args!(
+                "chunk: {}, length: {}",
+                key,
+                value.plain.len()
+            ))
             .unwrap();
     }
 
     fn store_message(&self, item: message::Item) {
-        self.file.lock().unwrap()
+        self.file
+            .lock()
+            .unwrap()
             .write_fmt(format_args!("message: {:?}", item.ty))
             .unwrap();
     }
 
     fn store_log(&self, item: node_log::Item) {
-        self.file.lock().unwrap()
+        self.file
+            .lock()
+            .unwrap()
             .write_fmt(format_args!("log: {:?}", item.level))
             .unwrap();
-
     }
 }
 

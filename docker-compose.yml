@@ -3,7 +3,7 @@ version: "3"
 services:
 
   memprof:
-    image: tezedge/tezedge-memprof:${TAG:-v1.6.7}
+    image: tezedge/tezedge-memprof:${TAG:-v1.6.8}
     build:
       context: .
       dockerfile: Dockerfile.memprof
@@ -19,7 +19,7 @@ services:
       - "17832:17832"
 
   debugger:
-    image: tezedge/tezedge-debugger:${TAG:-v1.6.7}
+    image: tezedge/tezedge-debugger:${TAG:-v1.6.8}
     build:
       context: .
       dockerfile: Dockerfile
@@ -41,7 +41,7 @@ services:
       - "11001:10001/udp"  # debugger syslog port for tezos node
 
   tezedge-node:
-    image: tezedge/tezedge:${TAG:-v1.6.7}-frame-pointers-enabled
+    image: tezedge/tezedge:${TAG:-v1.6.8}-frame-pointers-enabled
     command: ["--network", "mainnet", "--log", "terminal", "file", "--log-file", "/tmp/tezedge/tezedge.log", "--tezos-context-storage", "irmin", "--peer-thresh-low", "30", "--peer-thresh-high", "45"]
     depends_on:
       - "memprof"
@@ -82,7 +82,7 @@ services:
       - "18733:18733"     # node RPC port
 
   explorer:
-    image: tezedge/tezedge-explorer:${TAG:-v1.6.7}
+    image: tezedge/tezedge-explorer:${TAG:-v1.6.8}
     environment:
       # need a better way to provide such information
       - API=[{"id":"rust","name":"rust.localhost","http":"http://localhost:18732","p2p_port":9732,"features":[{"name":"ws","url":"ws://localhost:4927"},{"name":"debugger","url":"http://localhost:17732"},{"name":"resources/memory","memoryProfilerUrl":"http://localhost:17832"},{"name":"commit","id":""},{"name":"monitoring"},{"name":"resources/system","monitoringUrl":"http://localhost:38732/resources/tezedge"},{"name":"resources/storage"},{"name":"mempool"},{"name":"storage"},{"name":"network"},{"name":"logs"}]},{"id":"ocaml","name":"ocaml.localhost","http":"http://localhost:18733","p2p_port":9733,"features":[{"name":"debugger","url":"http://localhost:17732"},{"name":"monitoring"},{"name":"resources/system","monitoringUrl":"http://localhost:38732/resources/ocaml"},{"name":"resources/storage"},{"name":"mempool"},{"name":"network"},{"name":"logs"}]}]

@@ -3,8 +3,6 @@
 
 use std::net::TcpStream;
 
-use tezedge_recorder::{tezos_messages, crypto};
-
 use crypto::{
     nonce::{NoncePair, Nonce, generate_nonces},
     crypto_box::{CryptoKey, PrecomputedKey, PublicKey, SecretKey},

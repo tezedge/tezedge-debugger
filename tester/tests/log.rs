@@ -91,14 +91,14 @@ async fn timestamp() {
 
     impl TestCase {
         async fn run(self) {
-            let time = START_TIME as u64 + self.shift;
+            let time = (START_TIME as u64 + self.shift) * 1000;
             let direction = if self.forward { "forward" } else { "backward" };
             let params = format!("timestamp={}&limit=500&direction={}", time, direction);
             let items = get_log(&params).await.unwrap();
             assert_eq!(items.len(), self.expected);
             let mut time = time;
             for item in items {
-                let this = (item.timestamp / 1_000_000_000) as u64;
+                let this = (item.timestamp / 1_000_000) as u64;
                 if self.forward {
                     assert!(this > time);
                 } else {
@@ -120,5 +120,61 @@ async fn timestamp() {
 
     for test_case in test_cases {
         test_case.run().await;
+    }
+}
+
+#[tokio::test]
+async fn timestamp_and_level() {
+    let time = (START_TIME as u64 + 3_000) * 1000;
+    let params = format!("timestamp={}&limit=500&direction=backward&log_level=warn", time);
+    let items = get_log(&params).await.unwrap();
+    assert!(!items.is_empty());
+    let params = format!("timestamp={}&limit=500&direction=forward&log_level=warn", time);
+    let items = get_log(&params).await.unwrap();
+    assert!(!items.is_empty());
+}
+
+#[tokio::test]
+async fn full_text_search() {
+    #[derive(Debug)]
+    struct TestCase {
+        query: &'static str,
+        limit: usize,
+        has: &'static [&'static str],
+        not: &'static [&'static str],
+        must: &'static [&'static str],
+    }
+
+    impl TestCase {
+        async fn run(&self) {
+            let items = get_log(&format!("limit={}&query={}", self.limit, self.query)).await.unwrap();
+            assert!(!items.is_empty(), "{:?}", self);
+            for item in items {
+                if !self.has.is_empty() {
+                    assert!(self.has.iter().any(|&has| item.message.contains(has)), "{:?}", self);
+                }
+                for &not in self.not {
+                    assert!(!item.message.contains(not), "{:?}", self);
+                }
+                for &must in self.must {
+                    assert!(item.message.contains(must), "{:?} in {:?}", self, item.message);
+                }
+            }
+        }
+    }
+
+    let cases = [
+        TestCase { query: "peer", limit: 500, has: &["peer"], not: &[], must: &[] },
+        TestCase { query: "peer -branch", limit: 500, has: &["peer"], not: &["branch"], must: &[] },
+        TestCase { query: "peer chain -branch", limit: 500, has: &["peer", "chain"], not: &["branch"], must: &[] },
+        TestCase { query: "peer -branch -head", limit: 500, has: &["peer"], not: &["branch", "head"], must: &[] },
+        TestCase { query: "ip address -peer", limit: 500, has: &["ip", "address"], not: &["peer"], must: &[] },
+        // limit is lower here, because no many records meet the condition
+        TestCase { query: "+ip +address", limit: 16, has: &[], not: &[], must: &["ip", "address"] },
+        TestCase { query: "+head +chain +branch -peer -connection", limit: 4, has: &[], not: &["peer", "connection"], must: &["head", "chain", "branch"] },
+    ];
+
+    for case in &cases {
+        case.run().await;
     }
 }

@@ -1,7 +1,12 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, ops::Add, path::Path, sync::atomic::{Ordering, AtomicU64}};
+use std::{
+    net::SocketAddr,
+    ops::Add,
+    path::{Path, PathBuf},
+    sync::atomic::{Ordering, AtomicU64},
+};
 use rocksdb::{Cache, DB, ReadOptions};
 use storage::{
     Direction, IteratorMode,
@@ -11,6 +16,7 @@ use storage::{
         database::RocksDbKeyValueSchema,
     },
 };
+use tantivy::TantivyError;
 use anyhow::Result;
 use thiserror::Error;
 use itertools::Itertools;
@@ -18,7 +24,7 @@ use super::sorted_intersect::sorted_intersect;
 #[rustfmt::skip]
 use super::{
     // core traits
-    Database, DatabaseNew, DatabaseFetch,
+    Database, DatabaseNew, DatabaseFetch, search,
     // filters
     ConnectionsFilter, ChunksFilter, MessagesFilter, LogsFilter,
     // tables
@@ -28,12 +34,24 @@ use super::{
 };
 
 #[derive(Error, Debug)]
-#[error("{}", _0)]
-pub struct DbError(DBError);
+pub enum DbError {
+    #[error("rocksdb error: {}", _0)]
+    Rocksdb(DBError),
+    #[error("there is no log indexer")]
+    NoLogIndexer,
+    #[error("log indexer: {}", _0)]
+    LogIndexer(TantivyError),
+}
 
 impl From<DBError> for DbError {
     fn from(v: DBError) -> Self {
-        DbError(v)
+        DbError::Rocksdb(v)
+    }
+}
+
+impl From<TantivyError> for DbError {
+    fn from(v: TantivyError) -> Self {
+        DbError::LogIndexer(v)
     }
 }
 
@@ -41,6 +59,7 @@ pub struct Db {
     //_cache: Cache,
     message_counter: AtomicU64,
     log_counter: AtomicU64,
+    log_indexer: Option<search::LogIndexer>,
     inner: DB,
 }
 
@@ -64,7 +83,7 @@ impl Db {
 impl DatabaseNew for Db {
     type Error = DbError;
 
-    fn open<P>(path: P) -> Result<Self, Self::Error>
+    fn open<P>(path: P, log: bool) -> Result<Self, Self::Error>
     where
         P: AsRef<Path>,
     {
@@ -83,7 +102,9 @@ impl DatabaseNew for Db {
             log_level::Schema::descriptor(&cache),
             timestamp::LogSchema::descriptor(&cache),
         ];
-        let inner = persistent::database::open_kv(path, cfs, &DbConfiguration::default())?;
+        let path = PathBuf::from(path.as_ref());
+        let inner =
+            persistent::database::open_kv(path.join("rocksdb"), cfs, &DbConfiguration::default())?;
 
         fn counter<S>(db: &DB) -> Option<S::Key>
         where
@@ -98,10 +119,17 @@ impl DatabaseNew for Db {
                 .map(|c| c + 1)
         }
 
+        let log_indexer = if log {
+            Some(search::LogIndexer::try_new(path.join("tantivy"))?)
+        } else {
+            None
+        };
+
         Ok(Db {
             //_cache: cache,
             message_counter: AtomicU64::new(counter::<message::Schema>(&inner).unwrap_or(0)),
             log_counter: AtomicU64::new(counter::<node_log::Schema>(&inner).unwrap_or(0)),
+            log_indexer,
             inner,
         })
     }
@@ -176,7 +204,7 @@ impl Database for Db {
             index,
         };
         let timestamp_index = timestamp::Item {
-            timestamp: (item.timestamp / 1_000_000_000) as u64,
+            timestamp: (item.timestamp / 1_000_000) as u64,
             index,
         };
         let inner = || -> Result<(), DbError> {
@@ -186,6 +214,9 @@ impl Database for Db {
             self.as_kv::<node_log::Schema>().put(&index, &item)?;
             Ok(())
         };
+        if let Some(log_indexer) = &self.log_indexer {
+            log_indexer.write(&item.message, index);
+        }
         if let Err(error) = inner() {
             log::error!("database error: {}", error);
         }
@@ -287,17 +318,31 @@ impl DatabaseFetch for Db {
     ) -> Result<Vec<message::MessageFrontend>, Self::Error> {
         let limit = filter.limit.unwrap_or(100) as usize;
 
+        let forward = filter.direction == Some("forward".to_string());
+        let direction = || {
+            if forward {
+                Direction::Forward
+            } else {
+                Direction::Reverse
+            }
+        };
+
         if filter.remote_addr.is_none()
             && filter.source_type.is_none()
             && filter.incoming.is_none()
             && filter.types.is_none()
             && filter.from.is_none()
             && filter.to.is_none()
+            && filter.timestamp.is_none()
         {
             let mode = if let Some(cursor) = &filter.cursor {
-                IteratorMode::From(cursor, Direction::Reverse)
+                IteratorMode::From(cursor, direction())
             } else {
-                IteratorMode::End
+                if forward {
+                    IteratorMode::Start
+                } else {
+                    IteratorMode::End
+                }
             };
             let v = self
                 .as_kv::<message::Schema>()
@@ -340,7 +385,10 @@ impl DatabaseFetch for Db {
 
             Ok(v)
         } else {
-            let cursor = filter.cursor.clone().unwrap_or(u64::MAX);
+            let cursor = filter
+                .cursor
+                .clone()
+                .unwrap_or(if forward { 0 } else { u64::MAX });
             let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(5);
             if let Some(ty) = &filter.types {
                 let mut tys = Vec::new();
@@ -354,7 +402,7 @@ impl DatabaseFetch for Db {
                     let key = key
                         .encode()
                         .map_err(|error| DBError::SchemaError { error })?;
-                    let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                    let mode = rocksdb::IteratorMode::From(&key, direction().into());
                     let cf = self
                         .inner
                         .cf_handle(message_ty::Schema::name())
@@ -380,7 +428,7 @@ impl DatabaseFetch for Db {
                 let key = key
                     .encode()
                     .map_err(|error| DBError::SchemaError { error })?;
-                let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                let mode = rocksdb::IteratorMode::From(&key, direction().into());
                 let cf = self
                     .inner
                     .cf_handle(message_sender::Schema::name())
@@ -403,7 +451,7 @@ impl DatabaseFetch for Db {
                 let key = key
                     .encode()
                     .map_err(|error| DBError::SchemaError { error })?;
-                let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                let mode = rocksdb::IteratorMode::From(&key, direction().into());
                 let cf = self
                     .inner
                     .cf_handle(message_initiator::Schema::name())
@@ -431,7 +479,7 @@ impl DatabaseFetch for Db {
                 let key = key
                     .encode()
                     .map_err(|error| DBError::SchemaError { error })?;
-                let mode = rocksdb::IteratorMode::From(&key, rocksdb::Direction::Reverse);
+                let mode = rocksdb::IteratorMode::From(&key, direction().into());
                 let cf = self
                     .inner
                     .cf_handle(message_addr::Schema::name())
@@ -453,9 +501,13 @@ impl DatabaseFetch for Db {
                 };
                 let mode = if let Some(end) = filter.to {
                     timestamp.timestamp = end;
-                    IteratorMode::From(&timestamp, Direction::Reverse)
+                    IteratorMode::From(&timestamp, direction())
                 } else {
-                    IteratorMode::End
+                    if forward {
+                        IteratorMode::Start
+                    } else {
+                        IteratorMode::End
+                    }
                 };
                 let it = self
                     .as_kv::<timestamp::MessageSchema>()
@@ -463,15 +515,28 @@ impl DatabaseFetch for Db {
                     .filter_map(|(k, _)| k.ok());
                 if let Some(begin) = filter.from {
                     let it = it
-                        .take_while(move |k| k.timestamp >= begin)
+                        .take_while(move |k| (k.timestamp >= begin) ^ forward)
                         .map(|k| k.index);
                     iters.push(Box::new(it));
                 } else {
                     iters.push(Box::new(it.map(|k| k.index)));
                 }
             }
+            if let Some(middle) = filter.timestamp {
+                let middle = timestamp::Item {
+                    timestamp: middle,
+                    index: u64::MAX,
+                };
 
-            let v = sorted_intersect(iters.as_mut_slice(), limit)
+                let it = self
+                    .as_kv::<timestamp::MessageSchema>()
+                    .iterator(IteratorMode::From(&middle, direction()))?
+                    .filter_map(|(k, _)| k.ok())
+                    .map(|k| k.index);
+                iters.push(Box::new(it));
+            }
+
+            let v = sorted_intersect(iters.as_mut_slice(), limit, forward)
                 .into_iter()
                 .filter_map(
                     move |index| match self.as_kv::<message::Schema>().get(&index) {
@@ -529,9 +594,42 @@ impl DatabaseFetch for Db {
         let limit = filter.limit.unwrap_or(100) as usize;
 
         let forward = filter.direction == Some("forward".to_string());
-        let direction = || if forward { Direction::Forward } else { Direction::Reverse };
+        let direction = || {
+            if forward {
+                Direction::Forward
+            } else {
+                Direction::Reverse
+            }
+        };
 
-        if filter.log_level.is_none() && filter.from.is_none() && filter.to.is_none() && filter.timestamp.is_none() {
+        if let Some(query) = &filter.query {
+            let result = self
+                .log_indexer
+                .as_ref()
+                .ok_or(DbError::NoLogIndexer)?
+                .read(query, limit)?
+                .filter_map(
+                    |(_score, id)| match self.as_kv::<node_log::Schema>().get(&id) {
+                        Ok(Some(value)) => Some(node_log::ItemWithId::new(value, id)),
+                        Ok(None) => {
+                            log::info!("No value at index: {}", id);
+                            None
+                        },
+                        Err(err) => {
+                            log::warn!("Failed to load value at index {}: {}", id, err);
+                            None
+                        },
+                    },
+                )
+                .collect();
+            return Ok(result);
+        }
+
+        if filter.log_level.is_none()
+            && filter.from.is_none()
+            && filter.to.is_none()
+            && filter.timestamp.is_none()
+        {
             let mode = if let Some(cursor) = &filter.cursor {
                 IteratorMode::From(cursor, direction())
             } else {
@@ -545,15 +643,7 @@ impl DatabaseFetch for Db {
                 .as_kv::<node_log::Schema>()
                 .iterator(mode)?
                 .filter_map(|(k, v)| match (k, v) {
-                    (Ok(id), Ok(value)) => {
-                        Some(node_log::ItemWithId {
-                            id,
-                            level: value.level,
-                            timestamp: value.timestamp,
-                            section: value.section,
-                            message: value.message,
-                        })
-                    },
+                    (Ok(id), Ok(item)) => Some(node_log::ItemWithId::new(item, id)),
                     (Ok(index), Err(err)) => {
                         log::warn!("Failed to load value at {:?}: {}", index, err);
                         None
@@ -570,7 +660,10 @@ impl DatabaseFetch for Db {
             let mut iters: Vec<Box<dyn Iterator<Item = u64>>> = Vec::with_capacity(5);
 
             if let Some(lv) = &filter.log_level {
-                let cursor = filter.cursor.clone().unwrap_or(u64::MAX);
+                let cursor = filter
+                    .cursor
+                    .clone()
+                    .unwrap_or(if forward { 0 } else { u64::MAX });
                 let mut lvs = Vec::new();
                 for lv in lv.split(',') {
                     let lv =
@@ -641,29 +734,19 @@ impl DatabaseFetch for Db {
                 iters.push(Box::new(it));
             }
 
-            let v = sorted_intersect(iters.as_mut_slice(), limit)
+            let v = sorted_intersect(iters.as_mut_slice(), limit, forward)
                 .into_iter()
-                .filter_map(
-                    move |index| match self.as_kv::<node_log::Schema>().get(&index) {
-                        Ok(Some(value)) => {
-                            Some(node_log::ItemWithId {
-                                id: index,
-                                level: value.level,
-                                timestamp: value.timestamp,
-                                section: value.section,
-                                message: value.message,
-                            })
-                        },
-                        Ok(None) => {
-                            log::info!("No value at index: {}", index);
-                            None
-                        },
-                        Err(err) => {
-                            log::warn!("Failed to load value at index {}: {}", index, err);
-                            None
-                        },
+                .filter_map(move |id| match self.as_kv::<node_log::Schema>().get(&id) {
+                    Ok(Some(item)) => Some(node_log::ItemWithId::new(item, id)),
+                    Ok(None) => {
+                        log::info!("No value at index: {}", id);
+                        None
                     },
-                )
+                    Err(err) => {
+                        log::warn!("Failed to load value at index {}: {}", id, err);
+                        None
+                    },
+                })
                 .collect();
             Ok(v)
         }

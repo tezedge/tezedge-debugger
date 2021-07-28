@@ -3,6 +3,7 @@
 
 pub mod rocks;
 pub mod mock;
+pub mod search;
 
 mod sorted_intersect;
 
@@ -31,6 +32,7 @@ pub struct ChunksFilter {
 
 #[derive(Deserialize)]
 pub struct MessagesFilter {
+    pub direction: Option<String>,
     pub limit: Option<u64>,
     pub cursor: Option<u64>,
     pub remote_addr: Option<String>,
@@ -39,6 +41,7 @@ pub struct MessagesFilter {
     pub types: Option<String>,
     pub from: Option<u64>,
     pub to: Option<u64>,
+    pub timestamp: Option<u64>,
     // compatibility
     pub node_name: Option<String>,
 }
@@ -52,6 +55,7 @@ pub struct LogsFilter {
     pub from: Option<u64>,
     pub to: Option<u64>,
     pub timestamp: Option<u64>,
+    pub query: Option<String>,
     // compatibility
     pub node_name: Option<String>,
 }
@@ -88,7 +92,7 @@ where
 {
     type Error: 'static + Send + Sync + Error;
 
-    fn open<P>(path: P) -> Result<Self, Self::Error>
+    fn open<P>(path: P, log: bool) -> Result<Self, Self::Error>
     where
         P: AsRef<Path>;
 }

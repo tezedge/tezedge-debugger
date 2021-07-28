@@ -19,9 +19,9 @@ path = "src/main.rs"
 required-features = ["user"]
 
 [dependencies]
-ebpf-kern = { git = "https://github.com/vlad9486/ebpf-tools", branch = "develop", optional = true }
+ebpf-kern = { version = "0.1", optional = true }
 typenum = { version = "1.13", optional = true }
-ebpf-user = { git = "https://github.com/vlad9486/ebpf-tools", branch = "develop", optional = true }
+ebpf-user = { version = "0.1", optional = true }
 passfd = { version = "0.1", optional = true }
 sudo = { version = "0.6", optional = true }
 ctrlc = { version = "3.1", optional = true }
