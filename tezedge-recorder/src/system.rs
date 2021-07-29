@@ -99,13 +99,14 @@ impl NodeServer {
             .as_ref()
             .and_then(|c| c.disable_search)
             .unwrap_or(false);
-        let log_store_limit = log_config
-            .as_ref()
-            .and_then(|c| c.store_limit);
-        let message_store_limit = p2p_config
-            .as_ref()
-            .and_then(|c| c.store_limit);
-        let db = Arc::new(Db::open(db_path, log_search, log_store_limit, message_store_limit)?);
+        let log_store_limit = log_config.as_ref().and_then(|c| c.store_limit);
+        let message_store_limit = p2p_config.as_ref().and_then(|c| c.store_limit);
+        let db = Arc::new(Db::open(
+            db_path,
+            log_search,
+            log_store_limit,
+            message_store_limit,
+        )?);
         let server = if let Some(port) = rpc_port {
             let addr = ([0, 0, 0, 0], port);
             Some(rt.spawn(warp::serve(server::routes(db.clone())).run(addr)))

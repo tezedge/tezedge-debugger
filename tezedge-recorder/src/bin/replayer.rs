@@ -3,11 +3,11 @@
 
 use std::{
     net::{TcpListener, SocketAddr, TcpStream},
-    time::Duration,
+    time::{Duration, Instant},
     io,
 };
 use tezedge_recorder::{
-    common::MessageCategory,
+    common::{MessageCategory, MessageKind},
     database::{DatabaseNew, DatabaseFetch, rocks::Db, MessagesFilter},
     tables::message::{MessageFrontend, TezosMessage},
 };
@@ -17,12 +17,20 @@ use crypto::{
     nonce::{Nonce, NoncePair},
 };
 use tezos_messages::p2p::encoding::{
-    ack::AckMessage, metadata::MetadataMessage, peer::{PeerMessageResponse, PeerMessage},
+    ack::AckMessage,
+    metadata::MetadataMessage,
+    peer::{PeerMessageResponse, PeerMessage},
     operations_for_blocks::OperationsForBlock,
 };
 
+enum ReadResult {
+    Success,
+    Pending,
+    Ahead,
+}
+
 trait Replayer {
-    fn replay_read(&mut self, id: u64) -> Option<()>;
+    fn replay_read(&mut self, id: u64) -> ReadResult;
     fn replay_write(&mut self, id: u64);
 }
 
@@ -48,23 +56,15 @@ impl<Rp> State<Rp> {
     }
 
     pub fn next_read(&self) -> Option<u64> {
-        self.brief[self.read_pos..].iter().find_map(|m| {
-            if !m.incoming {
-                Some(m.id)
-            } else {
-                None
-            }
-        })
+        self.brief[self.read_pos..]
+            .iter()
+            .find_map(|m| if !m.incoming { Some(m.id) } else { None })
     }
 
     pub fn next_write(&self) -> Option<u64> {
-        self.brief[self.write_pos..].iter().find_map(|m| {
-            if m.incoming {
-                Some(m.id)
-            } else {
-                None
-            }
-        })
+        self.brief[self.write_pos..]
+            .iter()
+            .find_map(|m| if m.incoming { Some(m.id) } else { None })
     }
 }
 
@@ -79,7 +79,10 @@ where
             match (s.next_read(), s.next_write()) {
                 (None, None) => break,
                 (Some(next_read), None) => {
-                    s.replayer.replay_read(next_read).unwrap();
+                    match s.replayer.replay_read(next_read) {
+                        ReadResult::Pending => panic!(),
+                        _ => (),
+                    }
                     s.read_pos = (next_read as usize) + 1;
                 },
                 (None, Some(next_write)) => {
@@ -93,15 +96,20 @@ where
                         read_timeout = false;
                     } else {
                         match s.replayer.replay_read(next_read) {
-                            Some(()) => s.read_pos = (next_read as usize) + 1,
-                            None => {
+                            ReadResult::Success => s.read_pos = (next_read as usize) + 1,
+                            ReadResult::Ahead => {
+                                s.read_pos = (next_read as usize) + 1;
+                                s.read_pos =
+                                    (s.next_read().unwrap_or(s.read_pos as u64) as usize) + 1;
+                            },
+                            ReadResult::Pending => {
                                 log::info!(
                                     "pending read_pos {}, write_pos {}",
                                     next_read,
                                     next_write,
                                 );
                                 read_timeout = true;
-                            }
+                            },
                         }
                     }
                 },
@@ -117,6 +125,7 @@ pub struct SimpleReplayer {
     key: PrecomputedKey,
     local: Nonce,
     remote: Nonce,
+    last_head_id: u64,
 }
 
 impl SimpleReplayer {
@@ -134,22 +143,45 @@ impl SimpleReplayer {
             msg.message().clone()
         })
     }
+
+    pub fn read_db(&self, id: u64) -> PeerMessage {
+        let message = self.db.fetch_message(id).unwrap().unwrap();
+        match message.message {
+            Some(TezosMessage::PeerMessage(v)) => v,
+            _ => panic!(),
+        }
+    }
+
+    pub fn find_after(&self, id: u64, kind: &MessageKind) -> Option<u64> {
+        let mut filter = MessagesFilter::default();
+        filter.cursor = Some(id);
+        filter.limit = Some(100);
+        filter.direction = Some("forward".to_string());
+
+        loop {
+            let brief = self.db.fetch_messages(&filter).unwrap();
+            if let Some(m) = brief.iter().find(|m| m.kind == Some(kind.clone())) {
+                return Some(m.id);
+            }
+            if brief.len() < filter.limit.unwrap_or(100) as usize {
+                return None;
+            }
+            filter.cursor = Some(filter.cursor.unwrap_or(id) + filter.limit.unwrap_or(100));
+        }
+    }
 }
 
 impl Replayer for SimpleReplayer {
-    fn replay_read(&mut self, id: u64) -> Option<()> {
-        let have = {
-            let message = self.db.fetch_message(id).unwrap().unwrap();
-            match message.message {
-                Some(TezosMessage::PeerMessage(v)) => v,
-                _ => panic!(),
-            }
-        };
+    fn replay_read(&mut self, id: u64) -> ReadResult {
+        let have = self.read_db(id);
+        if let &PeerMessage::GetCurrentHead(_) = &have {
+            return ReadResult::Success;
+        }
 
         let read = match self.read() {
             Ok(v) => v,
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                return None;
+                return ReadResult::Pending;
             },
             Err(e) => {
                 Err::<(), _>(e).unwrap();
@@ -160,15 +192,32 @@ impl Replayer for SimpleReplayer {
         log::debug!("replay read {}", id);
 
         if !peer_message_eq(&read, &have) {
+            if let &PeerMessage::GetCurrentHead(_) = &read {
+                if self.last_head_id < id {
+                    let found = self.find_after(self.last_head_id, &MessageKind::CurrentHead);
+                    if let Some(id) = found {
+                        self.last_head_id = id;
+                        self.replay_write(id);
+                    }
+                } else {
+                    self.replay_write(self.last_head_id);
+                }
+                return ReadResult::Ahead;
+            }
+            if let &PeerMessage::CurrentHead(_) = &read {
+                // ignore, don't report error for such case
+                return ReadResult::Success;
+            }
             log::error!("mismatch at id: {}, read: {:?}, have: {:?}", id, read, have);
         }
 
-        Some(())
+        ReadResult::Success
     }
 
     fn replay_write(&mut self, id: u64) {
         let message = self.db.fetch_message(id).unwrap().unwrap();
         let peer_message = match message.message {
+            Some(TezosMessage::PeerMessage(PeerMessage::CurrentHead(_))) => return,
             Some(TezosMessage::PeerMessage(v)) => v,
             _ => panic!(),
         };
@@ -201,9 +250,9 @@ fn peer_message_eq(lhs: &PeerMessage, rhs: &PeerMessage) -> bool {
             lhs.chain_id == rhs.chain_id
         },
         (&PeerMessage::CurrentBranch(ref lhs), &PeerMessage::CurrentBranch(ref rhs)) => {
-            lhs.chain_id() == rhs.chain_id() &&
-            lhs.current_branch().current_head() == rhs.current_branch().current_head() &&
-            lhs.current_branch().history() == rhs.current_branch().history()
+            lhs.chain_id() == rhs.chain_id()
+                && lhs.current_branch().current_head() == rhs.current_branch().current_head()
+                && lhs.current_branch().history() == rhs.current_branch().history()
         },
         (&PeerMessage::Deactivate(ref lhs), &PeerMessage::Deactivate(ref rhs)) => {
             lhs.deactivate() == rhs.deactivate()
@@ -212,9 +261,9 @@ fn peer_message_eq(lhs: &PeerMessage, rhs: &PeerMessage) -> bool {
             lhs.chain_id() == rhs.chain_id()
         },
         (&PeerMessage::CurrentHead(ref lhs), &PeerMessage::CurrentHead(ref rhs)) => {
-            lhs.chain_id() == rhs.chain_id() &&
-            lhs.current_block_header() == rhs.current_block_header() &&
-            lhs.current_mempool() == rhs.current_mempool()
+            lhs.chain_id() == rhs.chain_id()
+                && lhs.current_block_header() == rhs.current_block_header()
+                && lhs.current_mempool() == rhs.current_mempool()
         },
         (&PeerMessage::GetBlockHeaders(ref lhs), &PeerMessage::GetBlockHeaders(ref rhs)) => {
             lhs.get_block_headers() == rhs.get_block_headers()
@@ -238,7 +287,10 @@ fn peer_message_eq(lhs: &PeerMessage, rhs: &PeerMessage) -> bool {
             let _ = (lhs, rhs);
             true
         },
-        (&PeerMessage::GetOperationsForBlocks(ref lhs), &PeerMessage::GetOperationsForBlocks(ref rhs)) => {
+        (
+            &PeerMessage::GetOperationsForBlocks(ref lhs),
+            &PeerMessage::GetOperationsForBlocks(ref rhs),
+        ) => {
             let mut lhs: Vec<OperationsForBlock> = lhs.get_operations_for_blocks().clone();
             let mut rhs: Vec<OperationsForBlock> = rhs.get_operations_for_blocks().clone();
 
@@ -246,10 +298,13 @@ fn peer_message_eq(lhs: &PeerMessage, rhs: &PeerMessage) -> bool {
             rhs.sort_by(|l, r| l.validation_pass().cmp(&r.validation_pass()));
             lhs == rhs
         },
-        (&PeerMessage::OperationsForBlocks(ref lhs), &PeerMessage::OperationsForBlocks(ref rhs)) => {
-            lhs.operations_for_block() == rhs.operations_for_block() &&
-            lhs.operation_hashes_path() == rhs.operation_hashes_path() &&
-            lhs.operations() == rhs.operations()
+        (
+            &PeerMessage::OperationsForBlocks(ref lhs),
+            &PeerMessage::OperationsForBlocks(ref rhs),
+        ) => {
+            lhs.operations_for_block() == rhs.operations_for_block()
+                && lhs.operation_hashes_path() == rhs.operation_hashes_path()
+                && lhs.operations() == rhs.operations()
         },
         _ => false,
     }
@@ -316,6 +371,9 @@ fn main() {
         key,
         local,
         remote,
+        last_head_id: 0,
     };
+    let now = Instant::now();
     State::new(brief, replayer).map(State::run);
+    log::info!("{:?}", now.elapsed());
 }
