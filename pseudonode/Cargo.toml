@@ -1,20 +1,10 @@
 [package]
-name = "tester"
+name = "pseudonode"
 version = "0.1.0"
 authors = ["Vladislav Melnik <vladislav.melnik@simplestaking.com>"]
 edition = "2018"
 
 [dependencies]
-structopt = { version = "0.3"}
-chrono = { version = "0.4" }
-rand = { version = "0.8.4", features = ["small_rng"] }
 crypto = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
 tezos_messages = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
 tezos_identity = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
-hex = "0.4"
-serde_json = "1.0"
-
-[dev-dependencies]
-reqwest = "0.11"
-tokio = { version = "1.8", features = ["full"] }
-tezedge-recorder = { path = "../tezedge-recorder" }

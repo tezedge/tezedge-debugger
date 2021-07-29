@@ -1788,6 +1788,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pseudonode"
+version = "0.1.0"
+dependencies = [
+ "crypto",
+ "tezos_identity",
+ "tezos_messages",
+]
+
+[[package]]
 name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2531,23 +2540,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tester"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "crypto",
- "hex",
- "rand 0.8.4",
- "reqwest",
- "serde_json",
- "structopt",
- "tezedge-recorder",
- "tezos_identity",
- "tezos_messages",
- "tokio",
-]
-
-[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2584,6 +2576,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bpf-recorder",
+ "chrono",
  "crypto",
  "ctrlc",
  "either",
@@ -2591,12 +2584,17 @@ dependencies = [
  "itertools 0.10.1",
  "jemallocator",
  "log",
+ "pseudonode",
+ "rand 0.8.4",
+ "reqwest",
  "rocksdb",
  "serde",
  "serde_json",
  "storage",
+ "structopt",
  "syslog_loose",
  "tantivy",
+ "tezedge-recorder",
  "tezos_messages",
  "thiserror",
  "tokio",

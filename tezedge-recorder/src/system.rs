@@ -20,12 +20,14 @@ use super::{
 pub struct P2pConfig {
     identity: String,
     pub port: u16,
+    store_limit: Option<u64>,
 }
 
 #[derive(Clone, Deserialize)]
 struct LogConfig {
     port: u16,
     disable_search: Option<bool>,
+    store_limit: Option<u64>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -86,6 +88,7 @@ impl NodeServer {
         db_path: &str,
         rpc_port: Option<u16>,
         log_config: &Option<LogConfig>,
+        p2p_config: &Option<P2pConfig>,
         rt: &Runtime,
         running: Arc<AtomicBool>,
     ) -> Result<(Self, Arc<Db>)>
@@ -96,7 +99,13 @@ impl NodeServer {
             .as_ref()
             .and_then(|c| c.disable_search)
             .unwrap_or(false);
-        let db = Arc::new(Db::open(db_path, log_search)?);
+        let log_store_limit = log_config
+            .as_ref()
+            .and_then(|c| c.store_limit);
+        let message_store_limit = p2p_config
+            .as_ref()
+            .and_then(|c| c.store_limit);
+        let db = Arc::new(Db::open(db_path, log_search, log_store_limit, message_store_limit)?);
         let server = if let Some(port) = rpc_port {
             let addr = ([0, 0, 0, 0], port);
             Some(rt.spawn(warp::serve(server::routes(db.clone())).run(addr)))
@@ -253,7 +262,7 @@ where
         for c in &self.config.nodes {
             let r = running.clone();
             let rt = &self.tokio_rt;
-            match NodeServer::open_spawn(&c.db, c.http_v3, &c.log, rt, r) {
+            match NodeServer::open_spawn(&c.db, c.http_v3, &c.log, &c.p2p, rt, r) {
                 Ok((server, db)) => {
                     self.node_servers.insert(c.name.clone(), server);
                     self.node_dbs.insert(c.name.clone(), db);

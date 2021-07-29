@@ -3,7 +3,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::ops::Range;
+use std::{ops::Range, env};
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -46,21 +46,23 @@ fn main() {
 
 fn generate_p2p(this: u16, peer: u16, initiator: bool) {
     use std::net::{SocketAddr, TcpListener, TcpStream};
-    use tester::{handshake, Message, ChunkBuffer};
+    use pseudonode::{handshake, Message, ChunkBuffer};
     use crypto::nonce::NoncePair;
     use tezos_messages::p2p::encoding::{
         metadata::MetadataMessage,
         ack::AckMessage,
         peer::{PeerMessage, PeerMessageResponse},
+        version::NetworkVersion,
     };
 
     let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], this))).unwrap();
+    let version = NetworkVersion::new("TEZOS_MAINNET".to_string(), 0, 1);
 
     if initiator {
         let addr = SocketAddr::from(([127, 0, 0, 1], peer));
         let mut stream = TcpStream::connect(addr).unwrap();
     
-        let (key, NoncePair { local, remote }) = handshake::initiator(this, &mut stream);
+        let (key, NoncePair { local, remote }) = handshake::initiator(this, &mut stream, include_str!("../../identity_i.json"), version);
         let mut buffer = ChunkBuffer::default();
 
         let local = MetadataMessage::new(false, false).write_msg(&mut stream, &key, local);
@@ -80,7 +82,7 @@ fn generate_p2p(this: u16, peer: u16, initiator: bool) {
             stream
         };
 
-        let (key, NoncePair { local, remote }) = handshake::responder(this, &mut stream);
+        let (key, NoncePair { local, remote }) = handshake::responder(this, &mut stream, include_str!("../../identity_r.json"), version);
         let mut buffer = ChunkBuffer::default();
         let (remote, _msg) =
             MetadataMessage::read_msg(&mut stream, &mut buffer, &key, remote, false).unwrap();
@@ -122,10 +124,16 @@ fn send_stream(msgs: impl Iterator<Item = String>) {
     }
 }
 
+fn start_time() -> i64 {
+    env::var("START_TIME")
+        .map(|s| s.parse::<i64>().unwrap_or(0))
+        .unwrap_or(0)
+}
+
 fn prepare_db_range(range: Range<i64>) {
     let it = range
         .map(|i| {
-            let timestamp = tester::START_TIME + i;
+            let timestamp = start_time() + i;
 
             let level = match timestamp % 19 {
                 1 | 4 | 5 | 8 => "WARN",
@@ -164,7 +172,7 @@ fn prepare_db_log_words() {
                         acc
                     }
                 });
-            prepare_message(tester::START_TIME, "INFO", &text)
+            prepare_message(start_time(), "INFO", &text)
         });
     send_stream(it);
 }

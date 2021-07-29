@@ -1,12 +1,12 @@
 [workspace]
 members = [
-    "tester",
     "extractor",
 
     # recorder and its bpf tools
     "tezedge-recorder",
     "bpf-recorder",
     "bpf-ring-buffer",
+    "pseudonode",
 
     #memprof and its bpf tools
     "bpf-memprof-common",

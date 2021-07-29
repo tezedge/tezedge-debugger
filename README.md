@@ -450,7 +450,7 @@ export LD_LIBRARY_PATH=$HOME/.cargo/git/checkouts/tezedge-????????????????/?????
 Run the tests:
 
 ```
-DEBUGGER_URL=http://localhost:17732 ./tester/test.sh
+DEBUGGER_URL=http://localhost:17732 ./tezedge-recorder/test.sh
 ```
 
 ### Important note before run

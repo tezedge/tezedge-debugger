@@ -13,7 +13,7 @@ db = "./target/debugger_db/i"
 # debugger expect the node will listen its p2p incoming connections on this port
 # the process which bind a socket on this port first, will be considered as the node
 # this is an inner port inside docker's virtual network of the node's container
-p2p = { identity = "tester/identity_i.json", port = 29732 }
+p2p = { identity = "tezedge-recorder/identity_i.json", port = 29732 }
 # debugger will run syslog server on this port
 # this is an inner port inside docker's virtual network of the debugger's container
 log = { port = 10000 }
@@ -22,7 +22,7 @@ log = { port = 10000 }
 name = "responder"
 http_v3 = 17743
 db = "./target/debugger_db/r"
-p2p = { identity = "tester/identity_r.json", port = 29733 }
+p2p = { identity = "tezedge-recorder/identity_r.json", port = 29733 }
 
 [[nodes]]
 name = "tezedge"

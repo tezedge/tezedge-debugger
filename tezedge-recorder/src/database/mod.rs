@@ -30,7 +30,7 @@ pub struct ChunksFilter {
     pub cn: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 pub struct MessagesFilter {
     pub direction: Option<String>,
     pub limit: Option<u64>,
@@ -92,7 +92,12 @@ where
 {
     type Error: 'static + Send + Sync + Error;
 
-    fn open<P>(path: P, log: bool) -> Result<Self, Self::Error>
+    fn open<P>(
+        path: P,
+        log_full_text_index: bool,
+        log_store_limit: Option<u64>,
+        message_store_limit: Option<u64>,
+    ) -> Result<Self, Self::Error>
     where
         P: AsRef<Path>;
 }
