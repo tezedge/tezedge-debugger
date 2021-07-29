@@ -57,6 +57,7 @@
         "precompute",
         "prevalidator",
         "printk",
+        "pseudonode",
         "pswd",
         "recvfrom",
         "redbpf",

@@ -50,5 +50,4 @@ fn build_bpf() {
         target_dir
     );
     println!("cargo:rerun-if-changed=src/main.rs");
-    println!("cargo:rerun-if-changed=src/event.rs");
 }

@@ -17,7 +17,8 @@ use crypto::{
     nonce::{Nonce, NoncePair},
 };
 use tezos_messages::p2p::encoding::{
-    ack::AckMessage, metadata::MetadataMessage, peer::PeerMessageResponse,
+    ack::AckMessage, metadata::MetadataMessage, peer::{PeerMessageResponse, PeerMessage},
+    operations_for_blocks::OperationsForBlock,
 };
 
 trait Replayer {
@@ -28,35 +29,8 @@ trait Replayer {
 struct State<Rp> {
     replayer: Rp,
     brief: Vec<MessageFrontend>,
-    read: bool,
     read_pos: usize,
     write_pos: usize,
-}
-
-impl<Rp> Iterator for State<Rp> {
-    type Item = (u64, bool);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.read {
-            let id = self.brief[self.read_pos..].iter().find_map(|m| {
-                if !m.incoming {
-                    Some(m.id)
-                } else {
-                    None
-                }
-            })?;
-            Some((id, true))
-        } else {
-            let id = self.brief[self.write_pos..].iter().find_map(|m| {
-                if m.incoming {
-                    Some(m.id)
-                } else {
-                    None
-                }
-            })?;
-            Some((id, false))
-        }
-    }
 }
 
 impl<Rp> State<Rp> {
@@ -67,11 +41,30 @@ impl<Rp> State<Rp> {
             Some(State {
                 replayer,
                 brief,
-                read: true,
                 read_pos: 6,
                 write_pos: 6,
             })
         }
+    }
+
+    pub fn next_read(&self) -> Option<u64> {
+        self.brief[self.read_pos..].iter().find_map(|m| {
+            if !m.incoming {
+                Some(m.id)
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn next_write(&self) -> Option<u64> {
+        self.brief[self.write_pos..].iter().find_map(|m| {
+            if m.incoming {
+                Some(m.id)
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -81,28 +74,39 @@ where
 {
     pub fn run(self) {
         let mut s = self;
-        while let Some((id, read)) = s.next() {
-            if read {
-                if s.replayer.replay_read(id).is_some() {
-                    s.read = s.brief.get(s.write_pos).map(|m| m.incoming).unwrap_or(false);
-                } else {
-                    s.read = false;
-                }
-                s.read_pos = (id as usize) + 1;
-            } else {
-                s.replayer.replay_write(id);
-                s.write_pos = (id as usize) + 1;
-                s.read = s.brief.get(s.write_pos).map(|m| m.incoming).unwrap_or(false);
+        let mut read_timeout = false;
+        loop {
+            match (s.next_read(), s.next_write()) {
+                (None, None) => break,
+                (Some(next_read), None) => {
+                    s.replayer.replay_read(next_read).unwrap();
+                    s.read_pos = (next_read as usize) + 1;
+                },
+                (None, Some(next_write)) => {
+                    s.replayer.replay_write(next_write);
+                    s.write_pos = (next_write as usize) + 1;
+                },
+                (Some(next_read), Some(next_write)) => {
+                    if next_write < next_read || read_timeout {
+                        s.replayer.replay_write(next_write);
+                        s.write_pos = (next_write as usize) + 1;
+                        read_timeout = false;
+                    } else {
+                        match s.replayer.replay_read(next_read) {
+                            Some(()) => s.read_pos = (next_read as usize) + 1,
+                            None => {
+                                log::info!(
+                                    "pending read_pos {}, write_pos {}",
+                                    next_read,
+                                    next_write,
+                                );
+                                read_timeout = true;
+                            }
+                        }
+                    }
+                },
             }
         }
-        /*for brief in &s.brief[6..] {
-            let id = brief.id;
-            if brief.incoming {
-                s.replayer.replay_write(id);
-            } else {
-                s.replayer.replay_read(id).unwrap();
-            }
-        }*/
     }
 }
 
@@ -115,14 +119,8 @@ pub struct SimpleReplayer {
     remote: Nonce,
 }
 
-impl Replayer for SimpleReplayer {
-    fn replay_read(&mut self, id: u64) -> Option<()> {
-        let message = self.db.fetch_message(id).unwrap().unwrap();
-        let peer_message = match &message.message {
-            &Some(TezosMessage::PeerMessage(ref v)) => v,
-            _ => panic!(),
-        };
-
+impl SimpleReplayer {
+    pub fn read(&mut self) -> io::Result<PeerMessage> {
         let r = PeerMessageResponse::read_msg(
             &mut self.stream,
             &mut self.buffer,
@@ -130,34 +128,45 @@ impl Replayer for SimpleReplayer {
             self.remote.clone(),
             true,
         );
-        let (remote, msg) = match r {
+
+        r.map(|(nonce, msg)| {
+            self.remote = nonce;
+            msg.message().clone()
+        })
+    }
+}
+
+impl Replayer for SimpleReplayer {
+    fn replay_read(&mut self, id: u64) -> Option<()> {
+        let have = {
+            let message = self.db.fetch_message(id).unwrap().unwrap();
+            match message.message {
+                Some(TezosMessage::PeerMessage(v)) => v,
+                _ => panic!(),
+            }
+        };
+
+        let read = match self.read() {
             Ok(v) => v,
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                log::info!("pending read {}", id);
                 return None;
             },
             Err(e) => {
-                panic!("{:?}", e);
+                Err::<(), _>(e).unwrap();
+                unreachable!()
             },
         };
-        log::info!("replay read {}", id);
-        self.remote = remote;
 
-        let _ = (peer_message, msg.message());
-        /*let read = serde_json::to_string(&msg.message()).unwrap();
-        let have = serde_json::to_string(peer_message).unwrap();
-        if read != have {
-            log::error!("read: {:?}", msg.message());
-            log::error!("have: {:?}", peer_message);
-            //panic!();
-        }*/
+        log::debug!("replay read {}", id);
+
+        if !peer_message_eq(&read, &have) {
+            log::error!("mismatch at id: {}, read: {:?}, have: {:?}", id, read, have);
+        }
 
         Some(())
     }
 
     fn replay_write(&mut self, id: u64) {
-        log::info!("replay write {}", id);
-
         let message = self.db.fetch_message(id).unwrap().unwrap();
         let peer_message = match message.message {
             Some(TezosMessage::PeerMessage(v)) => v,
@@ -170,6 +179,79 @@ impl Replayer for SimpleReplayer {
             self.local.clone(),
         );
         self.local = local;
+
+        log::debug!("replay write {}", id);
+    }
+}
+
+fn peer_message_eq(lhs: &PeerMessage, rhs: &PeerMessage) -> bool {
+    match (&lhs, &rhs) {
+        (&PeerMessage::Disconnect, &PeerMessage::Disconnect) => true,
+        (&PeerMessage::Advertise(ref lhs), &PeerMessage::Advertise(ref rhs)) => {
+            lhs.id() == rhs.id()
+        },
+        (&PeerMessage::SwapRequest(ref lhs), &PeerMessage::SwapRequest(ref rhs)) => {
+            lhs.point() == rhs.point() && lhs.peer_id() == rhs.peer_id()
+        },
+        (&PeerMessage::SwapAck(ref lhs), &PeerMessage::SwapAck(ref rhs)) => {
+            lhs.point() == rhs.point() && lhs.peer_id() == rhs.peer_id()
+        },
+        (&PeerMessage::Bootstrap, &PeerMessage::Bootstrap) => true,
+        (&PeerMessage::GetCurrentBranch(ref lhs), &PeerMessage::GetCurrentBranch(ref rhs)) => {
+            lhs.chain_id == rhs.chain_id
+        },
+        (&PeerMessage::CurrentBranch(ref lhs), &PeerMessage::CurrentBranch(ref rhs)) => {
+            lhs.chain_id() == rhs.chain_id() &&
+            lhs.current_branch().current_head() == rhs.current_branch().current_head() &&
+            lhs.current_branch().history() == rhs.current_branch().history()
+        },
+        (&PeerMessage::Deactivate(ref lhs), &PeerMessage::Deactivate(ref rhs)) => {
+            lhs.deactivate() == rhs.deactivate()
+        },
+        (&PeerMessage::GetCurrentHead(ref lhs), &PeerMessage::GetCurrentHead(ref rhs)) => {
+            lhs.chain_id() == rhs.chain_id()
+        },
+        (&PeerMessage::CurrentHead(ref lhs), &PeerMessage::CurrentHead(ref rhs)) => {
+            lhs.chain_id() == rhs.chain_id() &&
+            lhs.current_block_header() == rhs.current_block_header() &&
+            lhs.current_mempool() == rhs.current_mempool()
+        },
+        (&PeerMessage::GetBlockHeaders(ref lhs), &PeerMessage::GetBlockHeaders(ref rhs)) => {
+            lhs.get_block_headers() == rhs.get_block_headers()
+        },
+        (&PeerMessage::BlockHeader(ref lhs), &PeerMessage::BlockHeader(ref rhs)) => {
+            lhs.block_header() == rhs.block_header()
+        },
+        (&PeerMessage::GetOperations(ref lhs), &PeerMessage::GetOperations(ref rhs)) => {
+            lhs.get_operations() == rhs.get_operations()
+        },
+        (&PeerMessage::Operation(ref lhs), &PeerMessage::Operation(ref rhs)) => {
+            lhs.operation() == rhs.operation()
+        },
+        (&PeerMessage::GetProtocols(ref lhs), &PeerMessage::GetProtocols(ref rhs)) => {
+            //lhs.get_protocols() == rhs.get_protocols()
+            let _ = (lhs, rhs);
+            true
+        },
+        (&PeerMessage::Protocol(ref lhs), &PeerMessage::Protocol(ref rhs)) => {
+            //lhs.protocol() == rhs.protocol()
+            let _ = (lhs, rhs);
+            true
+        },
+        (&PeerMessage::GetOperationsForBlocks(ref lhs), &PeerMessage::GetOperationsForBlocks(ref rhs)) => {
+            let mut lhs: Vec<OperationsForBlock> = lhs.get_operations_for_blocks().clone();
+            let mut rhs: Vec<OperationsForBlock> = rhs.get_operations_for_blocks().clone();
+
+            lhs.sort_by(|l, r| l.validation_pass().cmp(&r.validation_pass()));
+            rhs.sort_by(|l, r| l.validation_pass().cmp(&r.validation_pass()));
+            lhs == rhs
+        },
+        (&PeerMessage::OperationsForBlocks(ref lhs), &PeerMessage::OperationsForBlocks(ref rhs)) => {
+            lhs.operations_for_block() == rhs.operations_for_block() &&
+            lhs.operation_hashes_path() == rhs.operation_hashes_path() &&
+            lhs.operations() == rhs.operations()
+        },
+        _ => false,
     }
 }
 
@@ -182,7 +264,7 @@ fn main() {
 
     let mut filter = MessagesFilter::default();
     filter.cursor = Some(0);
-    filter.limit = Some(100_000);
+    filter.limit = Some(40_000);
     filter.direction = Some("forward".to_string());
     let brief = db.fetch_messages(&filter).unwrap();
 

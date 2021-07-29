@@ -47,5 +47,4 @@ fn build_bpf() {
 
     println!("cargo:rustc-env=BPF_CODE_MEMPROF={}/debug/bpf-memprof-kern", target_dir);
     println!("cargo:rerun-if-changed=src/main.rs");
-    println!("cargo:rerun-if-changed=src/event.rs");
 }
