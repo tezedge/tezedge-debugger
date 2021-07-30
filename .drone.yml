@@ -82,7 +82,7 @@ steps:
       - cp /usr/local/cargo/git/checkouts/tezedge-*/*/tezos/sys/lib_tezos/artifacts/libtezos.so /usr/lib/x86_64-linux-gnu/libtezos.so
       - mkdir target/debugger_db
       # test
-      - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu DEBUGGER_URL="http://localhost:17732" ./tezedge-recorder/test.sh
+      - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu ./tezedge-recorder/test.sh
       # test with real node
       - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu ./target/none/release/tezedge-recorder --run-bpf & sleep 2
       # run tezedge-node in docker

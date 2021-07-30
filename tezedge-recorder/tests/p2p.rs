@@ -18,7 +18,7 @@ pub async fn get_p2p(params: &str, name: &str) -> Result<Vec<message::MessageFro
 async fn check_messages() {
     use tezedge_recorder::common::{MessageCategory, MessageKind};
 
-    let items = get_p2p("limit=100", "initiator").await.unwrap();
+    let items = get_p2p("limit=100&direction=forward", "initiator").await.unwrap();
 
     let expected = [
         (0, MessageCategory::Connection, None, false),

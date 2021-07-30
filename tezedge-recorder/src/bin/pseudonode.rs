@@ -9,8 +9,8 @@ use structopt::StructOpt;
 #[derive(StructOpt)]
 enum Args {
     Log { range: u8 },
-    P2pInitiator { this: u16, peer: u16 },
-    P2pResponder { this: u16, peer: u16 },
+    P2pInitiator { this: u16, peer: u16, msg_number: u64 },
+    P2pResponder { this: u16, peer: u16, msg_number: u64 },
 }
 
 fn main() {
@@ -27,16 +27,16 @@ fn main() {
         Args::Log { range: _ } => {
             panic!();
         },
-        Args::P2pInitiator { this, peer } => {
-            generate_p2p(this, peer, true);
+        Args::P2pInitiator { this, peer, msg_number } => {
+            generate_p2p(this, peer, msg_number, true);
         },
-        Args::P2pResponder { this, peer } => {
-            generate_p2p(this, peer, false);
+        Args::P2pResponder { this, peer, msg_number } => {
+            generate_p2p(this, peer, msg_number, false);
         },
     }
 }
 
-fn generate_p2p(this: u16, peer: u16, initiator: bool) {
+fn generate_p2p(this: u16, peer: u16, msg_number: u64, initiator: bool) {
     use std::net::{SocketAddr, TcpListener, TcpStream};
     use pseudonode::{handshake, Message, ChunkBuffer};
     use crypto::nonce::NoncePair;
@@ -70,13 +70,30 @@ fn generate_p2p(this: u16, peer: u16, initiator: bool) {
         let (_, _msg) =
             AckMessage::read_msg(&mut stream, &mut buffer, &key, remote, false).unwrap();
 
-        let fake_operation = serde_json::from_str(include_str!("operation_example.json")).unwrap();
-        let local = PeerMessageResponse::from(PeerMessage::Operation(fake_operation)).write_msg(
-            &mut stream,
-            &key,
-            local,
-        );
-        let _ = local;
+        let mut fake_operation: serde_json::Value =
+            serde_json::from_str(include_str!("operation_example.json")).unwrap();
+        let mut local = local;
+        for _ in 0..msg_number {
+            use std::{time::Duration, thread};
+
+            let data = fake_operation
+                .as_object_mut().unwrap()
+                .get_mut("operation").unwrap()
+                .as_object_mut().unwrap()
+                .get_mut("data").unwrap()
+                .as_array_mut().unwrap();
+            for v in data {
+                *v = serde_json::Value::Number(rand::random::<u8>().into());
+            }
+            let fake_operation = serde_json::from_value(fake_operation.clone()).unwrap();
+            local = PeerMessageResponse::from(PeerMessage::Operation(fake_operation)).write_msg(
+                &mut stream,
+                &key,
+                local,
+            );
+
+            thread::sleep(Duration::from_micros(100));
+        }
     } else {
         let mut stream = {
             let (stream, _) = listener.accept().unwrap();
@@ -98,11 +115,12 @@ fn generate_p2p(this: u16, peer: u16, initiator: bool) {
             AckMessage::read_msg(&mut stream, &mut buffer, &key, remote, false).unwrap();
         let _ = AckMessage::Ack.write_msg(&mut stream, &key, local);
 
-        let (remote, msg) =
-            PeerMessageResponse::read_msg(&mut stream, &mut buffer, &key, remote, true).unwrap();
-        assert!(matches!(msg.message(), &PeerMessage::Operation(_)));
-
-        let _ = remote;
+        let mut remote = remote;
+        for _ in 0..msg_number {
+            let (remote_new, msg) = PeerMessageResponse::read_msg(&mut stream, &mut buffer, &key, remote, true).unwrap();
+            assert!(matches!(msg.message(), &PeerMessage::Operation(_)));
+            remote = remote_new;
+        }
     }
     let _ = listener;
 }
