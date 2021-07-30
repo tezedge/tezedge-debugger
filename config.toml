@@ -35,3 +35,9 @@ name = "local_node"
 http_v3 = 17745
 db = "/volume/debugger_db/tezedge"
 p2p = { identity = "../tezedge/light_node/etc/tezedge/identity.json", port = 29735 }
+
+[[nodes]]
+name = "limit_test"
+http_v3 = 17746
+db = "./target/debugger_db/limit_test"
+p2p = { identity = "../tezedge/light_node/etc/tezedge/identity.json", port = 29736, store_limit = 10 }

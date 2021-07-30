@@ -80,6 +80,7 @@ pub struct System<Db> {
     node_servers: HashMap<String, NodeServer>,
     node_dbs: HashMap<String, Arc<Db>>,
     _old_server: Option<JoinHandle<()>>,
+    _aux_server: Option<JoinHandle<()>>,
     tokio_rt: Runtime,
 }
 
@@ -197,6 +198,7 @@ impl<Db> System<Db> {
             node_servers: HashMap::new(),
             node_dbs: HashMap::new(),
             _old_server: None,
+            _aux_server: None,
             tokio_rt: Runtime::new().unwrap(),
         })
     }
@@ -278,6 +280,9 @@ where
             let addr = ([0, 0, 0, 0], port);
             let s = warp::serve(server::routes_old(self.node_dbs.clone())).run(addr);
             self._old_server = Some(self.tokio_rt.spawn(s));
+            let addr = ([0, 0, 0, 0], port + 1);
+            let s = warp::serve(server::routes_test(self.node_dbs.clone())).run(addr);
+            self._aux_server = Some(self.tokio_rt.spawn(s));
         }
     }
 

@@ -272,3 +272,33 @@ where
         .with(with::header("Content-Type", "application/json"))
         .with(with::header("Access-Control-Allow-Origin", "*"))
 }
+
+pub fn routes_test<Db>(
+    dbs: HashMap<String, Arc<Db>>,
+) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send + 'static
+where
+    Db: DatabaseFetch + Sync + Send + 'static,
+{
+    use warp::reply::with;
+
+    warp::get()
+        .and(
+            warp::path!("compact").and(warp::query::query()).map(
+                move |filter: LogsFilter| -> reply::WithStatus<Json> {
+                    let node_name = filter.node_name.clone().unwrap_or("tezedge".to_string());
+                    match dbs.get(&node_name) {
+                        Some(db) => {
+                            db.compact();
+                            reply::with_status(reply::json(&0u32), StatusCode::INTERNAL_SERVER_ERROR)
+                        },
+                        None => {
+                            let r = &format!("no such node: {:?}", node_name);
+                            reply::with_status(reply::json(&r), StatusCode::NOT_FOUND)
+                        },
+                    }
+                },
+            )
+        )
+        .with(with::header("Content-Type", "application/json"))
+        .with(with::header("Access-Control-Allow-Origin", "*"))
+}

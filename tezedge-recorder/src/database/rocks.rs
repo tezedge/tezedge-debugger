@@ -836,6 +836,32 @@ impl DatabaseFetch for Db {
             Ok(v)
         }
     }
+
+    fn compact(&self) {
+        let cf_names = [
+            connection::Schema::name(),
+            chunk::Schema::name(),
+            message::Schema::name(),
+            node_log::Schema::name(),
+            message_ty::Schema::name(),
+            message_sender::Schema::name(),
+            message_initiator::Schema::name(),
+            message_addr::Schema::name(),
+            timestamp::MessageSchema::name(),
+            log_level::Schema::name(),
+            timestamp::LogSchema::name(),
+        ];
+
+        for cf_name in &cf_names {
+            if let Some(cf) = self.inner.cf_handle(cf_name) {
+                if let Ok(()) = self.inner.flush_cf(cf) {
+                    self.inner.compact_range_cf::<[u8; 0], [u8; 0]>(cf, None, None);
+                }
+            }
+        }
+
+        log::info!("compact");
+    }
 }
 
 fn details(

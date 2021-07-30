@@ -128,4 +128,7 @@ impl DatabaseFetch for Db {
         let _ = filter;
         Ok(vec![])
     }
+
+    fn compact(&self) {
+    }
 }

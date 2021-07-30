@@ -84,6 +84,8 @@ where
     fn fetch_message(&self, id: u64) -> Result<Option<message::MessageDetails>, Self::Error>;
 
     fn fetch_log(&self, filter: &LogsFilter) -> Result<Vec<node_log::ItemWithId>, Self::Error>;
+
+    fn compact(&self);
 }
 
 pub trait DatabaseNew
