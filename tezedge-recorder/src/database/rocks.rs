@@ -688,11 +688,17 @@ impl DatabaseFetch for Db {
         };
 
         if let Some(query) = &filter.query {
-            let result = self
+            // remove quotes everywhere, and add quotes begin end
+            let query = if filter.query_no_quotes.unwrap_or(false) {
+                query.replace('"', "")
+            } else {
+                format!("\"{}\"", query.replace('"', ""))
+            };
+            let mut result: Vec<_> = self
                 .log_indexer
                 .as_ref()
                 .ok_or(DbError::NoLogIndexer)?
-                .read(query, limit)?
+                .read(&query, limit)?
                 .filter_map(
                     |(_score, id)| match self.as_kv::<node_log::Schema>().get(&id) {
                         Ok(Some(value)) => Some(node_log::ItemWithId::new(value, id)),
@@ -707,6 +713,7 @@ impl DatabaseFetch for Db {
                     },
                 )
                 .collect();
+            result.sort_by(|a, b| a.timestamp.cmp(&b.timestamp).reverse());
             return Ok(result);
         }
 

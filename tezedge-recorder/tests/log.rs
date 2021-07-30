@@ -152,7 +152,7 @@ async fn full_text_search() {
 
     impl TestCase {
         async fn run(&self) {
-            let items = get_log(&format!("limit={}&query={}", self.limit, self.query)).await.unwrap();
+            let items = get_log(&format!("limit={}&query={}&query_no_quotes=true", self.limit, self.query)).await.unwrap();
             assert!(!items.is_empty(), "{:?}", self);
             for item in items {
                 if !self.has.is_empty() {

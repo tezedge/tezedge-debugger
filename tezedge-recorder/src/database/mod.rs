@@ -56,6 +56,7 @@ pub struct LogsFilter {
     pub to: Option<u64>,
     pub timestamp: Option<u64>,
     pub query: Option<String>,
+    pub query_no_quotes: Option<bool>,
     // compatibility
     pub node_name: Option<String>,
 }
