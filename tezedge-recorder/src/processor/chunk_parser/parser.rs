@@ -5,7 +5,7 @@ use typenum::Bit;
 use either::Either;
 use super::{
     state::{Initial, HaveCm, Uncertain, HaveKey, HaveNotKey, CannotDecrypt, MakeKeyOutput},
-    tables::{connection, chunk},
+    tables::{syscall, connection, chunk},
     common::{Local, Remote},
     Identity,
 };
@@ -18,6 +18,18 @@ pub struct Handshake {
 enum Half<S> {
     Initial(Initial<S>),
     HaveCm(HaveCm<S>),
+}
+
+impl<S> Half<S>
+where
+    S: Bit,
+{
+    fn data_offset(&self) -> syscall::DataOffset {
+        match self {
+            &Half::Initial(ref state) => state.data_offset(),
+            &Half::HaveCm(ref state) => state.data_offset(),
+        }
+    }
 }
 
 pub struct HandshakeOutput {
@@ -52,6 +64,14 @@ impl Handshake {
                 remote: Half::Initial(r),
             } => l.is_empty() && r.is_empty(),
             _ => false,
+        }
+    }
+
+    pub fn data_offset(&self, incoming: bool) -> syscall::DataOffset {
+        if !incoming {
+            self.local.data_offset()
+        } else {
+            self.remote.data_offset()
         }
     }
 
@@ -187,6 +207,15 @@ impl<S> HandshakeDone<S>
 where
     S: Bit,
 {
+    pub fn data_offset(&self) -> syscall::DataOffset {
+        match self {
+            HandshakeDone::Uncertain(ref state) => state.data_offset(),
+            HandshakeDone::HaveKey(ref state) => state.data_offset(),
+            HandshakeDone::HaveNotKey(ref state) => state.data_offset(),
+            HandshakeDone::CannotDecrypt(ref state) => state.data_offset(),
+        }
+    }
+
     pub fn handle_data<H>(
         self,
         payload: &[u8],

@@ -53,10 +53,15 @@ where
     }
 
     fn data_offset(&self, incoming: bool) -> syscall::DataOffset {
-        let _ = incoming;
-        syscall::DataOffset {
-            chunk_number: 0,
-            offset_in_chunk: 0,
+        match self.state.as_ref().unwrap() {
+            &ConnectionState::Handshake(ref h) => h.data_offset(incoming),
+            &ConnectionState::HandshakeDone { ref local, ref remote, .. } => {
+                if !incoming {
+                    local.data_offset()
+                } else {
+                    remote.data_offset()
+                }
+            },
         }
     }
 

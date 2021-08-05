@@ -31,6 +31,10 @@ impl Buffer {
         self.buffer.len()
     }
 
+    pub fn counter(&self) -> u64 {
+        self.counter
+    }
+
     // length (including 2 bytes header) of the chunk at offset
     fn len(&self, offset: usize) -> Option<usize> {
         use std::convert::TryFrom;
