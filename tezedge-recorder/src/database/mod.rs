@@ -4,6 +4,7 @@
 pub mod rocks;
 pub mod mock;
 pub mod search;
+pub mod rocks_utils;
 
 mod sorted_intersect;
 

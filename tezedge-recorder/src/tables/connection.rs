@@ -323,7 +323,7 @@ impl Decoder for Key {
 // ip 16 bytes, port 2 bytes, initiator 1 byte, padding 1 byte, comments 36 bytes, peer_pk 32 bytes
 pub struct Value {
     initiator: Initiator,
-    remote_addr: SocketAddr,
+    pub remote_addr: SocketAddr,
     peer_pk: [u8; 32],
     comments: Comments,
 }

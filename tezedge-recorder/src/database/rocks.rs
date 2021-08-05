@@ -31,6 +31,8 @@ use super::{
     common, syscall, connection, chunk, message, node_log,
     // secondary indexes
     message_ty, message_sender, message_initiator, message_addr, log_level, timestamp,
+    // utils
+    rocks_utils::SyscallMetadataIterator,
 };
 
 #[derive(Error, Debug)]
@@ -66,7 +68,18 @@ pub struct Db {
 }
 
 impl Db {
-    fn as_kv<S>(&self) -> &(impl KeyValueStoreBackend<S> + KeyValueStoreWithSchemaIterator<S>)
+    pub fn syscall_metadata_iterator<'a>(
+        &'a self,
+        position: u64,
+    ) -> Result<SyscallMetadataIterator<'a>, DbError> {
+        let iter = self
+            .as_kv::<syscall::Schema>()
+            .iterator(IteratorMode::From(&position, Direction::Forward))?;
+
+        Ok(SyscallMetadataIterator::new(self, iter))
+    }
+
+    pub(super) fn as_kv<S>(&self) -> &(impl KeyValueStoreBackend<S> + KeyValueStoreWithSchemaIterator<S>)
     where
         S: KeyValueSchema + RocksDbKeyValueSchema,
     {

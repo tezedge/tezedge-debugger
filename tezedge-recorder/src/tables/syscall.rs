@@ -57,6 +57,21 @@ impl Decoder for DataOffset {
 }
 
 impl Item {
+    pub fn cn_id(&self) -> connection::Key {
+        // TODO: store cn id even if syscall failed
+        match self {
+            | &Item::Close(ref cn)
+            | &Item::Connect(Ok(ref cn))
+            | &Item::Accept(Ok(ref cn))=> cn.clone(),
+            | &Item::Connect(Err(_))
+            | &Item::Accept(Err(_)) => unimplemented!(),
+            | &Item::Write(Ok(DataRef { ref cn, .. }))
+            | &Item::Read(Ok(DataRef { ref cn, .. })) => cn.clone(),
+            | &Item::Write(Err(_))
+            | &Item::Read(Err(_)) => unimplemented!(),
+        }
+    }
+
     fn incoming(&self) -> bool {
         match self {
             &Item::Close(_) => false,
