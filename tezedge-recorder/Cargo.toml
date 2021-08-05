@@ -16,6 +16,10 @@ name = "replayer"
 path = "src/bin/replayer.rs"
 
 [[bin]]
+name = "replayer-new"
+path = "src/bin/replayer_new.rs"
+
+[[bin]]
 name = "pseudonode"
 path = "src/bin/pseudonode.rs"
 

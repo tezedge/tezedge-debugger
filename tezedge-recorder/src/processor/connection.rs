@@ -14,6 +14,8 @@ use super::{
 pub struct Connection<Db> {
     state: Option<ConnectionState<Db>>,
     item: connection::Item,
+    incoming_offset: u64,
+    outgoing_offset: u64,
     db: Arc<Db>,
 }
 
@@ -44,6 +46,8 @@ where
         Connection {
             state: Some(state),
             item,
+            incoming_offset: 0,
+            outgoing_offset: 0,
             db,
         }
     }
@@ -52,23 +56,18 @@ where
         self.item.key()
     }
 
-    fn data_offset(&self, incoming: bool) -> syscall::DataOffset {
-        match self.state.as_ref().unwrap() {
-            &ConnectionState::Handshake(ref h) => h.data_offset(incoming),
-            &ConnectionState::HandshakeDone { ref local, ref remote, .. } => {
-                if !incoming {
-                    local.data_offset()
-                } else {
-                    remote.data_offset()
-                }
-            },
-        }
-    }
-
     pub fn handle_data(&mut self, payload: &[u8], net: bool, incoming: bool) {
+        let offset;
+        if incoming {
+            offset = self.incoming_offset;
+            self.incoming_offset += payload.len() as u64;
+        } else {
+            offset = self.outgoing_offset;
+            self.outgoing_offset += payload.len() as u64;
+        }
         let data_ref = Ok(syscall::DataRef {
             cn: self.cn_id(),
-            offset: self.data_offset(incoming),
+            offset,
             length: payload.len() as u32,
         });
         let syscall_item = if incoming {

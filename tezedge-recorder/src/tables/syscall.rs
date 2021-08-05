@@ -1,7 +1,6 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::convert::TryFrom;
 use storage::persistent::{
     KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema,
 };
@@ -23,37 +22,9 @@ pub enum Item {
 #[derive(Debug, Clone)]
 pub struct DataRef {
     pub cn: connection::Key,
-    pub offset: DataOffset,
+    pub offset: u64,
     // encoded as 3 bytes
     pub length: u32,
-}
-
-#[derive(Debug, Clone)]
-pub struct DataOffset {
-    // encoded as 6 bytes
-    pub chunk_number: u64,
-    pub offset_in_chunk: u16,
-}
-
-impl Encoder for DataOffset {
-    fn encode(&self) -> Result<Vec<u8>, SchemaError> {
-        let i = self.chunk_number << 16 + (self.offset_in_chunk as u64);
-        Ok(i.to_be_bytes().as_ref().to_vec())
-    }
-}
-
-impl Decoder for DataOffset {
-    fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
-        if bytes.len() != 8 {
-            return Err(SchemaError::DecodeError);
-        }
-
-        let i = u64::from_be_bytes(TryFrom::try_from(bytes).unwrap());
-        Ok(DataOffset {
-            chunk_number: i >> 16,
-            offset_in_chunk: (i & 0xffff) as u16,
-        })
-    }
 }
 
 impl Item {
@@ -160,7 +131,7 @@ impl Decoder for Item {
         let code = u32::from_be_bytes([0, bytes[1], bytes[2], bytes[3]]);
         let data_ref = DataRef {
             cn: connection::Key::decode(&bytes[4..16])?,
-            offset: DataOffset::decode(&bytes[16..24])?,
+            offset: u64::decode(&bytes[16..24])?,
             length: code,
         };
         match discriminant {

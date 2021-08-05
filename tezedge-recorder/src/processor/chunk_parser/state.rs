@@ -8,7 +8,7 @@ use typenum::{self, Bit};
 use super::{
     buffer::Buffer,
     key::{Keys, Key},
-    tables::{syscall, connection, chunk},
+    tables::{connection, chunk},
     common::{Sender, Local, Remote},
     Identity,
 };
@@ -42,13 +42,6 @@ where
         self.buffer
             .cleanup()
             .map(|(counter, bytes)| self.chunk(counter, bytes, Vec::new()))
-    }
-
-    pub fn data_offset(&self) -> syscall::DataOffset {
-        syscall::DataOffset {
-            chunk_number: self.buffer.counter(),
-            offset_in_chunk: self.buffer.remaining() as u16,
-        }
     }
 }
 
@@ -115,10 +108,6 @@ where
         self.inner.buffer.remaining() == 0
     }
 
-    pub fn data_offset(&self) -> syscall::DataOffset {
-        self.inner.data_offset()
-    }
-
     pub fn handle_data(mut self, payload: &[u8]) -> Either<Self, HaveCm<S>> {
         self.inner.handle_data(payload);
         if self.inner.buffer.have_chunk().is_some() {
@@ -145,10 +134,6 @@ where
             self.inner.handle_data(payload);
             Ok(self)
         }
-    }
-
-    pub fn data_offset(&self) -> syscall::DataOffset {
-        self.inner.data_offset()
     }
 
     fn have_key(mut self, key: Key) -> (HaveKey<S>, chunk::Item) {
@@ -269,10 +254,6 @@ where
         (Uncertain { inner }, c)
     }
 
-    pub fn data_offset(&self) -> syscall::DataOffset {
-        self.inner.data_offset()
-    }
-
     pub fn handle_data(&mut self, payload: &[u8]) -> chunk::Item {
         debug_assert!(!payload.is_empty());
         self.inner.handle_data(payload);
@@ -284,10 +265,6 @@ impl<S> HaveNotKey<S>
 where
     S: Bit,
 {
-    pub fn data_offset(&self) -> syscall::DataOffset {
-        self.inner.data_offset()
-    }
-
     pub fn handle_data(&mut self, payload: &[u8]) -> chunk::Item {
         debug_assert!(!payload.is_empty());
         self.inner.handle_data(payload);
@@ -299,10 +276,6 @@ impl<S> HaveKey<S>
 where
     S: Bit,
 {
-    pub fn data_offset(&self) -> syscall::DataOffset {
-        self.inner.data_offset()
-    }
-
     pub fn handle_data(mut self, payload: &[u8]) -> HaveData<S> {
         self.inner.handle_data(payload);
         HaveData {
@@ -354,10 +327,6 @@ impl<S> CannotDecrypt<S>
 where
     S: Bit,
 {
-    pub fn data_offset(&self) -> syscall::DataOffset {
-        self.inner.data_offset()
-    }
-
     pub fn handle_data(&mut self, payload: &[u8]) {
         debug_assert!(!payload.is_empty());
         self.inner.handle_data(payload);
