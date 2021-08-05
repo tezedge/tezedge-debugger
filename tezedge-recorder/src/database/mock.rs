@@ -43,6 +43,10 @@ impl DatabaseNew for Db {
 }
 
 impl Database for Db {
+    fn store_syscall(&self, item: crate::tables::syscall::Item) {
+        let _ = item;
+    }
+
     fn store_connection(&self, item: connection::Item) {
         self.file
             .lock()

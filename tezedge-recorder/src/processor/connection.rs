@@ -8,7 +8,7 @@ use super::{
     message_parser::MessageParser,
     Identity, Database,
     common::{Local, Remote, Initiator},
-    tables::connection,
+    tables::{syscall, connection},
 };
 
 pub struct Connection<Db> {
@@ -34,6 +34,12 @@ where
 {
     pub fn new(remote_addr: SocketAddr, incoming: bool, identity: Identity, db: Arc<Db>) -> Self {
         let item = connection::Item::new(Initiator::new(incoming), remote_addr);
+        db.store_connection(item.clone());
+        if incoming {
+            db.store_syscall(syscall::Item::Accept(Ok(item.key())));
+        } else {
+            db.store_syscall(syscall::Item::Connect(Ok(item.key())));
+        }
         let state = ConnectionState::Handshake(Handshake::new(&item.key(), identity));
         Connection {
             state: Some(state),
@@ -42,7 +48,31 @@ where
         }
     }
 
+    pub fn cn_id(&self) -> connection::Key {
+        self.item.key()
+    }
+
+    fn data_offset(&self, incoming: bool) -> syscall::DataOffset {
+        let _ = incoming;
+        syscall::DataOffset {
+            chunk_number: 0,
+            offset_in_chunk: 0,
+        }
+    }
+
     pub fn handle_data(&mut self, payload: &[u8], net: bool, incoming: bool) {
+        let data_ref = Ok(syscall::DataRef {
+            cn: self.cn_id(),
+            offset: self.data_offset(incoming),
+            length: payload.len() as u32,
+        });
+        let syscall_item = if incoming {
+            syscall::Item::Read(data_ref)
+        } else {
+            syscall::Item::Write(data_ref)
+        };
+        self.db.store_syscall(syscall_item);
+
         let state = match self.state.take().unwrap() {
             ConnectionState::Handshake(h) => {
                 match h.handle_data(payload, net, incoming, &mut self.item) {
@@ -55,7 +85,7 @@ where
                     }) => {
                         let mut local_mp = MessageParser::new(self.db.clone());
                         let mut remote_mp = MessageParser::new(self.db.clone());
-                        self.db.store_connection(self.item.clone());
+                        self.db.update_connection(self.item.clone());
                         if let Some(chunk) = l_chunk {
                             local_mp.handle_chunk(chunk, &mut self.item);
                         }
@@ -106,5 +136,7 @@ where
         }
     }
 
-    pub fn join(self) {}
+    pub fn join(self) {
+        self.db.store_syscall(syscall::Item::Close(self.item.key()));
+    }
 }

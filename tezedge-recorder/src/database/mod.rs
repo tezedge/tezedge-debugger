@@ -12,6 +12,7 @@ use serde::Deserialize;
 use super::{tables::*, common};
 
 pub trait Database {
+    fn store_syscall(&self, item: syscall::Item);
     fn store_connection(&self, item: connection::Item);
     fn update_connection(&self, item: connection::Item);
     fn store_chunk(&self, item: chunk::Item);

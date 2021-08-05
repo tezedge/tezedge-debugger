@@ -28,7 +28,7 @@ use super::{
     // filters
     ConnectionsFilter, ChunksFilter, MessagesFilter, LogsFilter,
     // tables
-    common, connection, chunk, message, node_log,
+    common, syscall, connection, chunk, message, node_log,
     // secondary indexes
     message_ty, message_sender, message_initiator, message_addr, log_level, timestamp,
 };
@@ -56,7 +56,7 @@ impl From<TantivyError> for DbError {
 }
 
 pub struct Db {
-    //_cache: Cache,
+    syscall_counter: AtomicU64,
     message_store_limit: Option<u64>,
     message_counter: AtomicU64,
     log_store_limit: Option<u64>,
@@ -71,6 +71,10 @@ impl Db {
         S: KeyValueSchema + RocksDbKeyValueSchema,
     {
         &self.inner
+    }
+
+    fn reserve_syscall_counter(&self) -> u64 {
+        self.syscall_counter.fetch_add(1, Ordering::SeqCst)
     }
 
     fn reserve_message_counter(&self) -> u64 {
@@ -97,6 +101,7 @@ impl DatabaseNew for Db {
         let cache = Cache::new_lru_cache(1).map_err(|error| DBError::RocksDBError { error })?;
 
         let cfs = vec![
+            syscall::Schema::descriptor(&cache),
             connection::Schema::descriptor(&cache),
             chunk::Schema::descriptor(&cache),
             message::Schema::descriptor(&cache),
@@ -133,6 +138,7 @@ impl DatabaseNew for Db {
         };
 
         Ok(Db {
+            syscall_counter: AtomicU64::new(counter::<syscall::Schema>(&inner).unwrap_or(0)),
             message_store_limit,
             message_counter: AtomicU64::new(counter::<message::Schema>(&inner).unwrap_or(0)),
             log_store_limit,
@@ -205,6 +211,17 @@ impl Db {
 }
 
 impl Database for Db {
+    fn store_syscall(&self, item: syscall::Item) {
+        let index = self.reserve_syscall_counter();
+        let inner = || -> Result<(), DbError> {
+            self.as_kv::<syscall::Schema>().put(&index, &item)?;
+            Ok(())
+        };
+        if let Err(error) = inner() {
+            log::error!("database error: {}", error);
+        }
+    }
+
     fn store_connection(&self, item: connection::Item) {
         let (key, value) = item.split();
         if let Err(error) = self.as_kv::<connection::Schema>().put(&key, &value) {
@@ -846,6 +863,7 @@ impl DatabaseFetch for Db {
 
     fn compact(&self) {
         let cf_names = [
+            syscall::Schema::name(),
             connection::Schema::name(),
             chunk::Schema::name(),
             message::Schema::name(),

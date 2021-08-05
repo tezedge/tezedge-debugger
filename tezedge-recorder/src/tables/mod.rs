@@ -3,6 +3,7 @@
 
 use super::common;
 
+pub mod syscall;
 pub mod connection;
 pub mod chunk;
 pub mod message;
