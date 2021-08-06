@@ -334,17 +334,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "colored"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3616f750b84d8f0de8a58bda93e08e2a81ad3f523089b05f1dffecab48c6cbd"
-dependencies = [
- "atty",
- "lazy_static",
- "winapi",
-]
-
-[[package]]
 name = "combine"
 version = "4.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -473,7 +462,7 @@ checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 [[package]]
 name = "crypto"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
+source = "git+https://github.com/tezedge/tezedge?branch=p2p-simulator-fix-dep#0f0a21ea3807016d1a0e6f927099f18aa82212e9"
 dependencies = [
  "base58",
  "failure",
@@ -1615,15 +1604,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "os_type"
-version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96eaebe22d9f12429b1af6a0b5dd411ccfc5cb5968710abbb8c512046be9df90"
-dependencies = [
- "regex",
-]
-
-[[package]]
 name = "parking_lot"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1942,9 +1922,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.2.9"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ab49abadf3f9e1c4bc499e8845e152ad87d2ad2d30371841171169e9d75feee"
+checksum = "8383f39639269cde97d255a32bdb68c047337295414940c68bdd30c2e13203ff"
 dependencies = [
  "bitflags",
 ]
@@ -2195,19 +2175,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sha2"
-version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b362ae5752fd2137731f9fa25fd4d9058af34666ca1966fb969119cc35719f12"
-dependencies = [
- "block-buffer",
- "cfg-if",
- "cpufeatures",
- "digest",
- "opaque-debug",
-]
-
-[[package]]
 name = "sharded-slab"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2326,7 +2293,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "storage"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
+source = "git+https://github.com/tezedge/tezedge?branch=p2p-simulator-fix-dep#0f0a21ea3807016d1a0e6f927099f18aa82212e9"
 dependencies = [
  "bincode",
  "bytes",
@@ -2621,23 +2588,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "tezos-sys"
-version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
-dependencies = [
- "colored",
- "fs_extra",
- "hex",
- "os_type",
- "serde",
- "serde_json",
- "sha2",
-]
-
-[[package]]
 name = "tezos_api"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
+source = "git+https://github.com/tezedge/tezedge?branch=p2p-simulator-fix-dep#0f0a21ea3807016d1a0e6f927099f18aa82212e9"
 dependencies = [
  "chrono",
  "crypto",
@@ -2650,7 +2603,6 @@ dependencies = [
  "slog",
  "strum",
  "strum_macros",
- "tezos-sys",
  "tezos_encoding",
  "tezos_messages",
  "url",
@@ -2659,7 +2611,7 @@ dependencies = [
 [[package]]
 name = "tezos_encoding"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
+source = "git+https://github.com/tezedge/tezedge?branch=p2p-simulator-fix-dep#0f0a21ea3807016d1a0e6f927099f18aa82212e9"
 dependencies = [
  "bit-vec",
  "byteorder",
@@ -2678,7 +2630,7 @@ dependencies = [
 [[package]]
 name = "tezos_encoding_derive"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
+source = "git+https://github.com/tezedge/tezedge?branch=p2p-simulator-fix-dep#0f0a21ea3807016d1a0e6f927099f18aa82212e9"
 dependencies = [
  "lazy_static",
  "parse-display",
@@ -2690,7 +2642,7 @@ dependencies = [
 [[package]]
 name = "tezos_identity"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
+source = "git+https://github.com/tezedge/tezedge?branch=p2p-simulator-fix-dep#0f0a21ea3807016d1a0e6f927099f18aa82212e9"
 dependencies = [
  "crypto",
  "failure",
@@ -2703,7 +2655,7 @@ dependencies = [
 [[package]]
 name = "tezos_messages"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
+source = "git+https://github.com/tezedge/tezedge?branch=p2p-simulator-fix-dep#0f0a21ea3807016d1a0e6f927099f18aa82212e9"
 dependencies = [
  "bytes",
  "chrono",
