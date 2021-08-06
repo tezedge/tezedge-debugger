@@ -2,7 +2,7 @@ FROM tezedge/tezedge-bpf-builder:latest as builder
 
 RUN apt install -y g++ git libssl-dev pkg-config libev-dev
 
-RUN rustup update stable && rustup update nightly-2021-03-23
+RUN rustup update stable && rustup update nightly-2021-08-04
 RUN cargo +stable install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
 
 COPY . .
