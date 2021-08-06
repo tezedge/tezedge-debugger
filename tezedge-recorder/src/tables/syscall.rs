@@ -87,7 +87,10 @@ impl Encoder for Item {
         match &self.inner {
             | &ItemInner::Close
             | &ItemInner::Connect(Ok(()))
-            | &ItemInner::Accept(Ok(())) => (),
+            | &ItemInner::Accept(Ok(())) => {
+                v.extend_from_slice(&0u64.to_ne_bytes());
+                v.extend_from_slice(&0u32.to_ne_bytes());
+            },
             | &ItemInner::Write(Ok(ref data))
             | &ItemInner::Read(Ok(ref data)) => {
                 let &DataRef { offset, length } = data;
@@ -121,7 +124,7 @@ impl Decoder for Item {
 
         let data_ref = DataRef {
             offset: u64::from_be_bytes(TryFrom::try_from(&bytes[28..36]).unwrap()),
-            length: u32::from_be_bytes(TryFrom::try_from(&bytes[28..36]).unwrap()),
+            length: u32::from_be_bytes(TryFrom::try_from(&bytes[36..40]).unwrap()),
         };
         let inner = match discriminant {
             0b0111 => Ok(ItemInner::Close),

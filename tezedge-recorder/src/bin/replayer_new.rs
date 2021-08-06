@@ -9,7 +9,7 @@ use std::{
 use tezedge_recorder::database::{
     DatabaseNew,
     rocks::Db,
-    rocks_utils::{SyscallKind, SyscallMetadata},
+    rocks_utils::SyscallKind,
 };
 
 fn main() {
@@ -27,9 +27,9 @@ fn main() {
         .unwrap();
 
     for item in it {
-        let SyscallMetadata { inner, .. } = item.unwrap();
-        log::info!("{:?}", inner);
-        match inner {
+        let item = item.unwrap();
+        log::info!("{:?}", item);
+        match item.inner {
             SyscallKind::Read(Ok(data)) => {
                 stream.write_all(&data).unwrap();
             },
