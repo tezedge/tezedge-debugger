@@ -7,9 +7,9 @@ use serde::{
     Serialize,
     ser::{self, SerializeStruct},
 };
-use rocksdb::{Cache, ColumnFamilyDescriptor};
-use storage::persistent::{
-    KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema,
+use storage::{
+    rocksdb::{Cache, ColumnFamilyDescriptor},
+    persistent::{KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema},
 };
 use super::{common::Sender, connection};
 
@@ -276,7 +276,7 @@ impl KeyValueSchema for Schema {
 
 impl RocksDbKeyValueSchema for Schema {
     fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
-        use rocksdb::{Options, SliceTransform};
+        use storage::rocksdb::{Options, SliceTransform};
 
         let mut cf_opts = Options::default();
         cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(12));

@@ -5,10 +5,10 @@ use std::{
     convert::TryFrom,
     net::{SocketAddr, IpAddr},
 };
-use storage::persistent::{
-    KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema,
+use storage::{
+    rocksdb::{ColumnFamilyDescriptor, Cache},
+    persistent::{KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema},
 };
-use rocksdb::{ColumnFamilyDescriptor, Cache};
 
 /// WARNING: this index work only with 48 bit index, should be enough
 /// * bytes layout: `[addr(16)][port(2)][index(6)]`
@@ -64,7 +64,7 @@ impl KeyValueSchema for Schema {
 
 impl RocksDbKeyValueSchema for Schema {
     fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
-        use rocksdb::{Options, SliceTransform};
+        use storage::rocksdb::{Options, SliceTransform};
 
         let mut cf_opts = Options::default();
         cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(18));

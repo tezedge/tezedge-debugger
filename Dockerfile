@@ -7,7 +7,7 @@ RUN cargo +stable install bpf-linker --git https://github.com/tezedge/bpf-linker
 
 COPY . .
 RUN cargo +stable build -p bpf-recorder --release && \
-    cargo +nightly-2021-03-23 build -p tezedge-recorder --release
+    cargo +nightly-2021-08-04 build -p tezedge-recorder --release
 
 FROM tezedge/tezedge-libs:latest-profile
 

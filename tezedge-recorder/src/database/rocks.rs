@@ -7,8 +7,8 @@ use std::{
     path::{Path, PathBuf},
     sync::atomic::{Ordering, AtomicU64},
 };
-use rocksdb::{Cache, DB, ReadOptions};
 use storage::{
+    rocksdb::{self, Cache, DB, ReadOptions},
     Direction, IteratorMode,
     persistent::{
         self, DBError, DbConfiguration, Decoder, Encoder, KeyValueSchema,
@@ -893,7 +893,7 @@ impl DatabaseFetch for Db {
         for cf_name in &cf_names {
             if let Some(cf) = self.inner.cf_handle(cf_name) {
                 if let Ok(()) = self.inner.flush_cf(cf) {
-                    self.inner.compact_range_cf::<[u8; 0], [u8; 0]>(cf, None, None);
+                    self.inner.compact_range_cf(cf, None::<[u8; 0]>, None::<[u8; 0]>);
                 }
             }
         }
