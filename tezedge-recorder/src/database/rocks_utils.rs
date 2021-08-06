@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{time::Duration, net::SocketAddr, fmt, cell::Cell};
+use std::{collections::HashMap, fmt, net::SocketAddr, time::Duration};
 use storage::{
     Direction,
     IteratorMode,
@@ -48,11 +48,11 @@ impl fmt::Debug for SyscallKind {
 pub struct SyscallMetadataIterator<'a> {
     db: &'a Db,
     iter: IteratorWithSchema<'a, syscall::Schema>,
-    incoming_cache: Cell<Cache>,
-    outgoing_cache: Cell<Cache>,
+    incoming_cache: HashMap<connection::Key, Cache>,
+    outgoing_cache: HashMap<connection::Key, Cache>,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone)]
 struct Cache {
     chunk: u64,
     offset: u64,
@@ -63,21 +63,29 @@ impl<'a> SyscallMetadataIterator<'a> {
         SyscallMetadataIterator {
             db,
             iter,
-            incoming_cache: Cell::default(),
-            outgoing_cache: Cell::default(),
+            incoming_cache: Default::default(),
+            outgoing_cache: Default::default(),
         }
     }
 
-    fn cache(&self, incoming: bool) -> &Cell<Cache> {
+    fn cache(&self, cn_id: &connection::Key, incoming: bool) -> Cache {
         if incoming {
-            &self.incoming_cache
+            self.incoming_cache.get(cn_id).cloned().unwrap_or_default()
         } else {
-            &self.outgoing_cache
+            self.outgoing_cache.get(cn_id).cloned().unwrap_or_default()
+        }
+    }
+
+    fn update_cache(&mut self, cn_id: &connection::Key, incoming: bool, cache: Cache) {
+        if incoming {
+            let _ = self.incoming_cache.insert(cn_id.clone(), cache);
+        } else {
+            let _ = self.outgoing_cache.insert(cn_id.clone(), cache);
         }
     }
 
     fn fetch_data(
-        &self,
+        &mut self,
         cn_id: connection::Key,
         offset: u64,
         length: u32,
@@ -85,9 +93,9 @@ impl<'a> SyscallMetadataIterator<'a> {
     ) -> Result<Vec<u8>, DbError> {
         let mut v = Vec::with_capacity(length as usize);
 
-        let cache = self.cache(incoming).get();
+        let mut cache = self.cache(&cn_id, incoming);
         let start = chunk::Key {
-            cn_id,
+            cn_id: cn_id.clone(),
             counter: cache.chunk,
             sender: Sender::new(incoming),
         };
@@ -103,32 +111,36 @@ impl<'a> SyscallMetadataIterator<'a> {
                     None
                 }
             });
-        let mut skip_offset = cache.offset as usize;
-        while let Some((chunk, bytes)) = chunks.next() {
-            if skip_offset + bytes.len() > offset as usize {
-                let q = if skip_offset < offset as usize {
-                    (offset as usize) - skip_offset
+        while let Some((c, bytes)) = chunks.next() {
+            let len = bytes.len() as u64;
+            if cache.offset + len > offset {
+                let q = if cache.offset < offset {
+                    offset - cache.offset
                 } else {
                     0
                 };
+                let q = q as usize;
                 let to_copy = (length as usize - v.len()).min(bytes.len() - q);
                 v.extend_from_slice(&bytes[q..(q + to_copy)]);
             }
-            if skip_offset + bytes.len() >= (offset as usize) + (length as usize) {
-                self.cache(incoming).set(Cache {
+            if cache.offset + len >= offset + (length as u64) {
+                /*self.cache(incoming).set(Cache {
                     chunk,
                     offset: skip_offset as u64,
-                });
+                });*/
+                cache.chunk = c;
                 break;
             }
 
-            skip_offset += bytes.len();
+            cache.offset += len;
         }
+
+        self.update_cache(&cn_id, incoming, cache);
 
         Ok(v)
     }
 
-    fn convert(&self, info: syscall::Item) -> Result<SyscallMetadata, DbError> {
+    fn convert(&mut self, info: syscall::Item) -> Result<SyscallMetadata, DbError> {
         let cn_id = info.cn_id();
         let cn = self.db.as_kv::<connection::Schema>()
             .get(&cn_id)?.unwrap();

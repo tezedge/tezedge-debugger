@@ -248,7 +248,7 @@ impl Item {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Key {
     pub ts: u64,
     pub ts_nanos: u32,
