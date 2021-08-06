@@ -473,7 +473,22 @@ checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 [[package]]
 name = "crypto"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#770703701cef6a631ccfd8bcf1f7da5ec5b48386"
+dependencies = [
+ "base58",
+ "failure",
+ "failure_derive",
+ "hex",
+ "num-bigint",
+ "num-traits",
+ "rand 0.7.3",
+ "serde",
+ "sodiumoxide",
+]
+
+[[package]]
+name = "crypto"
+version = "1.7.0"
+source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
 dependencies = [
  "base58",
  "failure",
@@ -1787,9 +1802,9 @@ dependencies = [
 name = "pseudonode"
 version = "0.1.0"
 dependencies = [
- "crypto",
+ "crypto 1.7.0 (git+https://github.com/binier/tezedge?branch=p2p-simulator)",
  "tezos_identity",
- "tezos_messages",
+ "tezos_messages 1.7.0 (git+https://github.com/binier/tezedge?branch=p2p-simulator)",
 ]
 
 [[package]]
@@ -2326,12 +2341,11 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "storage"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#770703701cef6a631ccfd8bcf1f7da5ec5b48386"
 dependencies = [
  "bincode",
  "bytes",
  "clap",
- "crypto",
+ "crypto 1.7.0",
  "derive_builder",
  "failure",
  "getset",
@@ -2347,7 +2361,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tezos_api",
- "tezos_messages",
+ "tezos_messages 1.7.0",
  "zstd",
 ]
 
@@ -2594,7 +2608,7 @@ dependencies = [
  "anyhow",
  "bpf-recorder",
  "chrono",
- "crypto",
+ "crypto 1.7.0",
  "ctrlc",
  "either",
  "hex",
@@ -2611,7 +2625,7 @@ dependencies = [
  "syslog_loose",
  "tantivy",
  "tezedge-recorder",
- "tezos_messages",
+ "tezos_messages 1.7.0",
  "thiserror",
  "tokio",
  "toml",
@@ -2624,7 +2638,6 @@ dependencies = [
 [[package]]
 name = "tezos-sys"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#770703701cef6a631ccfd8bcf1f7da5ec5b48386"
 dependencies = [
  "colored",
  "fs_extra",
@@ -2638,10 +2651,9 @@ dependencies = [
 [[package]]
 name = "tezos_api"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#770703701cef6a631ccfd8bcf1f7da5ec5b48386"
 dependencies = [
  "chrono",
- "crypto",
+ "crypto 1.7.0",
  "derive_builder",
  "failure",
  "nom",
@@ -2652,20 +2664,19 @@ dependencies = [
  "strum",
  "strum_macros",
  "tezos-sys",
- "tezos_encoding",
- "tezos_messages",
+ "tezos_encoding 1.7.0",
+ "tezos_messages 1.7.0",
  "url",
 ]
 
 [[package]]
 name = "tezos_encoding"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#770703701cef6a631ccfd8bcf1f7da5ec5b48386"
 dependencies = [
  "bit-vec",
  "byteorder",
  "bytes",
- "crypto",
+ "crypto 1.7.0",
  "failure",
  "hex",
  "lazy_static",
@@ -2673,13 +2684,43 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "serde",
- "tezos_encoding_derive",
+ "tezos_encoding_derive 1.7.0",
+]
+
+[[package]]
+name = "tezos_encoding"
+version = "1.7.0"
+source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
+dependencies = [
+ "bit-vec",
+ "byteorder",
+ "bytes",
+ "crypto 1.7.0 (git+https://github.com/binier/tezedge?branch=p2p-simulator)",
+ "failure",
+ "hex",
+ "lazy_static",
+ "nom",
+ "num-bigint",
+ "num-traits",
+ "serde",
+ "tezos_encoding_derive 1.7.0 (git+https://github.com/binier/tezedge?branch=p2p-simulator)",
 ]
 
 [[package]]
 name = "tezos_encoding_derive"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#770703701cef6a631ccfd8bcf1f7da5ec5b48386"
+dependencies = [
+ "lazy_static",
+ "parse-display",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "tezos_encoding_derive"
+version = "1.7.0"
+source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
 dependencies = [
  "lazy_static",
  "parse-display",
@@ -2691,9 +2732,9 @@ dependencies = [
 [[package]]
 name = "tezos_identity"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#770703701cef6a631ccfd8bcf1f7da5ec5b48386"
+source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
 dependencies = [
- "crypto",
+ "crypto 1.7.0 (git+https://github.com/binier/tezedge?branch=p2p-simulator)",
  "failure",
  "failure_derive",
  "hex",
@@ -2704,11 +2745,10 @@ dependencies = [
 [[package]]
 name = "tezos_messages"
 version = "1.7.0"
-source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#770703701cef6a631ccfd8bcf1f7da5ec5b48386"
 dependencies = [
  "bytes",
  "chrono",
- "crypto",
+ "crypto 1.7.0",
  "derive_builder",
  "failure",
  "getset",
@@ -2723,8 +2763,34 @@ dependencies = [
  "serde",
  "strum",
  "strum_macros",
- "tezos_encoding",
- "tezos_encoding_derive",
+ "tezos_encoding 1.7.0",
+ "tezos_encoding_derive 1.7.0",
+]
+
+[[package]]
+name = "tezos_messages"
+version = "1.7.0"
+source = "git+https://github.com/binier/tezedge?branch=p2p-simulator#370044b18232cd73c3f640e3bc2e21f34f474c66"
+dependencies = [
+ "bytes",
+ "chrono",
+ "crypto 1.7.0 (git+https://github.com/binier/tezedge?branch=p2p-simulator)",
+ "derive_builder",
+ "failure",
+ "getset",
+ "hex",
+ "lazy_static",
+ "nom",
+ "num-bigint",
+ "num-traits",
+ "quickcheck",
+ "quickcheck_derive",
+ "rand 0.7.3",
+ "serde",
+ "strum",
+ "strum_macros",
+ "tezos_encoding 1.7.0 (git+https://github.com/binier/tezedge?branch=p2p-simulator)",
+ "tezos_encoding_derive 1.7.0 (git+https://github.com/binier/tezedge?branch=p2p-simulator)",
 ]
 
 [[package]]
