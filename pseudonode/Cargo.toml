@@ -5,10 +5,6 @@ authors = ["Vladislav Melnik <vladislav.melnik@simplestaking.com>"]
 edition = "2018"
 
 [dependencies]
-#crypto = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
-#tezos_messages = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
-#tezos_identity = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
-
-crypto = { git = "https://github.com/binier/tezedge", branch = "p2p-simulator" }
-tezos_messages = { git = "https://github.com/binier/tezedge", branch = "p2p-simulator" }
-tezos_identity = { git = "https://github.com/binier/tezedge", branch = "p2p-simulator" }
+crypto = { git = "https://github.com/binier/tezedge", branch = "p2p-simulator", version = "=1.7.0" }
+tezos_messages = { git = "https://github.com/binier/tezedge", branch = "p2p-simulator", version = "=1.7.0" }
+tezos_identity = { git = "https://github.com/binier/tezedge", branch = "p2p-simulator", version = "=1.7.0" }
