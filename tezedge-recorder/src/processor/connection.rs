@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use either::Either;
 use super::{
     chunk_parser::{Handshake, HandshakeOutput, HandshakeDone, ChunkHandler},
@@ -34,14 +34,26 @@ impl<Db> Connection<Db>
 where
     Db: Database,
 {
-    pub fn new(remote_addr: SocketAddr, incoming: bool, identity: Identity, db: Arc<Db>) -> Self {
-        let item = connection::Item::new(Initiator::new(incoming), remote_addr);
+    pub fn new(
+        timestamp: Duration,
+        remote_addr: SocketAddr,
+        incoming: bool,
+        identity: Identity,
+        db: Arc<Db>,
+    ) -> Self {
+        let item = connection::Item::new(Initiator::new(incoming), remote_addr, timestamp);
         db.store_connection(item.clone());
-        if incoming {
-            db.store_syscall(syscall::Item::Accept(Ok(item.key())));
-        } else {
-            db.store_syscall(syscall::Item::Connect(Ok(item.key())));
-        }
+        let syscall_item = syscall::Item {
+            cn_id: item.key(),
+            timestamp,
+            inner: if incoming {
+                syscall::ItemInner::Accept(Ok(()))
+            } else {
+                syscall::ItemInner::Connect(Ok(()))
+            }
+        };
+        db.store_syscall(syscall_item);
+
         let state = ConnectionState::Handshake(Handshake::new(&item.key(), identity));
         Connection {
             state: Some(state),
@@ -56,7 +68,7 @@ where
         self.item.key()
     }
 
-    pub fn handle_data(&mut self, payload: &[u8], net: bool, incoming: bool) {
+    pub fn handle_data(&mut self, timestamp: Duration, payload: &[u8], net: bool, incoming: bool) {
         let offset;
         if incoming {
             offset = self.incoming_offset;
@@ -66,14 +78,17 @@ where
             self.outgoing_offset += payload.len() as u64;
         }
         let data_ref = Ok(syscall::DataRef {
-            cn: self.cn_id(),
             offset,
             length: payload.len() as u32,
         });
-        let syscall_item = if incoming {
-            syscall::Item::Read(data_ref)
-        } else {
-            syscall::Item::Write(data_ref)
+        let syscall_item = syscall::Item {
+            cn_id: self.cn_id(),
+            timestamp,
+            inner: if incoming {
+                syscall::ItemInner::Read(data_ref)
+            } else {
+                syscall::ItemInner::Write(data_ref)
+            }
         };
         self.db.store_syscall(syscall_item);
 
@@ -140,7 +155,12 @@ where
         }
     }
 
-    pub fn join(self) {
-        self.db.store_syscall(syscall::Item::Close(self.item.key()));
+    pub fn join(self, timestamp: Duration) {
+        let _ = timestamp;
+        self.db.store_syscall(syscall::Item {
+            cn_id: self.cn_id(),
+            timestamp,
+            inner: syscall::ItemInner::Close,
+        });
     }
 }

@@ -1,7 +1,7 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{convert::TryFrom, net::SocketAddr, num::ParseIntError, str::FromStr, fmt};
+use std::{convert::TryFrom, fmt, net::SocketAddr, num::ParseIntError, str::FromStr, time::Duration};
 use thiserror::Error;
 use serde::{
     Serialize,
@@ -158,20 +158,10 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn new(initiator: Initiator, remote_addr: SocketAddr) -> Self {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-
-        let ts = (timestamp / 1_000_000_000) as u64;
-        let ts_nanos = (timestamp % 1_000_000_000) as u32;
-
+    pub fn new(initiator: Initiator, remote_addr: SocketAddr, timestamp: Duration) -> Self {
         Item {
-            ts,
-            ts_nanos,
+            ts: timestamp.as_secs(),
+            ts_nanos: timestamp.subsec_nanos(),
             initiator,
             remote_addr,
             peer_pk: [0; 32],

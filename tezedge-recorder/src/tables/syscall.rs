@@ -1,6 +1,7 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+use std::{time::Duration, convert::TryFrom};
 use storage::persistent::{
     KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema,
 };
@@ -11,59 +12,49 @@ use super::connection;
 /// Connect or Accept syscall yield a socket address of a new connection or error code
 /// Read or Write syscall give a data or error code
 #[derive(Debug, Clone)]
-pub enum Item {
-    Close(connection::Key),
-    Connect(Result<connection::Key, i32>),
-    Accept(Result<connection::Key, i32>),
+pub struct Item {
+    pub cn_id: connection::Key,
+    pub timestamp: Duration,
+    pub inner: ItemInner,
+}
+
+#[derive(Debug, Clone)]
+pub enum ItemInner {
+    Close,
+    Connect(Result<(), i32>),
+    Accept(Result<(), i32>),
     Write(Result<DataRef, i32>),
     Read(Result<DataRef, i32>),
 }
 
 #[derive(Debug, Clone)]
 pub struct DataRef {
-    pub cn: connection::Key,
     pub offset: u64,
-    // encoded as 3 bytes
     pub length: u32,
 }
 
 impl Item {
-    pub fn cn_id(&self) -> connection::Key {
-        // TODO: store cn id even if syscall failed
-        match self {
-            | &Item::Close(ref cn)
-            | &Item::Connect(Ok(ref cn))
-            | &Item::Accept(Ok(ref cn))=> cn.clone(),
-            | &Item::Connect(Err(_))
-            | &Item::Accept(Err(_)) => unimplemented!(),
-            | &Item::Write(Ok(DataRef { ref cn, .. }))
-            | &Item::Read(Ok(DataRef { ref cn, .. })) => cn.clone(),
-            | &Item::Write(Err(_))
-            | &Item::Read(Err(_)) => unimplemented!(),
-        }
-    }
-
     fn incoming(&self) -> bool {
-        match self {
-            &Item::Close(_) => false,
-            &Item::Connect(_) | &Item::Write(_) => false,
-            &Item::Accept(_) | &Item::Read(_) => true,
+        match &self.inner {
+            &ItemInner::Close => false,
+            &ItemInner::Connect(_) | &ItemInner::Write(_) => false,
+            &ItemInner::Accept(_) | &ItemInner::Read(_) => true,
         }
     }
 
     fn data(&self) -> bool {
-        match self {
-            &Item::Close(_) => false,
-            &Item::Connect(_) | &Item::Accept(_) => false,
-            &Item::Write(_) | &Item::Read(_) => true,
+        match &self.inner {
+            &ItemInner::Close => false,
+            &ItemInner::Connect(_) | &ItemInner::Accept(_) => false,
+            &ItemInner::Write(_) | &ItemInner::Read(_) => true,
         }
     }
 
     fn err(&self) -> bool {
-        match self {
-            &Item::Close(_) => false,
-            &Item::Connect(ref r) | &Item::Accept(ref r) => r.is_err(),
-            &Item::Write(ref r) | &Item::Read(ref r) => r.is_err(),
+        match &self.inner {
+            &ItemInner::Close => false,
+            &ItemInner::Connect(ref r) | &ItemInner::Accept(ref r) => r.is_err(),
+            &ItemInner::Write(ref r) | &ItemInner::Read(ref r) => r.is_err(),
         }
     }
 
@@ -77,43 +68,38 @@ impl Item {
     // 0b1101 -- `Accept` err
     // 0b1110 -- `Write` err
     // 0b1111 -- `Read` err
-    fn discriminant(&self) -> u8 {
-        match self {
-            &Item::Close(_) => 0b0111,
-            _ => 8 + u8::from(self.err()) * 4 + u8::from(self.data()) * 2 + u8::from(self.incoming())
+    fn discriminant(&self) -> u32 {
+        match &self.inner {
+            &ItemInner::Close => 0b0111,
+            _ => 8 + u32::from(self.err()) * 4 + u32::from(self.data()) * 2 + u32::from(self.incoming())
         }
     }
 }
 
 impl Encoder for Item {
     fn encode(&self) -> Result<Vec<u8>, SchemaError> {
-        let mut v = Vec::with_capacity(24);
-        match self {
-            | &Item::Close(ref cn)
-            | &Item::Connect(Ok(ref cn))
-            | &Item::Accept(Ok(ref cn)) => {
-                v.push(self.discriminant());
-                v.extend_from_slice(&[0, 0, 0]);
-                v.append(&mut cn.encode()?);
-                v.extend_from_slice(&0u64.to_ne_bytes());
+        let mut v = Vec::with_capacity(40);
+        v.extend_from_slice(&self.discriminant().to_be_bytes());
+        v.append(&mut self.cn_id.encode()?);
+        v.extend_from_slice(&self.timestamp.as_secs().to_be_bytes());
+        v.extend_from_slice(&self.timestamp.subsec_nanos().to_be_bytes());
+
+        match &self.inner {
+            | &ItemInner::Close
+            | &ItemInner::Connect(Ok(()))
+            | &ItemInner::Accept(Ok(())) => (),
+            | &ItemInner::Write(Ok(ref data))
+            | &ItemInner::Read(Ok(ref data)) => {
+                let &DataRef { offset, length } = data;
+                v.extend_from_slice(&offset.to_be_bytes());
+                v.extend_from_slice(&length.to_be_bytes());
             },
-            | &Item::Write(Ok(ref data))
-            | &Item::Read(Ok(ref data)) => {
-                let &DataRef { ref cn, ref offset, length } = data;
-                v.push(self.discriminant());
-                v.extend_from_slice(&length.to_be_bytes()[1..4]);
-                v.append(&mut cn.encode()?);
-                v.append(&mut offset.encode()?);
-            },
-            | &Item::Connect(Err(code))
-            | &Item::Accept(Err(code))
-            | &Item::Write(Err(code))
-            | &Item::Read(Err(code)) => {
-                v.push(self.discriminant());
-                v.extend_from_slice(&(-code).to_be_bytes()[1..4]);
+            | &ItemInner::Connect(Err(code))
+            | &ItemInner::Accept(Err(code))
+            | &ItemInner::Write(Err(code))
+            | &ItemInner::Read(Err(code)) => {
                 v.extend_from_slice(&0u64.to_ne_bytes());
-                v.extend_from_slice(&0u32.to_ne_bytes());
-                v.extend_from_slice(&0u64.to_ne_bytes());
+                v.extend_from_slice(&code.to_be_bytes());
             },
         }
 
@@ -123,29 +109,38 @@ impl Encoder for Item {
 
 impl Decoder for Item {
     fn decode(bytes: &[u8]) -> Result<Self, SchemaError> {
-        if bytes.len() != 24 {
+        if bytes.len() != 40 {
             return Err(SchemaError::DecodeError);
         }
 
-        let discriminant = bytes[0];
-        let code = u32::from_be_bytes([0, bytes[1], bytes[2], bytes[3]]);
+        let discriminant = u32::from_be_bytes(TryFrom::try_from(&bytes[0..4]).unwrap());
+        let cn_id = connection::Key::decode(&bytes[4..16])?;
+        let secs = u64::from_be_bytes(TryFrom::try_from(&bytes[16..24]).unwrap());
+        let nanos = u32::from_be_bytes(TryFrom::try_from(&bytes[24..28]).unwrap());
+        let timestamp = Duration::from_secs(secs) + Duration::from_nanos(nanos as u64);
+
         let data_ref = DataRef {
-            cn: connection::Key::decode(&bytes[4..16])?,
-            offset: u64::decode(&bytes[16..24])?,
-            length: code,
+            offset: u64::from_be_bytes(TryFrom::try_from(&bytes[28..36]).unwrap()),
+            length: u32::from_be_bytes(TryFrom::try_from(&bytes[28..36]).unwrap()),
         };
-        match discriminant {
-            0b0111 => Ok(Item::Close(data_ref.cn)),
-            0b1000 => Ok(Item::Connect(Ok(data_ref.cn))),
-            0b1001 => Ok(Item::Accept(Ok(data_ref.cn))),
-            0b1010 => Ok(Item::Write(Ok(data_ref))),
-            0b1011 => Ok(Item::Read(Ok(data_ref))),
-            0b1100 => Ok(Item::Connect(Err(-(code as i32)))),
-            0b1101 => Ok(Item::Accept(Err(-(code as i32)))),
-            0b1110 => Ok(Item::Write(Err(-(code as i32)))),
-            0b1111 => Ok(Item::Read(Err(-(code as i32)))),
+        let inner = match discriminant {
+            0b0111 => Ok(ItemInner::Close),
+            0b1000 => Ok(ItemInner::Connect(Ok(()))),
+            0b1001 => Ok(ItemInner::Accept(Ok(()))),
+            0b1010 => Ok(ItemInner::Write(Ok(data_ref))),
+            0b1011 => Ok(ItemInner::Read(Ok(data_ref))),
+            0b1100 => Ok(ItemInner::Connect(Err(data_ref.length as i32))),
+            0b1101 => Ok(ItemInner::Accept(Err(data_ref.length as i32))),
+            0b1110 => Ok(ItemInner::Write(Err(data_ref.length as i32))),
+            0b1111 => Ok(ItemInner::Read(Err(data_ref.length as i32))),
             _ => Err(SchemaError::DecodeError),
-        }
+        }?;
+
+        Ok(Item {
+            cn_id,
+            timestamp,
+            inner,
+        })
     }
 }
 

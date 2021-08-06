@@ -141,23 +141,22 @@ impl<'a> SyscallMetadataIterator<'a> {
     }
 
     fn convert(&mut self, info: syscall::Item) -> Result<SyscallMetadata, DbError> {
-        let cn_id = info.cn_id();
+        let cn_id = info.cn_id.clone();
         let cn = self.db.as_kv::<connection::Schema>()
             .get(&cn_id)?.unwrap();
-        let timestamp = Duration::from_secs(cn_id.ts) + Duration::from_nanos(cn_id.ts_nanos as u64);
 
-        let inner = match info {
-            syscall::Item::Close(_) => SyscallKind::Close,
-            syscall::Item::Connect(r) => SyscallKind::Connect(r.map(|_| ())),
-            syscall::Item::Accept(r) => SyscallKind::Accept(r.map(|_| ())),
-            syscall::Item::Write(r) => {
+        let inner = match info.inner {
+            syscall::ItemInner::Close => SyscallKind::Close,
+            syscall::ItemInner::Connect(r) => SyscallKind::Connect(r),
+            syscall::ItemInner::Accept(r) => SyscallKind::Accept(r),
+            syscall::ItemInner::Write(r) => {
                 let r = match r {
                     Ok(dr) => Ok(self.fetch_data(cn_id, dr.offset, dr.length, false)?),
                     Err(code) => Err(code),
                 };
                 SyscallKind::Write(r)
             },
-            syscall::Item::Read(r) => {
+            syscall::ItemInner::Read(r) => {
                 let r = match r {
                     Ok(dr) => Ok(self.fetch_data(cn_id, dr.offset, dr.length, true)?),
                     Err(code) => Err(code),
@@ -167,7 +166,7 @@ impl<'a> SyscallMetadataIterator<'a> {
         };
 
         Ok(SyscallMetadata {
-            timestamp,
+            timestamp: info.timestamp,
             socket_address: cn.remote_addr,
             inner,
         })

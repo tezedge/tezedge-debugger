@@ -8,6 +8,7 @@ use std::{
         Arc,
         atomic::{Ordering, AtomicBool},
     },
+    time::Duration,
 };
 use anyhow::Result;
 use bpf_recorder::{BpfModuleClient, SnifferEvent, Command, EventId, SocketId};
@@ -35,6 +36,7 @@ where
                     if let Err(error) = list.system.handle_bind(id.socket_id.pid, address.port()) {
                         log::error!("failed to handle bind syscall: {}", error);
                     }
+                    list.calibrate_duration(id.ts);
                 },
                 SnifferEvent::Listen { id } => {
                     let _ = id;
@@ -78,6 +80,8 @@ where
 
 struct ConnectionList<'a, Db> {
     client: BpfModuleClient,
+    // between 1970 and system boot
+    timestamp_difference: Option<Duration>,
     system: &'a mut System<Db>,
     connections: HashMap<SocketId, Connection<Db>>,
 }
@@ -89,8 +93,30 @@ where
     fn new(client: BpfModuleClient, system: &'a mut System<Db>) -> Self {
         ConnectionList {
             client,
+            timestamp_difference: None,
             system,
             connections: HashMap::new(),
+        }
+    }
+
+    fn calibrate_duration(&mut self, nanos_from_boot: u64) {
+        use std::time::SystemTime;
+
+        if self.timestamp_difference.is_none() {
+            let timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap();
+            self.timestamp_difference = Some(timestamp - Duration::from_nanos(nanos_from_boot));
+        }
+    }
+
+    // duration between 1970 and event
+    fn convert_time(&self, event_id: &EventId) -> Duration {
+        if let Some(ts) = self.timestamp_difference {
+            ts + Duration::from_nanos(event_id.ts)
+        } else {
+            log::error!("got event before calibrate time");
+            Duration::from_nanos(0)
         }
     }
 
@@ -105,14 +131,15 @@ where
     }
 
     fn handle_connection(&mut self, event_id: EventId, address: SocketAddr, incoming: bool) {
+        let timestamp = self.convert_time(&event_id);
         let socket_id = event_id.socket_id;
         let pid = socket_id.pid;
         let fd = socket_id.fd;
         if !self.system.should_ignore(&address) {
             if let Some((info, db)) = self.system.get_mut(pid) {
-                let connection = Connection::new(address, incoming, info.identity(), db);
+                let connection = Connection::new(timestamp, address, incoming, info.identity(), db);
                 if let Some(old) = self.connections.insert(socket_id, connection) {
-                    old.join();
+                    old.join(timestamp);
                 }
                 return;
             }
@@ -133,28 +160,32 @@ where
     }
 
     fn handle_data(&mut self, id: EventId, payload: Vec<u8>, net: bool, incoming: bool) {
+        let timestamp = self.convert_time(&id);
+
         if payload.len() > 0x1000000 {
             log::warn!("received from ring buffer big payload {}", payload.len());
         }
         if let Some(connection) = self.connections.get_mut(&id.socket_id) {
-            connection.handle_data(&payload, net, incoming);
+            connection.handle_data(timestamp, &payload, net, incoming);
         } else {
             log::debug!("failed to handle data, connection does not exist: {}", id);
         }
     }
 
     fn handle_get_fd(&mut self, id: EventId) {
+        let timestamp = self.convert_time(&id);
         let socket_id = id.socket_id;
         if let Some(c) = self.connections.remove(&socket_id) {
             c.warn_fd_changed();
-            c.join();
+            c.join(timestamp);
         }
     }
 
     fn handle_close(&mut self, id: EventId) {
+        let timestamp = self.convert_time(&id);
         let socket_id = id.socket_id;
         if let Some(old) = self.connections.remove(&socket_id) {
-            old.join();
+            old.join(timestamp);
         }
     }
 }
