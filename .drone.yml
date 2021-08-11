@@ -64,7 +64,7 @@ steps:
         path: /var/run/docker.sock
     commands:
       - apt-get install -y pkg-config clang libev-dev
-      - rustup install nightly-2021-03-23
+      - rustup install nightly-2021-08-04
       - rustup install stable
       # docker client
       - curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.0.tgz
@@ -73,23 +73,20 @@ steps:
       # build recorder
       - cargo +stable install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
       - cargo +stable install --path bpf-recorder
-      - cargo +nightly-2021-03-23 build -p tezedge-recorder --tests --release
+      - cargo +nightly-2021-08-04 build -p tezedge-recorder --tests --release
       # stop old node if any
       - docker stop tezedge_node || true
       # remove old debugger's db if any
       - rm -Rf /tmp/volume/tezedge_debugger || true
-      # prepare
-      - cp /usr/local/cargo/git/checkouts/tezedge-*/*/tezos/sys/lib_tezos/artifacts/libtezos.so /usr/lib/x86_64-linux-gnu/libtezos.so
-      - mkdir target/debugger_db
       # test
-      - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu ./tezedge-recorder/test.sh
+      - ./tezedge-recorder/test.sh
       # test with real node
-      - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu ./target/none/release/tezedge-recorder --run-bpf & sleep 2
+      - ./target/none/release/tezedge-recorder --run-bpf & sleep 2
       # run tezedge-node in docker
       - docker run --rm -d --name tezedge_node -v /tmp/volume/tezedge:/tmp/tezedge tezedge/tezedge:latest-frame-pointers-enabled --network mainnet --p2p-port 29734
       # test p2p
-      - DEBUGGER_URL="http://localhost:17732" cargo +nightly-2021-03-23 test -p tezedge-recorder --release -- wait --nocapture
-      - DEBUGGER_URL="http://localhost:17732" cargo +nightly-2021-03-23 test -p tezedge-recorder --release -- p2p_limit p2p_cursor p2p_types_filter --nocapture
+      - DEBUGGER_URL="http://localhost:17732" cargo +nightly-2021-08-04 test -p tezedge-recorder --release -- wait --nocapture
+      - DEBUGGER_URL="http://localhost:17732" cargo +nightly-2021-08-04 test -p tezedge-recorder --release -- p2p_limit p2p_cursor p2p_types_filter --nocapture
       # stop the node
       - docker stop tezedge_node
 

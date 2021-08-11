@@ -86,6 +86,7 @@ impl fmt::Display for Command {
 pub struct DataDescriptor {
     pub id: EventId,
     pub tag: DataTag,
+    pub error: i16,
     pub size: i32,
 }
 
@@ -93,7 +94,7 @@ pub struct DataDescriptor {
 pub struct EventId {
     pub socket_id: SocketId,
     //ts: Range<u64>,
-    ts: u64,
+    pub ts: u64,
 }
 
 impl EventId {
@@ -133,7 +134,7 @@ impl TryFrom<&[u8]> for DataDescriptor {
     }
 }
 
-#[repr(u32)]
+#[repr(u16)]
 #[derive(Debug)]
 pub enum DataTag {
     Write,

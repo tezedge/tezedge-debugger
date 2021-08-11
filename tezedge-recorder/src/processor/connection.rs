@@ -1,19 +1,22 @@
 // Copyright (c) SimpleStaking, Viable Systems and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{sync::Arc, time::Duration};
 use either::Either;
 use super::{
     chunk_parser::{Handshake, HandshakeOutput, HandshakeDone, ChunkHandler},
     message_parser::MessageParser,
     Identity, Database,
     common::{Local, Remote, Initiator},
-    tables::connection,
+    tables::{syscall, connection},
+    ConnectionInfo,
 };
 
 pub struct Connection<Db> {
     state: Option<ConnectionState<Db>>,
     item: connection::Item,
+    incoming_offset: u64,
+    outgoing_offset: u64,
     db: Arc<Db>,
 }
 
@@ -32,17 +35,112 @@ impl<Db> Connection<Db>
 where
     Db: Database,
 {
-    pub fn new(remote_addr: SocketAddr, incoming: bool, identity: Identity, db: Arc<Db>) -> Self {
-        let item = connection::Item::new(Initiator::new(incoming), remote_addr);
-        let state = ConnectionState::Handshake(Handshake::new(&item.key(), identity));
-        Connection {
-            state: Some(state),
-            item,
-            db,
+    pub fn new(
+        timestamp: Duration,
+        connection_info: ConnectionInfo,
+        identity: Identity,
+        db: Arc<Db>,
+    ) -> Option<Self> {
+        let (key, item, code, incoming) = match connection_info {
+            ConnectionInfo::AcceptOk(remote_addr) => {
+                let item = connection::Item::new(Initiator::new(true), remote_addr, timestamp);
+                (item.key(), Some(item), 0, true)
+            },
+            ConnectionInfo::ConnectOk(remote_addr) => {
+                let item = connection::Item::new(Initiator::new(false), remote_addr, timestamp);
+                (item.key(), Some(item), 0, false)
+            },
+            ConnectionInfo::AcceptErr(code) => {
+                let key = connection::Key::new(timestamp);
+                (key, None, code, true)
+            },
+            ConnectionInfo::ConnectErr(remote_addr, code) => {
+                let item = connection::Item::new(Initiator::new(false), remote_addr, timestamp);
+                (item.key(), Some(item), code, false)
+            }
+        };
+        let syscall_item = syscall::Item {
+            cn_id: key,
+            timestamp,
+            inner: match (incoming, code == 0) {
+                (true, true) => syscall::ItemInner::Accept(Ok(())),
+                (true, false) => syscall::ItemInner::Accept(Err(code)),
+                (false, true) => syscall::ItemInner::Connect(Ok(())),
+                (false, false) => syscall::ItemInner::Connect(Err(code)),
+            },
+        };
+        db.store_syscall(syscall_item);
+
+        if let Some(item) = item {
+            db.store_connection(item.clone());
+
+            // EINPROGRESS
+            //     The socket is nonblocking and the connection cannot be
+            //     completed immediately.  (UNIX domain sockets failed with
+            //     EAGAIN instead.)  It is possible to select(2) or poll(2)
+            //     for completion by selecting the socket for writing.  After
+            //     select(2) indicates writability, use getsockopt(2) to read
+            //     the SO_ERROR option at level SOL_SOCKET to determine
+            //     whether connect() completed successfully (SO_ERROR is
+            //     zero) or unsuccessfully (SO_ERROR is one of the usual
+            //     error codes listed here, explaining the reason for the
+            //     failure).
+            const EINPROGRESS: i32 = -115;
+
+            // if we have no errors, or it outgoing connection and we have `EINPROGRESS`
+            // let's treat the connection as established
+            if code == 0 || (!incoming && code == EINPROGRESS) {
+                let state = ConnectionState::Handshake(Handshake::new(&item.key(), identity));
+                Some(Connection {
+                    state: Some(state),
+                    item,
+                    incoming_offset: 0,
+                    outgoing_offset: 0,
+                    db,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 
-    pub fn handle_data(&mut self, payload: &[u8], net: bool, incoming: bool) {
+    pub fn cn_id(&self) -> connection::Key {
+        self.item.key()
+    }
+
+    pub fn handle_data(&mut self, timestamp: Duration, payload: &[u8], error: Option<i32>, net: bool, incoming: bool) {
+        let offset;
+        if incoming {
+            offset = self.incoming_offset;
+            self.incoming_offset += payload.len() as u64;
+        } else {
+            offset = self.outgoing_offset;
+            self.outgoing_offset += payload.len() as u64;
+        }
+        let data_ref = match error {
+            None => Ok(syscall::DataRef {
+                offset,
+                length: payload.len() as u32,
+            }),
+            Some(error_code) => Err(error_code),
+        };
+        let syscall_item = syscall::Item {
+            cn_id: self.cn_id(),
+            timestamp,
+            inner: if incoming {
+                syscall::ItemInner::Read(data_ref)
+            } else {
+                syscall::ItemInner::Write(data_ref)
+            }
+        };
+        self.db.store_syscall(syscall_item);
+
+        if payload.is_empty() {
+            return;
+        }
+
         let state = match self.state.take().unwrap() {
             ConnectionState::Handshake(h) => {
                 match h.handle_data(payload, net, incoming, &mut self.item) {
@@ -55,7 +153,7 @@ where
                     }) => {
                         let mut local_mp = MessageParser::new(self.db.clone());
                         let mut remote_mp = MessageParser::new(self.db.clone());
-                        self.db.store_connection(self.item.clone());
+                        self.db.update_connection(self.item.clone());
                         if let Some(chunk) = l_chunk {
                             local_mp.handle_chunk(chunk, &mut self.item);
                         }
@@ -106,5 +204,12 @@ where
         }
     }
 
-    pub fn join(self) {}
+    pub fn join(self, timestamp: Duration) {
+        let _ = timestamp;
+        self.db.store_syscall(syscall::Item {
+            cn_id: self.cn_id(),
+            timestamp,
+            inner: syscall::ItemInner::Close,
+        });
+    }
 }

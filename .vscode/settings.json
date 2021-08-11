@@ -74,6 +74,7 @@
         "smallvec",
         "strtab",
         "structopt",
+        "subsec",
         "symtab",
         "syscalls",
         "syslogs",

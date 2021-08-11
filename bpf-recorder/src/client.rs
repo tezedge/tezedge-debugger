@@ -19,10 +19,12 @@ pub enum SnifferEvent {
         data: Vec<u8>,
         net: bool,
         incoming: bool,
+        error: Option<i32>,
     },
     Connect {
         id: EventId,
         address: SocketAddr,
+        error: Option<i32>,
     },
     Bind {
         id: EventId,
@@ -34,7 +36,7 @@ pub enum SnifferEvent {
     Accept {
         id: EventId,
         listen_on_fd: u32,
-        address: SocketAddr,
+        address: Result<SocketAddr, i32>,
     },
     Close {
         id: EventId,
@@ -143,6 +145,11 @@ impl RingBufferData for SnifferEvent {
         let descriptor = DataDescriptor::try_from(value)
             .map_err(|()| SnifferError::SliceTooShort(value.len()))?;
         let data = &value[mem::size_of::<DataDescriptor>()..];
+        let error = if descriptor.error != 0 {
+            Some(descriptor.error as i32)
+        } else {
+            None
+        };
         match descriptor.tag {
             DataTag::Write => {
                 SnifferError::data(descriptor.id, descriptor.size, data.len(), false, false).map(
@@ -151,6 +158,7 @@ impl RingBufferData for SnifferEvent {
                         data: data[..size].to_vec(),
                         net: false,
                         incoming: false,
+                        error,
                     },
                 )
             },
@@ -161,6 +169,7 @@ impl RingBufferData for SnifferEvent {
                         data: data[..size].to_vec(),
                         net: false,
                         incoming: true,
+                        error,
                     },
                 )
             },
@@ -171,6 +180,7 @@ impl RingBufferData for SnifferEvent {
                         data: data[..size].to_vec(),
                         net: true,
                         incoming: false,
+                        error,
                     },
                 )
             },
@@ -181,6 +191,7 @@ impl RingBufferData for SnifferEvent {
                         data: data[..size].to_vec(),
                         net: true,
                         incoming: true,
+                        error,
                     },
                 )
             },
@@ -192,6 +203,7 @@ impl RingBufferData for SnifferEvent {
                         code,
                     }
                 })?,
+                error,
             }),
             DataTag::Bind => Ok(SnifferEvent::Bind {
                 id: descriptor.id.clone(),
@@ -206,12 +218,15 @@ impl RingBufferData for SnifferEvent {
             DataTag::Accept => Ok(SnifferEvent::Accept {
                 id: descriptor.id.clone(),
                 listen_on_fd: 0,
-                address: parse_socket_address(data).map_err(|code| {
-                    SnifferError::AcceptBadAddress {
-                        id: descriptor.id,
-                        code,
-                    }
-                })?,
+                address: match error {
+                    Some(error) => Err(error),
+                    None => Ok(parse_socket_address(data).map_err(|code| {
+                        SnifferError::AcceptBadAddress {
+                            id: descriptor.id,
+                            code,
+                        }
+                    })?),
+                },
             }),
             DataTag::Close => Ok(SnifferEvent::Close { id: descriptor.id }),
             DataTag::GetFd => Ok(SnifferEvent::GetFd { id: descriptor.id }),

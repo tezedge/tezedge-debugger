@@ -15,7 +15,7 @@ use super::{
     // filters
     ConnectionsFilter, ChunksFilter, MessagesFilter, LogsFilter,
     // tables
-    connection, chunk, message, node_log,
+    syscall, connection, chunk, message, node_log,
 };
 
 pub struct Db {
@@ -43,6 +43,10 @@ impl DatabaseNew for Db {
 }
 
 impl Database for Db {
+    fn store_syscall(&self, item: syscall::Item) {
+        let _ = item;
+    }
+
     fn store_connection(&self, item: connection::Item) {
         self.file
             .lock()

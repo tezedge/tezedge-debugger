@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 use std::convert::TryFrom;
-use storage::persistent::{
-    KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema,
+use storage::{
+    rocksdb::{ColumnFamilyDescriptor, Cache},
+    persistent::{KeyValueSchema, Encoder, Decoder, SchemaError, database::RocksDbKeyValueSchema},
 };
-use rocksdb::{ColumnFamilyDescriptor, Cache};
 use super::*;
 
 /// WARNING: this index work only with 56 bit index, should be enough
@@ -48,7 +48,7 @@ impl KeyValueSchema for Schema {
 
 impl RocksDbKeyValueSchema for Schema {
     fn descriptor(_cache: &Cache) -> ColumnFamilyDescriptor {
-        use rocksdb::{Options, SliceTransform};
+        use storage::rocksdb::{Options, SliceTransform};
 
         let mut cf_opts = Options::default();
         cf_opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(1));

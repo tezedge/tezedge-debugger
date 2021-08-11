@@ -53,5 +53,5 @@ SIZE=$(du -sb target/debugger_db/r/ | cut -f1)
 if [[ $SIZE -lt 104857600 ]]; then fail; else echo $SIZE; fi
 # size of limit_test database is smaller than 30MiB
 SIZE=$(du -sb target/debugger_db/limit_test/ | cut -f1)
-if [[ $SIZE -gt 31457280 ]]; then fail; else echo $SIZE; fi
+if [[ $SIZE -gt 52428800 ]]; then fail; else echo $SIZE; fi
 stop_recorder
