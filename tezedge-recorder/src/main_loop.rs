@@ -168,8 +168,8 @@ where
                         old.join(timestamp);
                     }
                 }
-                return;
             }
+            return;
         }
         match self
             .client

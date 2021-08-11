@@ -217,62 +217,47 @@ impl App {
         pid: u32,
     ) -> Result<(), i32> {
         if ret < 0 {
-            // TODO: need a better fix
-            // EINPROGRESS
-            //     The socket is nonblocking and the connection cannot be
-            //     completed immediately.  (UNIX domain sockets failed with
-            //     EAGAIN instead.)  It is possible to select(2) or poll(2)
-            //     for completion by selecting the socket for writing.  After
-            //     select(2) indicates writability, use getsockopt(2) to read
-            //     the SO_ERROR option at level SOL_SOCKET to determine
-            //     whether connect() completed successfully (SO_ERROR is
-            //     zero) or unsuccessfully (SO_ERROR is one of the usual
-            //     error codes listed here, explaining the reason for the
-            //     failure).
-            const EINPROGRESS: i64 = -115;
-            //if !(matches!(&data, &SyscallContextData::Connect { .. }) && ret == EINPROGRESS) {
-                match data {
-                    SyscallContextData::Accept { .. } => {
-                        let id = EventId::new(SocketId { pid, fd: 0 }, ts0, ts1);
-                        send::sized::<typenum::U0, typenum::B0>(
-                            id,
-                            DataTag::Accept,
-                            ret as i16,
-                            ptr::null(),
-                            0,
-                            &mut self.event_queue,
-                        );
-                    },
-                    SyscallContextData::Connect { fd, addr_ptr, addr_len } => {
-                        let socket_id = SocketId { pid, fd };
-                        let id = EventId::new(socket_id, ts0, ts1);
-                        send::sized::<typenum::U28, typenum::B0>(
-                            id,
-                            DataTag::Connect,
-                            ret as i16,
-                            addr_ptr as *const u8,
-                            addr_len as usize,
-                            &mut self.event_queue,
-                        );
-                    },
-                    | SyscallContextData::Write { fd, .. }
-                    | SyscallContextData::Send { fd, .. }
-                    | SyscallContextData::Read { fd, .. }
-                    | SyscallContextData::Recv { fd, .. } => {
-                        let id = EventId::new(SocketId { pid, fd }, ts0, ts1);
-                        send::dyn_sized::<typenum::B0>(
-                            id,
-                            data.tag(),
-                            ret as i16,
-                            ptr::null(),
-                            0,
-                            &mut self.event_queue,
-                        );
-                    },
-                    _ => (),
-                }
-                return Ok(());
-            //}
+            match data {
+                SyscallContextData::Accept { .. } => {
+                    let id = EventId::new(SocketId { pid, fd: 0 }, ts0, ts1);
+                    send::sized::<typenum::U0, typenum::B0>(
+                        id,
+                        DataTag::Accept,
+                        ret as i16,
+                        ptr::null(),
+                        0,
+                        &mut self.event_queue,
+                    );
+                },
+                SyscallContextData::Connect { fd, addr_ptr, addr_len } => {
+                    let socket_id = SocketId { pid, fd };
+                    let id = EventId::new(socket_id, ts0, ts1);
+                    send::sized::<typenum::U28, typenum::B0>(
+                        id,
+                        DataTag::Connect,
+                        ret as i16,
+                        addr_ptr as *const u8,
+                        addr_len as usize,
+                        &mut self.event_queue,
+                    );
+                },
+                | SyscallContextData::Write { fd, .. }
+                | SyscallContextData::Send { fd, .. }
+                | SyscallContextData::Read { fd, .. }
+                | SyscallContextData::Recv { fd, .. } => {
+                    let id = EventId::new(SocketId { pid, fd }, ts0, ts1);
+                    send::dyn_sized::<typenum::B0>(
+                        id,
+                        data.tag(),
+                        ret as i16,
+                        ptr::null(),
+                        0,
+                        &mut self.event_queue,
+                    );
+                },
+                _ => (),
+            }
+            return Ok(());
         }
 
         match data {
