@@ -231,6 +231,13 @@ impl App {
                 },
                 SyscallContextData::Connect { fd, addr_ptr, addr_len } => {
                     let socket_id = SocketId { pid, fd };
+                    const EINPROGRESS: i64 = -115;
+                    if ret == EINPROGRESS {
+                        if Address::read(addr_ptr, addr_len)?.is_none() {
+                            return self.forget_connection(socket_id);
+                        }
+                        self.reg_connection(socket_id, false)?;
+                    }
                     let id = EventId::new(socket_id, ts0, ts1);
                     send::sized::<typenum::U28, typenum::B0>(
                         id,

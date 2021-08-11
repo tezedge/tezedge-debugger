@@ -94,6 +94,7 @@ struct ConnectionList<'a, Db> {
     connections: HashMap<SocketId, Connection<Db>>,
 }
 
+#[derive(Debug)]
 pub enum ConnectionInfo {
     AcceptOk(SocketAddr),
     AcceptErr(i32),
@@ -161,6 +162,8 @@ where
         let socket_id = event_id.socket_id;
         let pid = socket_id.pid;
         let fd = socket_id.fd;
+        log::info!("socket_id: {:?}", socket_id);
+        log::info!("connection: {:?}", c_info);
         if c_info.address().map(|a| !self.system.should_ignore(a)).unwrap_or(true) {
             if let Some((info, db)) = self.system.get_mut(pid) {
                 if let Some(connection) = Connection::new(timestamp, c_info, info.identity(), db) {
