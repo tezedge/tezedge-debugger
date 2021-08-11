@@ -244,6 +244,15 @@ pub struct Key {
     pub ts_nanos: u32,
 }
 
+impl Key {
+    pub fn new(timestamp: Duration) -> Self {
+        Key {
+            ts: timestamp.as_secs(),
+            ts_nanos: timestamp.subsec_nanos(),
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum KeyFromStrError {
     #[error("wrong formatted connection key")]

@@ -17,7 +17,7 @@ use super::{common::Sender, syscall, connection, chunk, rocks::{Db, DbError}};
 pub struct SyscallMetadata {
     // unix time
     pub timestamp: Duration,
-    pub socket_address: SocketAddr,
+    pub socket_address: Option<SocketAddr>,
     pub inner: SyscallKind,
 }
 
@@ -142,8 +142,9 @@ impl<'a> SyscallMetadataIterator<'a> {
 
     fn convert(&mut self, info: syscall::Item) -> Result<SyscallMetadata, DbError> {
         let cn_id = info.cn_id.clone();
-        let cn = self.db.as_kv::<connection::Schema>()
-            .get(&cn_id)?.unwrap();
+        let socket_address = self.db.as_kv::<connection::Schema>()
+            .get(&cn_id)?
+            .map(|v| v.remote_addr);
 
         let inner = match info.inner {
             syscall::ItemInner::Close => SyscallKind::Close,
@@ -167,7 +168,7 @@ impl<'a> SyscallMetadataIterator<'a> {
 
         Ok(SyscallMetadata {
             timestamp: info.timestamp,
-            socket_address: cn.remote_addr,
+            socket_address,
             inner,
         })
     }
