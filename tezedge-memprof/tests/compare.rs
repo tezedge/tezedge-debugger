@@ -74,7 +74,7 @@ async fn compare_3() {
 
     loop {
         let t = get_usage_kib().await.unwrap() as i32;
-        if t > 32 * 1024 {
+        if t > 64 * 1024 {
             break t;
         } else {
             println!("wait {:?}...", duration);

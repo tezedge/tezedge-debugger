@@ -205,7 +205,7 @@ impl LogIndexer {
                     .iter()
                     .find(|x| x.field() == id_field)?;
                 match f.value() {
-                    &schema::Value::U64(ref id) => Some((score, *id)),
+                    &schema::Value::U64(ref id) if score > 0.0 => Some((score, *id)),
                     _ => None,
                 }
             });
