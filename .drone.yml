@@ -13,26 +13,28 @@ steps:
         path: /proc
       - name: docker_sock
         path: /var/run/docker.sock
+      - name: tmp_dir
+        path: /tmp
     commands:
       - apt-get install -y pkg-config
       - rustup install nightly-2021-03-23
       # docker client
-      - curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.0.tgz
-      - tar xzf docker-20.10.0.tgz --strip 1 -C /usr/local/bin docker/docker
-      - rm docker-20.10.0.tgz
+      # - curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.0.tgz
+      # - tar xzf docker-20.10.0.tgz --strip 1 -C /usr/local/bin docker/docker
+      # - rm docker-20.10.0.tgz
       # build memprof
       - cargo +nightly-2021-03-23 install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
       - cargo +nightly-2021-03-23 test --package tezedge-memprof --lib --release -- history::history history::tests
       - cargo +nightly-2021-03-23 build -p bpf-memprof --release
       - cargo +nightly-2021-03-23 build -p tezedge-memprof --tests --release
       # run tezedge-node in docker
-      - docker stop tezedge_node || true
-      - TEZEDGE_NODE_NAME=tezedge_node ./target/none/release/bpf-memprof-user &
-      - docker run --rm -d --name tezedge_node tezedge/tezedge:latest-frame-pointers-enabled --network granadanet
+      # - docker stop tezedge_node || true
+      # - TEZEDGE_NODE_NAME=tezedge_node ./target/none/release/bpf-memprof-user &
+      # - docker run --rm -d --name tezedge_node tezedge/tezedge:latest-frame-pointers-enabled --network hangzhounet
       # do tests
-      - URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof --release -- positive compare --nocapture
+      # - URL=http://localhost:17832 cargo +nightly-2021-03-23 test -p tezedge-memprof --release -- positive compare --nocapture
       # stop the node
-      - docker stop tezedge_node
+      # - docker stop tezedge_node
 
 volumes:
   - name: kernel-debug
@@ -44,6 +46,9 @@ volumes:
   - name: docker_sock
     host:
       path: /var/run/docker.sock
+  - name: tmp_dir
+    host:
+      path: /tmp
 
 ---
 
@@ -67,9 +72,9 @@ steps:
       - rustup install nightly-2021-03-23
       - rustup install stable
       # docker client
-      - curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.0.tgz
-      - tar xzf docker-20.10.0.tgz --strip 1 -C /usr/local/bin docker/docker
-      - rm docker-20.10.0.tgz
+      # - curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-20.10.0.tgz
+      # - tar xzf docker-20.10.0.tgz --strip 1 -C /usr/local/bin docker/docker
+      # - rm docker-20.10.0.tgz
       # build recorder
       - cargo +stable install bpf-linker --git https://github.com/tezedge/bpf-linker.git --branch main
       - cargo +stable install --path bpf-recorder
@@ -83,15 +88,15 @@ steps:
       - mkdir target/debugger_db
       # test
       - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu ./tezedge-recorder/test.sh
-      # test with real node
-      - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu ./target/none/release/tezedge-recorder --run-bpf & sleep 2
+      # test with real node, turn off, let's rely on ./tezedge-recorder/test.sh
+      # - LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu ./target/none/release/tezedge-recorder --run-bpf & sleep 2
       # run tezedge-node in docker
-      - docker run --rm -d --name tezedge_node -v /tmp/volume/tezedge:/tmp/tezedge tezedge/tezedge:latest-frame-pointers-enabled --network mainnet --p2p-port 29734
+      # - docker run --rm -d --name tezedge_node -v /tmp/volume/tezedge:/tmp/tezedge tezedge/tezedge:latest-frame-pointers-enabled --network mainnet --p2p-port 29734
       # test p2p
-      - DEBUGGER_URL="http://localhost:17732" cargo +nightly-2021-03-23 test -p tezedge-recorder --release -- wait --nocapture
-      - DEBUGGER_URL="http://localhost:17732" cargo +nightly-2021-03-23 test -p tezedge-recorder --release -- p2p_limit p2p_cursor p2p_types_filter --nocapture
+      # - DEBUGGER_URL="http://localhost:17732" cargo +nightly-2021-03-23 test -p tezedge-recorder --release -- wait --nocapture
+      # - DEBUGGER_URL="http://localhost:17732" cargo +nightly-2021-03-23 test -p tezedge-recorder --release -- p2p_limit p2p_cursor p2p_types_filter --nocapture
       # stop the node
-      - docker stop tezedge_node
+      # - docker stop tezedge_node
 
 volumes:
   - name: tezedge-shared-data
