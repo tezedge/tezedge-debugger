@@ -41,3 +41,9 @@ name = "limit_test"
 http_v3 = 17746
 db = "./target/debugger_db/limit_test"
 p2p = { identity = "../tezedge/light_node/etc/tezedge/identity.json", port = 29736, store_limit = 10_000 }
+
+[[nodes]]
+name = "python_tests"
+http_v3 = 17750
+db = "./target/python_tests"
+p2p = { identity = "/tmp/tezos-test-0/identity.json", port = 19730 }

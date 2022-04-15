@@ -7,6 +7,7 @@ use storage::persistent::{
 };
 
 /// * bytes layout: `[timestamp(8)][index(8)]`
+#[derive(Clone)]
 pub struct Item {
     pub timestamp: u64,
     pub index: u64,

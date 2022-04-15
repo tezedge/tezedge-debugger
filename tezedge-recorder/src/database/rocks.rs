@@ -421,7 +421,7 @@ impl DatabaseFetch for Db {
             && filter.timestamp.is_none()
         {
             let mode = if let Some(cursor) = &filter.cursor {
-                IteratorMode::From(cursor, direction())
+                IteratorMode::From(std::borrow::Cow::Borrowed(cursor), direction())
             } else {
                 if forward {
                     IteratorMode::Start
@@ -586,7 +586,7 @@ impl DatabaseFetch for Db {
                 };
                 let mode = if let Some(end) = filter.to {
                     timestamp.timestamp = end;
-                    IteratorMode::From(&timestamp, direction())
+                    IteratorMode::From(std::borrow::Cow::Owned(timestamp), direction())
                 } else {
                     if forward {
                         IteratorMode::Start
@@ -615,7 +615,7 @@ impl DatabaseFetch for Db {
 
                 let it = self
                     .as_kv::<timestamp::MessageSchema>()
-                    .iterator(IteratorMode::From(&middle, direction()))?
+                    .iterator(IteratorMode::From(std::borrow::Cow::Borrowed(&middle), direction()))?
                     .filter_map(|(k, _)| k.ok())
                     .map(|k| k.index);
                 iters.push(Box::new(it));
@@ -723,7 +723,7 @@ impl DatabaseFetch for Db {
             && filter.timestamp.is_none()
         {
             let mode = if let Some(cursor) = &filter.cursor {
-                IteratorMode::From(cursor, direction())
+                IteratorMode::From(std::borrow::Cow::Borrowed(cursor), direction())
             } else {
                 if forward {
                     IteratorMode::Start
@@ -791,7 +791,7 @@ impl DatabaseFetch for Db {
                 };
                 let mode = if let Some(end) = filter.to {
                     timestamp.timestamp = end;
-                    IteratorMode::From(&timestamp, direction())
+                    IteratorMode::From(std::borrow::Cow::Owned(timestamp), direction())
                 } else {
                     if forward {
                         IteratorMode::Start
@@ -820,7 +820,7 @@ impl DatabaseFetch for Db {
 
                 let it = self
                     .as_kv::<timestamp::LogSchema>()
-                    .iterator(IteratorMode::From(&middle, direction()))?
+                    .iterator(IteratorMode::From(std::borrow::Cow::Owned(middle), direction()))?
                     .filter_map(|(k, _)| k.ok())
                     .map(|k| k.index);
                 iters.push(Box::new(it));
@@ -862,7 +862,7 @@ impl DatabaseFetch for Db {
         for cf_name in &cf_names {
             if let Some(cf) = self.inner.cf_handle(cf_name) {
                 if let Ok(()) = self.inner.flush_cf(cf) {
-                    self.inner.compact_range_cf::<[u8; 0], [u8; 0]>(cf, None, None);
+                    self.inner.compact_range_cf(cf, None::<[u8; 0]>, None::<[u8; 0]>);
                 }
             }
         }

@@ -12,6 +12,7 @@ use rocksdb::{ColumnFamilyDescriptor, Cache};
 
 /// WARNING: this index work only with 48 bit index, should be enough
 /// * bytes layout: `[addr(16)][port(2)][index(6)]`
+#[derive(Clone)]
 pub struct Item {
     pub addr: SocketAddr,
     pub index: u64,

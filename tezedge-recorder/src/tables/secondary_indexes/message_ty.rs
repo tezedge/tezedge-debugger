@@ -10,6 +10,7 @@ use super::*;
 
 /// WARNING: this index work only with 56 bit index, should be enough
 /// * bytes layout: `[type(1)][index(7)]`
+#[derive(Clone)]
 pub struct Item {
     pub ty: MessageType,
     pub index: u64,

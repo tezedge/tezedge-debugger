@@ -5,8 +5,8 @@ authors = ["Vladislav Melnik <vladislav.melnik@simplestaking.com>"]
 edition = "2018"
 
 [dependencies]
-libc = "0.2"
-futures = "0.3"
-tokio = { version = "1.8", features = ["net"] }
-smallvec = "1.6"
-log = "0.4"
+libc = "0.2.112"
+futures = "0.3.19"
+tokio = { version = "1.15", features = ["net"] }
+smallvec = "1.7"
+log = "0.4.14"

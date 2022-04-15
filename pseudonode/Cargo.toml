@@ -5,6 +5,6 @@ authors = ["Vladislav Melnik <vladislav.melnik@simplestaking.com>"]
 edition = "2018"
 
 [dependencies]
-crypto = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
-tezos_messages = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
-tezos_identity = { tag = "v1.6.5", git = "https://github.com/tezedge/tezedge" }
+crypto = { branch = "develop", git = "https://github.com/tezedge/tezedge" }
+tezos_messages = { branch = "develop", git = "https://github.com/tezedge/tezedge" }
+tezos_identity = { branch = "develop", git = "https://github.com/tezedge/tezedge" }
