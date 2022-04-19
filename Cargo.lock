@@ -269,8 +269,7 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
- "serde",
- "time",
+ "time 0.1.44",
  "winapi",
 ]
 
@@ -449,11 +448,12 @@ checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
 name = "crypto"
-version = "1.15.0"
-source = "git+https://github.com/tezedge/tezedge?branch=develop#d90ca093c929996fe10be201cb1393e0c759ed54"
+version = "2.1.0"
+source = "git+https://github.com/tezedge/tezedge?tag=v2.1.0#01170238abb1bad051e98ead8167f10230ddb590"
 dependencies = [
  "anyhow",
  "base58",
+ "byteorder",
  "hex",
  "libsecp256k1",
  "num-bigint",
@@ -462,6 +462,8 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "sodiumoxide",
+ "strum",
+ "strum_macros",
  "thiserror",
 ]
 
@@ -674,11 +676,10 @@ dependencies = [
 
 [[package]]
 name = "edgekv"
-version = "1.15.0"
-source = "git+https://github.com/tezedge/tezedge?branch=develop#d90ca093c929996fe10be201cb1393e0c759ed54"
+version = "2.1.0"
+source = "git+https://github.com/tezedge/tezedge?tag=v2.1.0#01170238abb1bad051e98ead8167f10230ddb590"
 dependencies = [
  "bincode",
- "chrono",
  "crc",
  "crc32fast",
  "fs2",
@@ -686,6 +687,7 @@ dependencies = [
  "lru-cache",
  "serde",
  "thiserror",
+ "time 0.3.9",
 ]
 
 [[package]]
@@ -1237,15 +1239,6 @@ checksum = "68f2d64f2edebec4ce84ad108148e67e1064789bee435edc5b60ad398714a3a9"
 
 [[package]]
 name = "itertools"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9a9d19fa1e79b6215ff29b9d6880b706147f16e9b1dbb1e4e5947b5b02bc5e3"
@@ -1706,6 +1699,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19e64526ebdee182341572e50e9ad03965aa510cd94427a4549448f285e957a1"
 dependencies = [
  "hermit-abi",
+ "libc",
+]
+
+[[package]]
+name = "num_threads"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aba1801fb138d8e85e11d0fc70baf4fe1cdfffda7c6cd34a854905df588e5ed0"
+dependencies = [
  "libc",
 ]
 
@@ -2434,15 +2436,15 @@ dependencies = [
 
 [[package]]
 name = "slog-term"
-version = "2.8.0"
+version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95c1e7e5aab61ced6006149ea772770b84a0d16ce0f7885def313e4829946d76"
+checksum = "87d29185c55b7b258b4f120eab00f48557d4d9bc814f41713f449d35b0f8977c"
 dependencies = [
  "atty",
- "chrono",
  "slog",
  "term",
  "thread_local",
+ "time 0.3.9",
 ]
 
 [[package]]
@@ -2495,8 +2497,8 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "storage"
-version = "1.15.0"
-source = "git+https://github.com/tezedge/tezedge?branch=develop#d90ca093c929996fe10be201cb1393e0c759ed54"
+version = "2.1.0"
+source = "git+https://github.com/tezedge/tezedge?tag=v2.1.0#01170238abb1bad051e98ead8167f10230ddb590"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2507,7 +2509,7 @@ dependencies = [
  "edgekv",
  "getset",
  "hex",
- "itertools 0.10.3",
+ "itertools",
  "num_cpus",
  "rocksdb",
  "serde",
@@ -2655,7 +2657,7 @@ dependencies = [
  "fs2",
  "futures",
  "htmlescape",
- "itertools 0.10.3",
+ "itertools",
  "levenshtein_automata",
  "log",
  "lru",
@@ -2791,7 +2793,7 @@ dependencies = [
  "ctrlc",
  "either",
  "hex",
- "itertools 0.10.3",
+ "itertools",
  "jemallocator",
  "log",
  "pseudonode",
@@ -2817,11 +2819,10 @@ dependencies = [
 
 [[package]]
 name = "tezos_api"
-version = "1.15.0"
-source = "git+https://github.com/tezedge/tezedge?branch=develop#d90ca093c929996fe10be201cb1393e0c759ed54"
+version = "2.1.0"
+source = "git+https://github.com/tezedge/tezedge?tag=v2.1.0#01170238abb1bad051e98ead8167f10230ddb590"
 dependencies = [
  "anyhow",
- "chrono",
  "crypto",
  "derive_builder",
  "nom 6.1.2",
@@ -2834,15 +2835,15 @@ dependencies = [
  "tezos_encoding",
  "tezos_messages",
  "thiserror",
+ "time 0.3.9",
  "url",
 ]
 
 [[package]]
 name = "tezos_context_api"
-version = "1.15.0"
-source = "git+https://github.com/tezedge/tezedge?branch=develop#d90ca093c929996fe10be201cb1393e0c759ed54"
+version = "2.1.0"
+source = "git+https://github.com/tezedge/tezedge?tag=v2.1.0#01170238abb1bad051e98ead8167f10230ddb590"
 dependencies = [
- "chrono",
  "crypto",
  "derive_builder",
  "nom 6.1.2",
@@ -2851,12 +2852,13 @@ dependencies = [
  "strum_macros",
  "tezos_encoding",
  "tezos_messages",
+ "time 0.3.9",
 ]
 
 [[package]]
 name = "tezos_encoding"
-version = "1.15.0"
-source = "git+https://github.com/tezedge/tezedge?branch=develop#d90ca093c929996fe10be201cb1393e0c759ed54"
+version = "2.1.0"
+source = "git+https://github.com/tezedge/tezedge?tag=v2.1.0#01170238abb1bad051e98ead8167f10230ddb590"
 dependencies = [
  "bit-vec",
  "crypto",
@@ -2872,8 +2874,8 @@ dependencies = [
 
 [[package]]
 name = "tezos_encoding_derive"
-version = "1.15.0"
-source = "git+https://github.com/tezedge/tezedge?branch=develop#d90ca093c929996fe10be201cb1393e0c759ed54"
+version = "2.1.0"
+source = "git+https://github.com/tezedge/tezedge?tag=v2.1.0#01170238abb1bad051e98ead8167f10230ddb590"
 dependencies = [
  "lazy_static",
  "once_cell",
@@ -2885,8 +2887,8 @@ dependencies = [
 
 [[package]]
 name = "tezos_identity"
-version = "1.15.0"
-source = "git+https://github.com/tezedge/tezedge?branch=develop#d90ca093c929996fe10be201cb1393e0c759ed54"
+version = "2.1.0"
+source = "git+https://github.com/tezedge/tezedge?tag=v2.1.0#01170238abb1bad051e98ead8167f10230ddb590"
 dependencies = [
  "anyhow",
  "crypto",
@@ -2898,12 +2900,11 @@ dependencies = [
 
 [[package]]
 name = "tezos_messages"
-version = "1.15.0"
-source = "git+https://github.com/tezedge/tezedge?branch=develop#d90ca093c929996fe10be201cb1393e0c759ed54"
+version = "2.1.0"
+source = "git+https://github.com/tezedge/tezedge?tag=v2.1.0#01170238abb1bad051e98ead8167f10230ddb590"
 dependencies = [
  "anyhow",
  "bytes",
- "chrono",
  "crypto",
  "derive_builder",
  "getset",
@@ -2916,11 +2917,14 @@ dependencies = [
  "quickcheck_derive",
  "rand 0.7.3",
  "serde",
+ "slog",
  "strum",
  "strum_macros",
  "tezos_encoding",
  "tezos_encoding_derive",
+ "tezos_identity",
  "thiserror",
+ "time 0.3.9",
 ]
 
 [[package]]
@@ -2962,6 +2966,25 @@ dependencies = [
  "wasi 0.10.0+wasi-snapshot-preview1",
  "winapi",
 ]
+
+[[package]]
+name = "time"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2702e08a7a860f005826c6815dcac101b19b5eb330c27fe4a5928fec1d20ddd"
+dependencies = [
+ "itoa 1.0.1",
+ "libc",
+ "num_threads",
+ "serde",
+ "time-macros",
+]
+
+[[package]]
+name = "time-macros"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42657b1a6f4d817cda8e7a0ace261fe0cc946cf3a80314390b22cc61ae080792"
 
 [[package]]
 name = "tinyvec"
@@ -3498,18 +3521,18 @@ checksum = "d68d9dcec5f9b43a30d38c49f91dfedfaac384cb8f085faca366c26207dd1619"
 
 [[package]]
 name = "zstd"
-version = "0.5.4+zstd.1.4.7"
+version = "0.10.0+zstd.1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69996ebdb1ba8b1517f61387a883857818a66c8a295f487b1ffd8fd9d2c82910"
+checksum = "3b1365becbe415f3f0fcd024e2f7b45bacfb5bdd055f0dc113571394114e7bdd"
 dependencies = [
  "zstd-safe",
 ]
 
 [[package]]
 name = "zstd-safe"
-version = "2.0.6+zstd.1.4.7"
+version = "4.1.4+zstd.1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98aa931fb69ecee256d44589d19754e61851ae4769bf963b385119b1cc37a49e"
+checksum = "2f7cd17c9af1a4d6c24beb1cc54b17e2ef7b593dc92f19e9d9acad8b182bbaee"
 dependencies = [
  "libc",
  "zstd-sys",
@@ -3517,12 +3540,10 @@ dependencies = [
 
 [[package]]
 name = "zstd-sys"
-version = "1.4.18+zstd.1.4.7"
+version = "1.6.3+zstd.1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1e6e8778706838f43f771d80d37787cb2fe06dafe89dd3aebaf6721b9eaec81"
+checksum = "fc49afa5c8d634e75761feda8c592051e7eeb4683ba827211eb0d731d3402ea8"
 dependencies = [
  "cc",
- "glob",
- "itertools 0.9.0",
  "libc",
 ]

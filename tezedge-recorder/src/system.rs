@@ -115,7 +115,7 @@ impl NodeServer {
             None
         };
         let log_client = if let Some(log_config) = log_config {
-            Some(log_client::spawn(log_config.port, db.clone(), running)?)
+            log_client::spawn(log_config.port, db.clone(), running).ok()
         } else {
             None
         };

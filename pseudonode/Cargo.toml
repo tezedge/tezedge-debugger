@@ -1,10 +1,10 @@
 [package]
 name = "pseudonode"
 version = "0.1.0"
-authors = ["Vladislav Melnik <vladislav.melnik@simplestaking.com>"]
+authors = ["Vladislav Melnik <vladislav.melnik@viablesystems.io>"]
 edition = "2018"
 
 [dependencies]
-crypto = { branch = "develop", git = "https://github.com/tezedge/tezedge" }
-tezos_messages = { branch = "develop", git = "https://github.com/tezedge/tezedge" }
-tezos_identity = { branch = "develop", git = "https://github.com/tezedge/tezedge" }
+crypto = { tag = "v2.1.0", git = "https://github.com/tezedge/tezedge" }
+tezos_messages = { tag = "v2.1.0", git = "https://github.com/tezedge/tezedge" }
+tezos_identity = { tag = "v2.1.0", git = "https://github.com/tezedge/tezedge" }

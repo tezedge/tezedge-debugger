@@ -14,7 +14,7 @@ fn build_bpf() {
     let target_dir = format!("{}/bpf", target_dir);
 
     let args = &[
-        "+nightly-2020-12-31",
+        "+nightly-2022-04-15",
         "rustc",
         "--package=bpf-memprof",
         "--bin=bpf-memprof-kern",

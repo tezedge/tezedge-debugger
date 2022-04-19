@@ -80,11 +80,9 @@ fn generate_p2p(this: u16, peer: u16, msg_number: u64, initiator: bool) {
                 .as_object_mut().unwrap()
                 .get_mut("operation").unwrap()
                 .as_object_mut().unwrap()
-                .get_mut("data").unwrap()
-                .as_array_mut().unwrap();
-            for v in data {
-                *v = serde_json::Value::Number(rand::random::<u8>().into());
-            }
+                .get_mut("data").unwrap();
+            let bytes = (0..128).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
+            *data = serde_json::Value::String(hex::encode(bytes));
             let fake_operation = serde_json::from_value(fake_operation.clone()).unwrap();
             local = PeerMessageResponse::from(PeerMessage::Operation(fake_operation)).write_msg(
                 &mut stream,

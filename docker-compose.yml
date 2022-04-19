@@ -8,13 +8,13 @@ services:
       context: .
       dockerfile: Dockerfile
     privileged: true
-    init: true
+    # init: true
     environment:
       - RUST_BACKTRACE=1
     volumes:
       - "tezedge-shared-data:/tmp/volume/tezedge:ro"
       # /var/lib/docker/volumes/remote-workspace/_data/tezedge-debugger
-      - "/home/vladislav/workspace/viablesystems/tezedge-debugger/config-docker.toml:/etc/config.toml:ro"
+      - "config-docker.toml:/etc/config.toml:ro"
       - "/sys/kernel/debug:/sys/kernel/debug:rw"
     ports:
       - "17732:17732"      # debugger RPC port compatibility server
@@ -26,7 +26,7 @@ services:
   tezedge-node:
     image: tezedge/tezedge:${TAG:-v1.12.0}-frame-pointers-enabled
     command: ["--network", "mainnet", "--log", "terminal", "file", "--log-file", "/tmp/tezedge/tezedge.log", "--peer-thresh-low", "30", "--peer-thresh-high", "45"]
-    init: true
+    # init: true
     logging:
       # Produce syslogs instead of terminal logs
       driver: "syslog"

@@ -1,7 +1,7 @@
 [package]
 name = "bpf-ring-buffer"
 version = "0.1.0"
-authors = ["Vladislav Melnik <vladislav.melnik@simplestaking.com>"]
+authors = ["Vladislav Melnik <vladislav.melnik@viablesystems.io>"]
 edition = "2018"
 
 [dependencies]
